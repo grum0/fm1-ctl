@@ -1,0 +1,1497 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+/* GEN: the generators. See gen.h. Integer only, no allocation; gen_subtick runs in the engine's tick.
+ *
+ *   time      96 subticks a quarter note (four a MIDI clock tick), 24 a sixteenth, 384 a bar. At subtick 0 of
+ *             each bar every part that is on writes the bar's events (notes with lengths, controllers, pitch
+ *             bends) into its list, sorted; the subticks play them.
+ *   harmony   the key and the style choose a progression (chords by the half bar); bass, chords, arpeggio, lead
+ *             and the melodic kick all read the chord of the moment.
+ *   seed      every choice is drawn from hashes of the seed, the part's variation and the bar of the phrase:
+ *             nothing depends on what was played before, so a part recorded later fits the ones before it.
+ *   styles    per style: drum lanes as 16 weights ('0'..'9', 'a'..'e' ghost notes of weight 5..9), timing
+ *             (swing, lanes late or early, jitter), fills, progressions, chord voicing and rhythm, bass and lead.
+ *   devices   per instrument: range, how an accent and a slide are sent, the filter controller, bend range.
+ *
+ * The Grids drum maps: Mutable Instruments Grids by Emilie Gillet (grids_tables.h, GPL-3.0-or-later), by way of
+ * Hortator's C port. */
+#include "gen.h"
+#ifdef GEN_STANDALONE
+#include <string.h>
+#endif
+#include "grids_tables.h"
+
+#define GEN_MAXON 10
+enum { EV_BEND, EV_CC, EV_NOTE };        /* in the order they go out within a subtick */
+typedef struct { uint16_t pos, dur; uint8_t kind, a, b, ch; } gev_t;
+typedef struct { uint8_t note, ch; uint16_t left; } gon_t;
+typedef struct { uint8_t root, q; } chord_t;
+typedef struct { uint32_t s; } rng_t;
+
+/* ------------------------------------------------------------- tables --- */
+enum { SC_MAJ, SC_AEO, SC_DOR, SC_MIX, SC_PHR, NSC };
+static const uint16_t SC_MASK[NSC] = {0xAB5, 0x5AD, 0x6AD, 0x6B5, 0x5AB};   /* bit n: semitone n in the scale */
+#define PENT_MIN 0x4A9u                  /* minor pentatonic: 0 3 5 7 10 */
+#define PENT_MAJ 0x295u                  /* major pentatonic: 0 2 4 7 9 */
+
+enum { Q_MAJ, Q_MIN, Q_7, Q_MAJ7, Q_MIN7, Q_9, Q_MAJ9, Q_MIN9, Q_MIN11, Q_13, Q_7SUS, Q_ADD9, Q_DIM7, Q_M7B5, Q_7S9,
+       Q_MIN6, Q_P5, NQ };
+static const uint8_t QIV[NQ][6] = {{0, 4, 7}, {0, 3, 7}, {0, 4, 7, 10}, {0, 4, 7, 11}, {0, 3, 7, 10}, {0, 4, 7, 10, 14},
+                                   {0, 4, 7, 11, 14}, {0, 3, 7, 10, 14}, {0, 3, 7, 10, 14, 17}, {0, 4, 7, 10, 14, 21},
+                                   {0, 5, 7, 10}, {0, 4, 7, 14}, {0, 3, 6, 9}, {0, 3, 6, 10}, {0, 4, 7, 10, 15},
+                                   {0, 3, 7, 9}, {0, 7}};
+static const uint8_t QN[NQ] = {3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 4, 4, 4, 4, 5, 4, 2};
+/* (spelled so they read the same in capitals: the screen's large type has no lower case) */
+static const char *const QNAME[NQ] = {"", "min", "7", "maj7", "min7", "9", "maj9", "min9", "min11", "13", "7sus", "add9",
+                                      "dim7", "min7b5", "7#9", "min6", "5"};
+static const char *const PC_NAME[12] = {"C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"};
+
+/* progressions: chords as semitones above the key, a quality and a length in half bars (2, 4 or 8 in all) */
+typedef struct { uint8_t scale, n; struct { uint8_t semi, q, len; } c[5]; } prog_t;
+static const prog_t PROG_MIN[] = {
+    /* 0 */ {SC_DOR, 1, {{0, Q_MIN7, 8}}},
+    /* 1 */ {SC_DOR, 2, {{0, Q_MIN7, 4}, {5, Q_9, 4}}},
+    /* 2 */ {SC_AEO, 2, {{0, Q_MIN7, 4}, {10, Q_MAJ, 4}}},
+    /* 3 */ {SC_AEO, 2, {{0, Q_MIN9, 4}, {5, Q_MIN9, 4}}},
+    /* 4 */ {SC_AEO, 3, {{0, Q_MIN7, 4}, {8, Q_MAJ7, 2}, {10, Q_MAJ, 2}}},
+    /* 5 */ {SC_AEO, 2, {{0, Q_MIN7, 4}, {8, Q_MAJ7, 4}}},
+    /* 6 */ {SC_AEO, 2, {{0, Q_MIN7, 4}, {7, Q_MIN7, 4}}},
+    /* 7 */ {SC_AEO, 4, {{0, Q_MIN9, 2}, {5, Q_MIN9, 2}, {8, Q_MAJ9, 2}, {7, Q_7S9, 2}}},
+    /* 8 */ {SC_DOR, 5, {{0, Q_MIN11, 2}, {5, Q_13, 2}, {3, Q_MAJ9, 2}, {2, Q_M7B5, 1}, {7, Q_7S9, 1}}},
+    /* 9 */ {SC_PHR, 2, {{0, Q_MIN, 6}, {1, Q_MAJ, 2}}},
+    /* 10 */ {SC_AEO, 4, {{0, Q_MIN, 2}, {10, Q_MAJ, 2}, {8, Q_MAJ, 2}, {10, Q_MAJ, 2}}},
+    /* 11 */ {SC_AEO, 1, {{0, Q_P5, 8}}},
+    /* 12 */ {SC_DOR, 2, {{0, Q_7SUS, 4}, {10, Q_7SUS, 4}}},
+    /* 13 */ {SC_DOR, 3, {{0, Q_MIN9, 4}, {5, Q_13, 3}, {6, Q_DIM7, 1}}},
+    /* 14 */ {SC_AEO, 4, {{0, Q_MIN9, 2}, {8, Q_MAJ7, 2}, {10, Q_9, 2}, {7, Q_7S9, 2}}},
+    /* 15 */ {SC_AEO, 3, {{8, Q_MAJ9, 2}, {10, Q_ADD9, 2}, {0, Q_MIN9, 4}}},
+    /* 16 */ {SC_DOR, 1, {{0, Q_7S9, 8}}},
+    /* 17 */ {SC_AEO, 5, {{0, Q_MIN7, 2}, {10, Q_ADD9, 2}, {8, Q_MAJ7, 2}, {7, Q_7SUS, 1}, {7, Q_7, 1}}},
+    /* 18 */ {SC_AEO, 4, {{0, Q_MIN, 2}, {3, Q_MAJ, 2}, {5, Q_MIN7, 2}, {3, Q_MAJ, 2}}},
+    /* 19 */ {SC_AEO, 3, {{0, Q_MIN9, 4}, {11, Q_MAJ9, 2}, {1, Q_MAJ7, 2}}},
+    /* 20 */ {SC_DOR, 3, {{0, Q_7S9, 6}, {3, Q_9, 1}, {2, Q_9, 1}}},          /* the funk turnaround, down by semitones */
+    /* 21 */ {SC_AEO, 2, {{0, Q_MIN7, 4}, {8, Q_MIN7, 4}}},                   /* cold: two minor chords */
+    /* 22 */ {SC_AEO, 3, {{0, Q_MIN9, 4}, {3, Q_MAJ7, 2}, {5, Q_MIN7, 2}}},
+    /* 23 */ {SC_DOR, 4, {{0, Q_MIN, 2}, {3, Q_MAJ, 2}, {10, Q_MAJ, 2}, {5, Q_MAJ, 2}}},
+    /* 24 */ {SC_PHR, 2, {{0, Q_P5, 6}, {1, Q_P5, 2}}},
+    /* 25 */ {SC_PHR, 2, {{0, Q_MIN7, 6}, {1, Q_9, 2}}},
+};
+/* "major": where a style has no use for a bright key, its dominant side (mixolydian vamps) */
+static const prog_t PROG_MAJ[] = {
+    /* 0 */ {SC_MAJ, 2, {{0, Q_MAJ7, 4}, {5, Q_MAJ7, 4}}},
+    /* 1 */ {SC_MAJ, 4, {{2, Q_MIN9, 2}, {7, Q_13, 2}, {0, Q_MAJ9, 2}, {9, Q_7S9, 2}}},
+    /* 2 */ {SC_MAJ, 4, {{0, Q_MAJ7, 2}, {9, Q_MIN7, 2}, {2, Q_MIN7, 2}, {7, Q_7SUS, 2}}},
+    /* 3 */ {SC_MAJ, 4, {{5, Q_MAJ9, 2}, {4, Q_MIN7, 2}, {2, Q_MIN9, 2}, {7, Q_7SUS, 2}}},
+    /* 4 */ {SC_MIX, 1, {{0, Q_9, 8}}},
+    /* 5 */ {SC_MIX, 2, {{0, Q_9, 6}, {5, Q_9, 2}}},
+    /* 6 */ {SC_MIX, 3, {{0, Q_MAJ, 4}, {10, Q_MAJ, 2}, {5, Q_MAJ, 2}}},
+    /* 7 */ {SC_MAJ, 2, {{0, Q_MAJ9, 4}, {2, Q_MIN9, 4}}},
+    /* 8 */ {SC_MAJ, 2, {{5, Q_MAJ9, 4}, {4, Q_MIN7, 4}}},
+    /* 9 */ {SC_MIX, 2, {{0, Q_7, 4}, {5, Q_7, 4}}},
+    /* 10 */ {SC_MIX, 1, {{0, Q_7SUS, 8}}},
+    /* 11 */ {SC_MAJ, 4, {{0, Q_MAJ7, 2}, {4, Q_MIN7, 2}, {5, Q_MAJ7, 2}, {5, Q_MIN6, 2}}},
+    /* 12 */ {SC_MIX, 1, {{0, Q_P5, 8}}},
+    /* 13 */ {SC_MIX, 2, {{0, Q_13, 4}, {10, Q_13, 4}}},
+    /* 14 */ {SC_MAJ, 4, {{0, Q_MAJ9, 2}, {3, Q_MAJ9, 2}, {8, Q_MAJ9, 2}, {1, Q_MAJ9, 2}}},   /* major ninths, planing */
+};
+
+/* devices */
+#define DF_NOVEL 1u                      /* no velocity: a ghost note is a short gate, an accent the controller */
+#define DF_LEGATO 2u                     /* a slide is an overlap */
+typedef struct { const char *name; uint8_t lo, hi, poly, acc, vmax, cc, rest, bend, flags; } gdev_t;
+static const gdev_t DEV[GEN_NDEV] = {
+    {"Generic", 0, 127, 8, 120, 110, 74, 64, 2, DF_LEGATO},
+    {"MB-33", 24, 72, 1, 127, 112, 0, 0, 0, DF_LEGATO},      /* accent: velocity above 120; slide: overlap */
+    {"Hades", 24, 84, 1, 100, 100, 1, 0, 3, DF_NOVEL | DF_LEGATO},   /* mod wheel to a CV; bend 3 semitones */
+    {"Monologue", 24, 96, 1, 122, 110, 43, 64, 255, DF_LEGATO},      /* cutoff; glide on legato (portamento Auto) */
+    {"JV-1010", 24, 108, 8, 120, 108, 74, 64, 2, 0},
+    {"Volca FM", 24, 96, 3, 120, 108, 1, 0, 0, 0},
+    {"MBase 11", 24, 72, 1, 127, 110, 0, 0, 0, 0},
+    {"Tanzbar", 0, 127, 16, 127, 115, 0, 0, 0, 0},
+};
+
+/* styles */
+enum { FILL_NONE, FILL_SNARE, FILL_TOMS, FILL_ELECTRO, FILL_LIVE, FILL_DROP, FILL_DNB, FILL_BUSY };
+enum { V_TRIAD, V_SEVENTH, V_RICH, V_QUARTAL, V_POWER };
+enum { DM_STYLE, DM_GRIDS, DM_TURING, NDM };
+enum { CM_STYLE, CM_PAD, CM_STABS, NCM };
+enum { AM_UP, AM_DOWN, AM_UPDOWN, AM_RANDOM, AM_CONVERGE, AM_PLAYED, NAM };
+enum { BM_STYLE, BM_ROOT, BM_ACID, BM_BOOTSY, BM_WORRELL, BM_HERBIE, BM_QUINCY, BM_GLIDE, BM_ROBOT, BM_LAZY, BM_LIVE,
+       BM_OCTAVE, BM_WOBBLE, BM_TURING, NBM };
+enum { LM_STYLE, LM_HOOK, LM_CALL, LM_SOLO, LM_WHINE, LM_TURING, NLM };
+enum { KK_STYLE, KK_FOUR, KK_808, NKK };
+enum { RM_CHORD, RM_PENT, RM_SCALE, NRM };
+
+typedef struct {
+    const char *name;
+    const char *lane[GEN_NLANES];        /* 16 weights a lane, or none */
+    int8_t sw, lk, ls, lh;               /* swing of the off sixteenths; kick, snare, hats late (subticks) */
+    uint8_t jit, rat, fill;              /* jitter; ratchets (percent); FILL_* */
+    uint8_t prog[2][4];                  /* progressions: minor, major */
+    uint8_t voicing;                     /* V_* */
+    const char *comp;                    /* the chords' rhythm */
+    uint8_t comp_len;                    /* a stab's length in sixteenths, 0: held to the next */
+    uint8_t bass, lead;                  /* BM_*, LM_* */
+    const char *lead_rhy;
+    uint8_t lead_base, pent, arp_div;    /* the lead's centre note; pentatonic; the arpeggio's step in 16ths */
+} style_t;
+
+static const style_t STYLE[GEN_NSTYLES] = {
+    [GS_DILLA] = {"Dilla",
+        {[L_KICK] = "9000000705200030", [L_SNARE] = "000090000300900a", [L_RIM] = "0000000200000000",
+         [L_CLAP] = "0000400000004000", [L_CHH] = "9161916191619162", [L_OHH] = "0000000000000020"},
+        5, 1, 3, -1, 3, 0, FILL_LIVE, {{7, 3, 8, 22}, {1, 11, 14, 7}}, V_RICH, "9000000000300000", 0, BM_LAZY, LM_HOOK,
+        "7000300000700030", 70, 1, 2},
+    [GS_SOULQ] = {"Soulquarian",
+        {[L_KICK] = "9000000007200400", [L_SNARE] = "0000900a00c09000", [L_RIM] = "0002000000020000",
+         [L_CHH] = "9272927292729272", [L_OHH] = "0000000000000003"},
+        6, 2, 4, 0, 3, 0, FILL_LIVE, {{8, 7, 13, 3}, {1, 11, 14, 3}}, V_RICH, "9000003000000600", 0, BM_LAZY, LM_CALL,
+        "0070300070003000", 70, 0, 2},
+    [GS_GFUNK] = {"G-Funk",
+        {[L_KICK] = "9000001090070000", [L_SNARE] = "0000900000009000", [L_CLAP] = "0000600000006000",
+         [L_CHH] = "9797979797979797", [L_OHH] = "0000000000000040", [L_COWB] = "0000000000200000"},
+        2, 0, 1, 0, 1, 0, FILL_SNARE, {{5, 6, 2, 0}, {13, 5, 9, 4}}, V_SEVENTH, "9000000000000000", 0, BM_GLIDE, LM_WHINE,
+        "9000000000700030", 79, 1, 2},
+    [GS_BOMB] = {"Bomb Squad",
+        {[L_KICK] = "9007009070050700", [L_SNARE] = "0000900200009003", [L_CHH] = "9898989898989898",
+         [L_OHH] = "0040004000400040", [L_CONGL] = "0303503003053030", [L_COWB] = "0000300000300000",
+         [L_SIM2] = "0000000300000050"},
+        1, 0, 0, 0, 1, 10, FILL_BUSY, {{16, 0, 20, 11}, {4, 9, 12, 4}}, V_SEVENTH, "0090000900900000", 1, BM_ROOT, LM_CALL,
+        "9090000090900000", 72, 1, 1},
+    [GS_QUINCY] = {"Quincy",
+        {[L_KICK] = "9000003090000030", [L_SNARE] = "0000900000009000", [L_CLAP] = "0000700000007000",
+         [L_CHH] = "9797979797979797", [L_OHH] = "0000000300000030", [L_CONGH] = "0030030000300302",
+         [L_COWB] = "3000300030003000"},
+        0, 0, 0, 0, 1, 0, FILL_TOMS, {{17, 1, 4, 18}, {3, 2, 13, 7}}, V_RICH, "9000009000700300", 2, BM_QUINCY, LM_HOOK,
+        "9070007000907000", 72, 1, 1},
+    [GS_JUSTIFIED] = {"Justified",
+        {[L_KICK] = "9000007000090030", [L_SNARE] = "0000900000009000", [L_CLAP] = "0000900000009000",
+         [L_RIM] = "0020000302000020", [L_CHH] = "9050905090509050", [L_CLAVE] = "0003000030000300",
+         [L_CONGH] = "0000003000000030"},
+        2, 0, 0, 0, 1, 5, FILL_DROP, {{3, 1, 15, 18}, {7, 3, 8, 13}}, V_SEVENTH, "0090009000900030", 1, BM_OCTAVE, LM_HOOK,
+        "7000700030700000", 72, 1, 1},
+    [GS_MPLS] = {"Mpls 80s",
+        {[L_KICK] = "9000000090070000", [L_SNARE] = "0000900000009000", [L_CLAP] = "0000900000009000",
+         [L_CHH] = "9797979797979797", [L_OHH] = "0000000000000030", [L_SIM1] = "0000000000000200"},
+        0, 0, 0, 0, 0, 0, FILL_ELECTRO, {{12, 0, 1, 20}, {6, 10, 5, 4}}, V_QUARTAL, "9000009000090000", 2, BM_OCTAVE,
+        LM_HOOK, "9000700090070000", 72, 1, 1},
+    [GS_NPG] = {"NPG 90s",
+        {[L_KICK] = "9000030090300500", [L_SNARE] = "0000900a0000900c", [L_CHH] = "9494949494949494",
+         [L_OHH] = "0000000500000005", [L_CONGH] = "0030003000300030", [L_COWB] = "0000300000003000"},
+        4, 0, 1, 0, 2, 5, FILL_LIVE, {{13, 14, 20, 1}, {5, 13, 9, 1}}, V_RICH, "0090009700900900", 1, BM_LIVE, LM_CALL,
+        "9070509070307050", 72, 1, 1},
+    [GS_NJS] = {"New Jack",
+        {[L_KICK] = "9000000390300000", [L_SNARE] = "000090000000900a", [L_CLAP] = "0000800000008000",
+         [L_RIM] = "0030000000300000", [L_CHH] = "9597959795979597", [L_OHH] = "0000000000000050"},
+        7, 0, 0, 0, 1, 5, FILL_SNARE, {{14, 4, 3, 7}, {13, 2, 9, 3}}, V_SEVENTH, "9000000900900000", 2, BM_ROOT, LM_HOOK,
+        "9000709000507000", 72, 1, 1},
+    [GS_BOOGIE] = {"Boogie",
+        {[L_KICK] = "9000000090000000", [L_SNARE] = "0000600000006000", [L_CLAP] = "0000900000009000",
+         [L_CHH] = "9595959595959595", [L_OHH] = "0050005000500050"},
+        1, 0, 0, 0, 1, 0, FILL_TOMS, {{15, 5, 3, 4}, {8, 7, 13, 3}}, V_RICH, "9000000000700000", 0, BM_WORRELL, LM_HOOK,
+        "9000007000900050", 74, 1, 2},
+    [GS_PFUNK] = {"P-Funk",
+        {[L_KICK] = "9000000390000300", [L_SNARE] = "0000900a0a009000", [L_CLAP] = "0000300000003000",
+         [L_CHH] = "9595959595959595", [L_OHH] = "0000000500000050"},
+        3, 0, 1, 0, 2, 0, FILL_LIVE, {{16, 20, 1, 12}, {4, 5, 9, 13}}, V_SEVENTH, "0090000090000900", 1, BM_BOOTSY, LM_CALL,
+        "9000705090007050", 72, 1, 1},
+    [GS_JAZZFUNK] = {"Jazz-Funk",
+        {[L_KICK] = "9003000090030000", [L_SNARE] = "0000900a00a09002", [L_CHH] = "9797979797979797",
+         [L_CONGL] = "0030000300300003", [L_CONGH] = "3000030000030300"},
+        2, 0, 0, 0, 2, 0, FILL_LIVE, {{1, 12, 8, 20}, {5, 13, 4, 9}}, V_RICH, "9000090000900000", 2, BM_HERBIE, LM_SOLO,
+        "9070309070503070", 72, 0, 1},
+    [GS_ELECTRO] = {"Electro",
+        {[L_KICK] = "9003009000900000", [L_SNARE] = "0000900000009000", [L_CLAP] = "0000900000009000",
+         [L_CHH] = "9797979797979797", [L_OHH] = "0000000000300000", [L_COWB] = "0050005030050050",
+         [L_SIM1] = "0000000000000300"},
+        0, 0, 0, 0, 0, 15, FILL_ELECTRO, {{10, 9, 0, 2}, {12, 6, 10, 12}}, V_TRIAD, "9000009000900000", 2, BM_ROBOT,
+        LM_HOOK, "9090009090009000", 72, 1, 1},
+    [GS_ELECTRO2] = {"Electro+",
+        {[L_KICK] = "9000009000090000", [L_SNARE] = "0000900000009000", [L_CLAP] = "0000300000009000",
+         [L_RIM] = "0030000300003000", [L_CHH] = "9090909790909097", [L_CLAVE] = "0000030000300000"},
+        0, 0, 0, 0, 0, 10, FILL_ELECTRO, {{9, 24, 21, 10}, {12, 10, 12, 6}}, V_TRIAD, "0000009000000090", 2, BM_ACID,
+        LM_CALL, "9000900090709000", 72, 1, 1},
+    [GS_WONKY] = {"Wonky",
+        {[L_KICK] = "9000002000300600", [L_SNARE] = "000000a09000000b", [L_CLAP] = "0000000070000000",
+         [L_RIM] = "0002000000020000", [L_CHH] = "9090909090909090", [L_OHH] = "0000000000000300"},
+        4, -2, 5, 0, 5, 25, FILL_DNB, {{19, 8, 22, 3}, {14, 11, 1, 14}}, V_RICH, "9000000000090000", 0, BM_WOBBLE, LM_CALL,
+        "7000305000300700", 74, 0, 3},
+    [GS_BIGBEAT] = {"Big Beat",
+        {[L_KICK] = "9020000000970020", [L_SNARE] = "000090020a009003", [L_CHH] = "9090909090909090",
+         [L_OHH] = "0000000500000000"},
+        1, 0, 0, 0, 1, 5, FILL_SNARE, {{11, 0, 2, 9}, {12, 9, 6, 4}}, V_TRIAD, "9009000090090000", 1, BM_ACID, LM_HOOK,
+        "9090709000907000", 72, 1, 1},
+    [GS_BRAINDANCE] = {"Drill n Bass",
+        {[L_KICK] = "9003000030900030", [L_SNARE] = "000090030030a00a", [L_RIM] = "0300003000030300",
+         [L_CHH] = "9797979797979797"},
+        0, 0, 0, 0, 0, 40, FILL_DNB, {{19, 9, 11, 18}, {14, 12, 11, 6}}, V_SEVENTH, "9000000000000000", 0, BM_ACID,
+        LM_SOLO, "9070907050907090", 74, 0, 1},
+    /* Drexciya, Dopplereffekt: fast, straight, cold; the arpeggio belongs here */
+    [GS_DETROIT] = {"Detroit",
+        {[L_KICK] = "9000009000090090", [L_SNARE] = "0000900000009000", [L_CLAP] = "0000000000009000",
+         [L_CHH] = "9797979797979797", [L_OHH] = "0050005000500050", [L_RIM] = "0000030000000300"},
+        0, 0, 0, 0, 0, 10, FILL_ELECTRO, {{21, 9, 0, 10}, {12, 10, 6, 12}}, V_TRIAD, "9000000000000000", 0, BM_ROBOT,
+        LM_HOOK, "9090900090909000", 72, 1, 1},
+    /* Egyptian Lover: the 808 alone, long kicks, rolling hats, cowbell */
+    [GS_808] = {"808 Electro",
+        {[L_KICK] = "9000009000900900", [L_SNARE] = "0000900000009000", [L_CLAP] = "0000900000009000",
+         [L_CHH] = "9797979797979797", [L_OHH] = "0000000000000030", [L_COWB] = "9050905090509050",
+         [L_TOML] = "0000000000000302", [L_SIM1] = "0000000300000000"},
+        0, 0, 0, 0, 0, 30, FILL_ELECTRO, {{11, 9, 0, 2}, {12, 10, 12, 6}}, V_POWER, "0000009000000000", 2, BM_OCTAVE,
+        LM_HOOK, "9090009090009090", 72, 1, 1},
+    /* Tipper: mid tempo, heavy swing, edits and ratchets, a bass that moves under long notes */
+    [GS_GLITCH] = {"Glitch Hop",
+        {[L_KICK] = "9000000700200300", [L_SNARE] = "0000900000009002", [L_RIM] = "0020000002000030",
+         [L_CHH] = "9060906090609060", [L_OHH] = "0000000000000030"},
+        6, 0, 1, 0, 2, 35, FILL_DNB, {{25, 19, 0, 9}, {14, 12, 10, 14}}, V_SEVENTH, "0000009000000000", 1, BM_WOBBLE,
+        LM_CALL, "7000300070003000", 72, 1, 3},
+    /* Two Fingers: half time, the snare on three, room for the low end */
+    [GS_HALFTIME] = {"Halftime",
+        {[L_KICK] = "9000000000300600", [L_SNARE] = "0000000090000000", [L_CLAP] = "0000000050000000",
+         [L_RIM] = "0003000000030002", [L_CHH] = "9050905090509757", [L_OHH] = "0000000000000300"},
+        2, 0, 0, 0, 1, 25, FILL_DNB, {{24, 11, 21, 9}, {12, 12, 10, 14}}, V_POWER, "9000000000000000", 0, BM_LAZY,
+        LM_CALL, "7000000030000700", 70, 1, 2},
+    /* Mr. Oizo: four on the floor, dry, and a bass riff that slides about */
+    [GS_FLAT] = {"Flat Beat",
+        {[L_KICK] = "9000900090009000", [L_CLAP] = "0000900000009000", [L_OHH] = "0090009000900090",
+         [L_CHH] = "5050505050505057", [L_RIM] = "0000000300000030"},
+        0, 0, 0, 0, 0, 5, FILL_DROP, {{11, 0, 16, 25}, {12, 4, 10, 9}}, V_TRIAD, "0000006000000000", 1, BM_HERBIE,
+        LM_CALL, "9000900030009000", 72, 1, 1},
+    /* The Prodigy: breakbeats at speed, minor stabs */
+    [GS_RAVE] = {"Rave Breaks",
+        {[L_KICK] = "9090000000990000", [L_SNARE] = "0000900a0a00900a", [L_CHH] = "9090909090909090",
+         [L_OHH] = "0000000000300000", [L_CYM] = "3000000000000000"},
+        1, 0, 0, 0, 1, 15, FILL_DNB, {{23, 10, 2, 11}, {6, 12, 6, 12}}, V_TRIAD, "9009009000900900", 1, BM_ROOT, LM_HOOK,
+        "9090709090007090", 72, 1, 1},
+    /* Aphex Twin's analogue side: a 303 line over machine drums, wide minor pads behind */
+    [GS_ACIDDREAM] = {"Acid Dream",
+        {[L_KICK] = "9000000090090000", [L_SNARE] = "0000900000009000", [L_CLAP] = "0000300000003000",
+         [L_CHH] = "9797979797979797", [L_OHH] = "0030000000300000", [L_RIM] = "0000003000000300"},
+        0, 0, 0, 0, 1, 15, FILL_SNARE, {{22, 3, 5, 0}, {14, 11, 0, 7}}, V_RICH, "9000000000000000", 0, BM_ACID, LM_TURING,
+        "7000300070003000", 72, 0, 1},
+};
+
+/* bass presets: the rhythm, then percentages: octave, fifth, colour (3rd, 7th), passing, chromatic approach, slide,
+ * accent, ghost; the gate (0 short, 1 medium, 2 to the next note); late (subticks); a run at the phrase's end */
+typedef struct { const char *rhy; uint8_t riff, oct, fifth, color, pass, appr, slide, acc, ghost, gate; int8_t late;
+                 uint8_t run; } bass_t;
+static const bass_t BASS[NBM] = {
+    [BM_ROOT] = {"9002007090025030", 2, 10, 25, 10, 5, 20, 5, 15, 0, 1, 0, 10},
+    [BM_ACID] = {"9686978697869787", 1, 30, 10, 25, 10, 5, 30, 30, 0, 0, 0, 0},
+    [BM_BOOTSY] = {"9000002006050370", 2, 40, 10, 20, 5, 25, 15, 35, 30, 0, 1, 30},
+    [BM_WORRELL] = {"9007060070607050", 2, 15, 15, 20, 40, 30, 45, 15, 5, 2, 0, 70},
+    [BM_HERBIE] = {"9070030790700370", 1, 20, 15, 30, 10, 50, 10, 20, 10, 1, 0, 20},
+    [BM_QUINCY] = {"9070979070709790", 1, 30, 10, 15, 5, 15, 5, 20, 0, 0, 0, 10},
+    [BM_GLIDE] = {"9000000070000030", 2, 20, 20, 10, 10, 10, 65, 5, 0, 2, 0, 20},
+    [BM_ROBOT] = {"9090009090900090", 1, 50, 10, 5, 0, 5, 0, 20, 0, 0, 0, 0},
+    [BM_LAZY] = {"9000000600030000", 2, 10, 20, 25, 15, 30, 25, 5, 0, 2, 4, 20},
+    [BM_LIVE] = {"9030607090306075", 2, 35, 15, 20, 30, 40, 15, 25, 30, 1, 1, 50},
+    [BM_OCTAVE] = {"9070907090709070", 1, 0, 5, 5, 0, 10, 0, 15, 0, 0, 0, 10},
+    [BM_WOBBLE] = {"9000000090000030", 2, 10, 20, 10, 0, 10, 30, 0, 0, 2, 2, 0},
+    [BM_TURING] = {"9797979797979797", 1, 0, 0, 0, 0, 0, 15, 20, 0, 1, 0, 0},
+};
+
+static const char *const PART_NAME[GEN_NPARTS] = {"Drums", "Chords", "Arp", "Bass", "Lead", "Kick", "Marble"};
+static const char *const RM_NAME[NRM] = {"Chord", "Penta", "Scale"};
+static const char *const LANE_NAME[GEN_NLANES] = {"Kick", "Snare", "Rim", "Clap", "Closed hat", "Open hat", "Low tom",
+                                                  "High tom", "Low conga", "High conga", "Cowbell", "Claves", "Cymbal",
+                                                  "Simmons 1", "Simmons 2"};
+static const char *const DSET_NAME[GEN_NDSET] = {"All", "Kit", "Simmons", "Kick", "No kick"};
+static const char *const DM_NAME[NDM] = {"Style", "Grids", "Turing"};
+static const char *const CM_NAME[NCM] = {"Style", "Pad", "Stabs"};
+static const char *const AM_NAME[NAM] = {"Up", "Down", "Up-down", "Random", "Converge", "Played"};
+static const char *const BM_NAME[NBM] = {"Style", "Root", "Acid", "Bootsy", "Worrell", "Herbie", "Quincy", "Glide",
+                                         "Robot", "Lazy", "Live", "Octave", "Wobble", "Turing"};
+static const char *const LM_NAME[NLM] = {"Style", "Hook", "Call+resp", "Solo", "Whine", "Turing"};
+static const char *const KK_NAME[NKK] = {"Style", "4 floor", "808"};
+static const uint8_t NMODES[GEN_NPARTS] = {NDM, NCM, NAM, NBM, NLM, NKK, NRM};
+/* the lanes' notes: the MFB Tanzbar Lite's (one tom and one conga note each), and the MPC pads that trigger the
+ * Simmons (A01 37, A02 36: the same numbers as the Tanzbar's snare and kick, so they go out by themselves, Lanes) */
+static const uint8_t LANE_DEFAULT[GEN_NLANES] = {36, 37, 38, 41, 43, 39, 40, 40, 44, 44, 45, 46, 47, 37, 36};
+static const uint8_t PHRASE_BARS[4] = {1, 2, 4, 8};
+
+/* -------------------------------------------------------------- state --- */
+/* Two buffers of a bar's events: the one playing (the tick only reads it) and the one gen_service writes in the
+ * main loop: the next bar, or this bar again after a setting changed. The tick never builds anything. */
+#ifdef GEN_STANDALONE
+#define GEN_LOCK() 0u
+#define GEN_UNLOCK(f) (void)(f)
+#else
+#define GEN_LOCK() plat_lock()
+#define GEN_UNLOCK(f) plat_unlock(f)
+#endif
+#define GEN_POOL 496
+static const uint16_t GEV_OFF[GEN_NPARTS + 1] = {0, 128, 224, 264, 360, 456, 472, GEN_POOL};   /* a part's share */
+typedef struct {
+    gev_t ev[GEN_POOL];
+    uint16_t n[GEN_NPARTS];
+    uint16_t lanes[GEN_NLANES];          /* the drum part's hits, a bit a sixteenth (for the screen and the keys) */
+    uint32_t bar, sig;                   /* the bar it holds, and the settings it was made from */
+    uint8_t ok;
+} gbuf_t;
+static gbuf_t gb[2];
+static gbuf_t *wb;                       /* the buffer being written */
+static uint32_t bb;                      /* the bar being written */
+static gon_t gon[GEN_NPARTS][GEN_MAXON];
+static struct {
+    gen_cfg_t *c;
+    gen_out_t out;
+    uint8_t run, cur;                    /* cur: the buffer playing */
+    uint16_t pos;                        /* the subtick of the bar */
+    uint32_t bar;                        /* bars since the start */
+    int8_t man_pc;                       /* prog = keys: the chord's pitch class, -1 none yet */
+    uint16_t i[GEN_NPARTS];              /* each part's next event */
+    uint8_t moved[GEN_NPARTS];           /* bit 0: the controller, bit 1: the bend is away from rest */
+} g;
+
+/* ------------------------------------------------------------ helpers --- */
+static int gclamp(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; }
+static uint32_t gh(uint32_t a, uint32_t b)
+{
+    a ^= b + 0x9E3779B9u + (a << 6) + (a >> 2);
+    a ^= a >> 16;
+    a *= 0x7FEB352Du;
+    a ^= a >> 15;
+    a *= 0x846CA68Bu;
+    a ^= a >> 16;
+    return a;
+}
+static uint32_t rnext(rng_t *r)
+{
+    uint32_t s = r->s ? r->s : 0x1234567u;
+    s ^= s << 13;
+    s ^= s >> 17;
+    s ^= s << 5;
+    return r->s = s;
+}
+static uint32_t rnd(rng_t *r, uint32_t n) { return n ? (rnext(r) >> 8) % n : 0u; }
+static int chance(rng_t *r, int pct) { return (int)rnd(r, 100) < pct; }
+static const style_t *sty(void) { return &STYLE[g.c->style % GEN_NSTYLES]; }
+static const gdev_t *devp(int p) { return &DEV[g.c->part[p].dev % GEN_NDEV]; }
+static int phrase_len(void) { return PHRASE_BARS[g.c->phrase & 3]; }
+static uint32_t epoch(void)              /* 0 while the phrase repeats exactly */
+{
+    return g.c->mutate ? bb / (uint32_t)phrase_len() / (uint32_t)(9 - gclamp(g.c->mutate, 1, 8)) : 0u;
+}
+static uint32_t pseed(int p, uint32_t salt)   /* the part's seed: the song, the style, its variation */
+{
+    return gh(gh(g.c->seed * 65537u + g.c->style, (uint32_t)p * 131u + g.c->part[p].var), salt);
+}
+static int wdec(char c, int *ghost)
+{
+    *ghost = c >= 'a' && c <= 'e';
+    return *ghost ? c - 'a' + 5 : c >= '0' && c <= '9' ? c - '0' : 0;
+}
+static int wlevel(int w) { return w >= 9 ? 255 : w * 28; }
+static int feel(int v) { return v * g.c->feel / 8; }
+/* the off sixteenths' delay: the style's own (by Feel), or Swing as an MPC counts it, 50 % straight to 75 %:
+ * the off sixteenth that far through its pair (66 % a triplet) */
+static int swing_sub(void)
+{
+    return g.c->swing ? (g.c->swing - 1) * 2 * (int)GEN_STEP / 100 : feel(sty()->sw);
+}
+/* a sixteenth's subtick: swing on the off sixteenths, the lane's lateness and jitter, by Feel */
+static int tpos(int step, int late, int jit, rng_t *r)
+{
+    int p = step * (int)GEN_STEP + ((step & 1) ? swing_sub() : 0) + feel(late), j = feel(jit);
+    if (j > 0)
+        p += (int)rnd(r, 2u * (uint32_t)j + 1u) - j;
+    return gclamp(p, 0, (int)GEN_BAR - 1);
+}
+
+/* ------------------------------------------------------------- events --- */
+static void gput_ev(int p, int pos, int kind, int a, int b, int dur, int ch)
+{
+    gev_t *e;
+    if (wb->n[p] >= GEV_OFF[p + 1] - GEV_OFF[p])
+        return;
+    e = &wb->ev[GEV_OFF[p] + wb->n[p]++];
+    e->pos = (uint16_t)gclamp(pos, 0, (int)GEN_BAR - 1);
+    e->dur = (uint16_t)gclamp(dur, 1, 4 * (int)GEN_BAR);
+    e->kind = (uint8_t)kind;
+    e->a = (uint8_t)(a & 127);
+    e->b = (uint8_t)(b & 127);
+    e->ch = (uint8_t)(ch & 15);
+}
+static int fold(int p, int n)             /* into the device's range, by octaves */
+{
+    const gdev_t *d = devp(p);
+    while (n < d->lo)
+        n += 12;
+    while (n > d->hi)
+        n -= 12;
+    return gclamp(n, 0, 127);
+}
+static void gput_note(int p, int pos, int note, int vel, int dur)
+{
+    gput_ev(p, pos, EV_NOTE, fold(p, note), gclamp(vel, 1, 127), dur, g.c->part[p].chan);
+}
+static void gput_cc(int p, int pos, int v)
+{
+    if (devp(p)->cc)
+        gput_ev(p, pos, EV_CC, devp(p)->cc, gclamp(v, 0, 127), 1, g.c->part[p].chan);
+}
+static int bend_range(int p)
+{
+    int b = devp(p)->bend;
+    return b == 255 ? gclamp(g.c->bend, 1, 12) : b;
+}
+static void gput_bend(int p, int pos, int quarter)   /* in quarter semitones */
+{
+    int rg = bend_range(p), v;
+    if (!rg)
+        return;
+    v = gclamp(8192 + quarter * 2048 / rg, 0, 16383);
+    gput_ev(p, pos, EV_BEND, v & 127, v >> 7, 1, g.c->part[p].chan);
+}
+static void ramp_cc(int p, int p0, int p1, int v0, int v1, int n)
+{
+    int i;
+    for (i = 0; i < n; i++)
+        gput_cc(p, p0 + (p1 - p0) * i / (n > 1 ? n - 1 : 1), v0 + (v1 - v0) * i / (n > 1 ? n - 1 : 1));
+}
+static void ramp_bend(int p, int p0, int p1, int q0, int q1, int n)
+{
+    int i;
+    for (i = 0; i < n; i++)
+        gput_bend(p, p0 + (p1 - p0) * i / (n > 1 ? n - 1 : 1), q0 + (q1 - q0) * i / (n > 1 ? n - 1 : 1));
+}
+static void sort_ev(int p)
+{
+    gev_t *v = wb->ev + GEV_OFF[p];
+    int i, j, n = wb->n[p];
+    for (i = 1; i < n; i++) {
+        gev_t t = v[i];
+        uint32_t k = (uint32_t)t.pos << 2 | t.kind;
+        for (j = i; j > 0 && ((uint32_t)v[j - 1].pos << 2 | v[j - 1].kind) > k; j--)
+            v[j] = v[j - 1];
+        v[j] = t;
+    }
+}
+
+/* ------------------------------------------------------------ harmony --- */
+static const prog_t *cur_prog(void)
+{
+    const style_t *s = sty();
+    int m = g.c->minor ? 0 : 1, i = s->prog[m][gh(g.c->seed, 0x50u + g.c->style) & 3];
+    return m ? &PROG_MAJ[i % (int)(sizeof PROG_MAJ / sizeof PROG_MAJ[0])]
+             : &PROG_MIN[i % (int)(sizeof PROG_MIN / sizeof PROG_MIN[0])];
+}
+static uint16_t rot12(uint16_t m, int by) { by = ((by % 12) + 12) % 12; return (uint16_t)(((m << by) | (m >> (12 - by))) & 0xFFFu); }
+static uint16_t key_mask(void) { return rot12(SC_MASK[cur_prog()->scale], g.c->root); }
+static uint16_t chord_mask(chord_t c)
+{
+    uint16_t m = 0;
+    int i;
+    for (i = 0; i < QN[c.q]; i++)
+        m |= (uint16_t)(1u << ((c.root + QIV[c.q][i]) % 12));
+    return m;
+}
+static chord_t chord_at(uint32_t bar, int half)
+{
+    const prog_t *pr = cur_prog();
+    chord_t c;
+    int i, tot = 0, h;
+    if (g.c->prog && g.man_pc >= 0) {     /* the keys: the chord the key's scale makes on that note */
+        uint16_t km = key_mask();
+        int r = g.man_pc, maj3 = km >> ((r + 4) % 12) & 1, min3 = km >> ((r + 3) % 12) & 1;
+        int b7 = km >> ((r + 10) % 12) & 1, p5 = km >> ((r + 7) % 12) & 1;
+        c.root = (uint8_t)r;
+        c.q = (uint8_t)(maj3 ? (b7 ? Q_9 : Q_MAJ7) : min3 ? (!p5 ? Q_M7B5 : b7 ? Q_MIN7 : Q_MIN) : Q_7SUS);
+        return c;
+    }
+    for (i = 0; i < pr->n; i++)
+        tot += pr->c[i].len;
+    h = (int)((bar * 2u + (uint32_t)half) % (uint32_t)tot);
+    for (i = 0; i < pr->n - 1 && h >= pr->c[i].len; i++)
+        h -= pr->c[i].len;
+    c.root = (uint8_t)((g.c->root + pr->c[i].semi) % 12);
+    c.q = pr->c[i].q;
+    return c;
+}
+static chord_t chord_step(int step) { return chord_at(bb, step >= 8); }
+static chord_t chord_after(int step) { return step >= 8 ? chord_at(bb + 1u, 0) : chord_at(bb, 1); }
+/* the notes a melody may use over a chord: its tones, and the key's that don't sit a semitone above one */
+static uint16_t mel_mask(chord_t c, int pent)
+{
+    uint16_t cm = chord_mask(c), km = key_mask();
+    if (pent)
+        km &= rot12(g.c->minor ? PENT_MIN : PENT_MAJ, g.c->root);
+    return (uint16_t)(cm | (km & ~rot12(cm, 1)));
+}
+static int in_mask(int note, uint16_t m) { return m >> (((note % 12) + 12) % 12) & 1; }
+static int ladder(int note, int n, uint16_t m)   /* n allowed notes up (or down) from note */
+{
+    int d = n < 0 ? -1 : 1, guard = 0;
+    if (!m)
+        return note;
+    while (!in_mask(note, m) && guard++ < 12)
+        note += d ? d : 1;
+    n = n < 0 ? -n : n;
+    while (n > 0 && note > 0 && note < 127) {
+        note += d;
+        if (in_mask(note, m))
+            n--;
+    }
+    return gclamp(note, 0, 127);
+}
+static int nearest(int note, uint16_t m)
+{
+    int d;
+    for (d = 0; d < 7; d++) {
+        if (in_mask(note - d, m))
+            return note - d;
+        if (in_mask(note + d, m))
+            return note + d;
+    }
+    return note;
+}
+static int root_note(chord_t c, int base) { return base + ((c.root - base % 12) + 12) % 12; }
+
+/* ---------------------------------------------------------------- drums --- */
+static int lane_late(int l)
+{
+    const style_t *s = sty();
+    return l == L_KICK ? s->lk : l == L_SNARE || l == L_CLAP || l == L_RIM || l == L_SIM2 ? s->ls : s->lh;
+}
+static int lane_ch(int l)
+{
+    return (l == L_SIM1 || l == L_SIM2) && g.c->sim_chan ? g.c->sim_chan - 1 : g.c->part[GP_DRUMS].chan;
+}
+static int lane_sent(int l)
+{
+    int sim = l == L_SIM1 || l == L_SIM2;
+    switch (g.c->dset) {
+    case DS_KIT: return !sim;
+    case DS_SIM: return sim;
+    case DS_KICK: return l == L_KICK;
+    case DS_NOKICK: return l != L_KICK;
+    default: return 1;
+    }
+}
+static void drum_hit(int l, int pos, int vel)
+{
+    if (!lane_sent(l))
+        return;
+    gput_ev(GP_DRUMS, pos, EV_NOTE, g.c->lane_note[l], gclamp(vel, 1, 127), 8, lane_ch(l));
+    wb->lanes[l] |= (uint16_t)(1u << (gclamp(pos, 0, (int)GEN_BAR - 1) / (int)GEN_STEP));
+}
+/* a lane's step in the style: 0 no hit, else its velocity. The same for the drum part and the melodic kick. */
+static int style_hit(int l, int step, int dens)
+{
+    const char *str = sty()->lane[l];
+    int ghost, w, lev;
+    uint32_t pb = bb % (uint32_t)phrase_len();
+    rng_t r;
+    if (!str)
+        return 0;
+    w = wdec(str[step], &ghost);
+    if (!w)
+        return 0;
+    lev = wlevel(w);
+    if (w < 9) {                         /* the variation: which of the lighter hits; and a little per bar */
+        lev += (int)(gh(pseed(GP_DRUMS, 0x100u + (uint32_t)l), (uint32_t)step) % 81u) - 40;
+        lev += (int)(gh(pseed(GP_DRUMS, 0x200u + (uint32_t)l * 16u + (uint32_t)step), pb + epoch() * 64u) % 25u) - 12;
+    }
+    if (lev < 255 - dens * 2)
+        return 0;
+    r.s = gh(pseed(GP_DRUMS, 0x300u + (uint32_t)l), bb * 16u + (uint32_t)step);
+    if (ghost)
+        return 30 + (int)rnd(&r, 20);
+    return (w >= 8 ? 108 : 82) + (int)rnd(&r, 14) + ((step & 3) == 0 ? 4 : 0);
+}
+
+static void drums_fill(int from, rng_t *r)
+{
+    int f = sty()->fill, s, i, fl = g.c->part[GP_DRUMS].flair;
+    switch (f) {
+    case FILL_SNARE:
+        for (s = from; s < 16; s++)
+            if (s >= 13 || (s & 1) == 0)
+                drum_hit(L_SNARE, tpos(s, 0, 1, r), 60 + (s - from) * 60 / (16 - from));
+        break;
+    case FILL_TOMS:
+        for (s = from; s < 16; s++)
+            if ((s & 1) == 0 || s >= 14)
+                drum_hit(s < (from + 16) / 2 ? L_TOMH : L_TOML, tpos(s, 0, 1, r), 90 + (int)rnd(r, 20));
+        break;
+    case FILL_ELECTRO:
+        for (s = from; s < 16; s++) {
+            int l = s < 14 ? L_SNARE : L_TOML;
+            drum_hit(l, tpos(s, 0, 0, r), 85 + (int)rnd(r, 25));
+            if (s >= 14 || chance(r, fl / 3))    /* a roll in 32nds */
+                drum_hit(l, tpos(s, 0, 0, r) + 12, 75);
+        }
+        drum_hit(L_SIM1, tpos(chance(r, 50) ? 14 : 15, 0, 0, r), 110);
+        break;
+    case FILL_LIVE:
+        for (s = from; s < 16; s++)
+            if (chance(r, 55))
+                drum_hit(L_SNARE, tpos(s, sty()->ls, 2, r), s == 15 ? 100 : 35 + (int)rnd(r, 30));
+        drum_hit(L_OHH, tpos(14, 0, 1, r), 95);
+        drum_hit(L_KICK, tpos(15, 0, 1, r), 85);
+        break;
+    case FILL_DROP:
+        drum_hit(L_CLAP, tpos(14, 0, 0, r), 105);
+        if (chance(r, 50))
+            drum_hit(L_KICK, tpos(15, 0, 0, r), 95);
+        break;
+    case FILL_DNB:
+        for (s = from; s < 16; s++) {
+            int n = s >= 14 ? 3 : chance(r, 40) ? 2 : 1;
+            for (i = 0; i < n; i++)
+                drum_hit(chance(r, 25) ? L_KICK : L_SNARE, tpos(s, 0, 0, r) + i * (int)GEN_STEP / n,
+                         70 + (int)rnd(r, 45));
+        }
+        break;
+    case FILL_BUSY:
+        for (s = from; s < 16; s++) {
+            drum_hit((s & 1) ? L_SNARE : L_KICK, tpos(s, 0, 0, r), 90 + (int)rnd(r, 25));
+            if (chance(r, 40))
+                drum_hit(L_SIM2, tpos(s, 0, 0, r), 100);
+        }
+        break;
+    default: break;
+    }
+    if (f != FILL_ELECTRO && f != FILL_NONE && f != FILL_DROP && chance(r, 30 + fl / 3))
+        drum_hit(L_SIM1, tpos(15, 0, 0, r), 105);          /* the laser tom: a zap at the phrase's end */
+}
+
+static uint32_t grids_mix(uint32_t a, uint32_t b, uint32_t bal) { return (a * (255u - bal) + b * bal) >> 8; }
+static uint32_t grids_level(uint32_t step, uint32_t ch, uint32_t x, uint32_t y)
+{
+    static const uint8_t MAP[5][5] = {{10, 8, 0, 9, 11}, {15, 7, 13, 12, 6}, {18, 14, 4, 5, 3}, {23, 16, 21, 1, 2},
+                                      {24, 19, 17, 20, 22}};
+    uint32_t i = x >> 6, j = y >> 6, off = ch * 32u + (step & 31u), xb = (x << 2) & 255u, yb = (y << 2) & 255u;
+    const uint8_t *a = GRIDS_NODE[MAP[i][j]], *b = GRIDS_NODE[MAP[i + 1u][j]];
+    const uint8_t *c = GRIDS_NODE[MAP[i][j + 1u]], *d = GRIDS_NODE[MAP[i + 1u][j + 1u]];
+    return grids_mix(grids_mix(a[off], b[off], xb), grids_mix(c[off], d[off], xb), yb);
+}
+
+static void build_drums(void)
+{
+    const gen_part_t *pt = &g.c->part[GP_DRUMS];
+    const style_t *st = sty();
+    int pl = phrase_len(), pb = (int)(bb % (uint32_t)pl), l, s, from = 16;
+    rng_t r, fr;
+    r.s = gh(pseed(GP_DRUMS, 1), (uint32_t)pb + epoch() * 64u);
+    fr.s = gh(pseed(GP_DRUMS, 2), (uint32_t)pb + epoch() * 64u);
+    if (pl > 1 && pb == pl - 1 && st->fill != FILL_NONE && pt->mode == DM_STYLE)
+        from = chance(&fr, 25 + pt->flair / 4) ? 8 : 12;
+    if (pt->mode == DM_GRIDS) {
+        static const uint8_t GL[3] = {L_KICK, L_SNARE, L_CHH};
+        uint32_t x = (uint32_t)gclamp(g.c->gx, 0, 127) * 2u, y = (uint32_t)gclamp(g.c->gy, 0, 127) * 2u, ch;
+        for (ch = 0; ch < 3u; ch++) {
+            uint32_t pert = rnd(&r, (uint32_t)g.c->chaos / 2u + 1u);
+            for (s = 0; s < 32; s++) {
+                uint32_t lev = grids_level((uint32_t)s, ch, x, y);
+                lev = lev + pert > 255u ? 255u : lev + pert;
+                if (lev > (uint32_t)(255 - pt->dens * 2)) {
+                    int pos = tpos(s / 2, lane_late(GL[ch]), st->jit, &r) + (s & 1) * 12;
+                    drum_hit(ch == 2 && lev > 235u ? L_OHH : GL[ch], pos, lev > 192u ? 112 : 84);
+                }
+            }
+        }
+    } else if (pt->mode == DM_TURING) {
+        /* shift registers: sixteen bits a lane, a few flipped each bar of the phrase (Mutate: more of them) */
+        static const uint8_t TL[5] = {L_KICK, L_SNARE, L_CHH, L_OHH, L_RIM};
+        static const uint8_t TP[5] = {26, 14, 62, 8, 12};        /* percent of steps on */
+        int k, b;
+        for (k = 0; k < 5; k++) {
+            uint16_t reg = 0;
+            rng_t q;
+            q.s = pseed(GP_DRUMS, 0x400u + (uint32_t)k);
+            for (s = 0; s < 16; s++)
+                if ((int)rnd(&q, 100) < TP[k] * (40 + pt->dens) / 104)
+                    reg |= (uint16_t)(1u << s);
+            if (k == 0)
+                reg |= 1u;
+            if (k == 1)
+                reg |= 1u << 4 | 1u << 12;
+            for (b = 0; b <= pb; b++) {
+                int flips = b ? 1 + g.c->mutate / 3 : 0;
+                q.s = gh(pseed(GP_DRUMS, 0x500u + (uint32_t)k), (uint32_t)b + epoch() * 64u);
+                while (flips--)
+                    reg ^= (uint16_t)(1u << rnd(&q, 16));
+            }
+            for (s = 0; s < 16; s++)
+                if (reg >> s & 1u)
+                    drum_hit(TL[k], tpos(s, lane_late(TL[k]), st->jit, &r), ((s & 3) == 0 ? 105 : 80) + (int)rnd(&r, 12));
+        }
+    } else {
+        for (l = 0; l < GEN_NLANES; l++) {
+            if (l == L_SIM2 && !st->lane[L_SIM2]) {          /* the second Simmons lane by its role */
+                if (g.c->sim2 == 0 && from > 12)
+                    drum_hit(l, tpos(12, st->ls, st->jit, &r), 96);
+                else if (g.c->sim2 == 1 && pb == 0 && bb)
+                    drum_hit(l, 0, 110);
+                else if (g.c->sim2 == 2)
+                    for (s = 0; s < from; s++)
+                        if ((s == 3 || s == 6 || s == 11 || s == 14) && chance(&r, 30 + pt->dens / 2))
+                            drum_hit(l, tpos(s, st->lh, st->jit, &r), 70 + (int)rnd(&r, 30));
+                continue;
+            }
+            for (s = 0; s < from; s++) {
+                int v = style_hit(l, s, pt->dens), pos;
+                if (!v)
+                    continue;
+                pos = tpos(s, lane_late(l), st->jit, &r);
+                drum_hit(l, pos, v);
+                if ((l == L_CHH || l == L_SNARE) && v > 60 && chance(&r, st->rat * pt->flair / 127)) {
+                    int n = chance(&r, 40) ? 3 : 2, i;       /* a ratchet */
+                    for (i = 1; i < n; i++)
+                        drum_hit(l, pos + i * (int)GEN_STEP / n, v - 15 - (int)rnd(&r, 15));
+                }
+            }
+        }
+        if (from < 16)
+            drums_fill(from, &fr);
+        if (pb == 0 && bb && pl > 1 && st->fill != FILL_NONE && st->fill != FILL_DROP && pt->dens >= 40)
+            drum_hit(L_CYM, 0, 100);                         /* a crash after the fill */
+    }
+}
+
+/* --------------------------------------------------------------- chords --- */
+static int voicing(chord_t c, int type, int base, int poly, uint8_t *out)
+{
+    static const uint8_t ORD_RICH[6] = {1, 3, 4, 2, 0, 5}, ORD_7[6] = {1, 3, 0, 2, 4, 5}, ORD_3[6] = {0, 1, 2, 3, 4, 5};
+    const uint8_t *ord = type == V_RICH && QN[c.q] >= 5 ? ORD_RICH : type == V_TRIAD ? ORD_3 : ORD_7;
+    int want = type == V_TRIAD ? 3 : 4, n = 0, i, j;
+    uint8_t iv[6];
+    if (type == V_POWER || c.q == Q_P5) {
+        iv[0] = 0, iv[1] = 7, iv[2] = 12;
+        n = 3;
+    } else if (type == V_QUARTAL) {                      /* fourths under minor and sus chords, fifths under major */
+        int min = QIV[c.q][1] == 3 || QIV[c.q][1] == 5;
+        iv[0] = 0, iv[1] = (uint8_t)(min ? 5 : 7), iv[2] = (uint8_t)(min ? 10 : 14);
+        n = 3;
+    } else {
+        for (i = 0; i < 6 && n < want; i++)
+            if (ord[i] < QN[c.q])
+                iv[n++] = QIV[c.q][ord[i]];
+    }
+    if (n > poly)
+        n = poly;
+    for (i = 0; i < n; i++) {                            /* each tone in the octave from base: close voicings that */
+        int nt = c.root + iv[i];                         /* move little from chord to chord */
+        nt = type == V_POWER || c.q == Q_P5 ? root_note(c, base) + iv[i] : base + ((nt - base % 12) % 12 + 12) % 12;
+        out[i] = (uint8_t)gclamp(nt, 0, 127);
+    }
+    for (i = 1; i < n; i++) {                            /* low to high */
+        uint8_t t = out[i];
+        for (j = i; j > 0 && out[j - 1] > t; j--)
+            out[j] = out[j - 1];
+        out[j] = t;
+    }
+    return n;
+}
+
+static void build_chords(void)
+{
+    const gen_part_t *pt = &g.c->part[GP_CHORD];
+    const style_t *st = sty();
+    const gdev_t *d = devp(GP_CHORD);
+    const char *comp = pt->mode == CM_PAD ? "9000000000000000" : pt->mode == CM_STABS ? "9000009000900300" : st->comp;
+    int len = pt->mode == CM_PAD ? 0 : pt->mode == CM_STABS ? 1 : st->comp_len;
+    int pl = phrase_len(), pb = (int)(bb % (uint32_t)pl), s, i, hit[16], hp[16], nh = 0, base = 52 + 12 * pt->oct;
+    chord_t c0 = chord_step(0), c1 = chord_step(8);
+    rng_t r;
+    r.s = gh(pseed(GP_CHORD, 1), (uint32_t)pb + epoch() * 64u);
+    for (s = 0; s < 16; s++) {
+        int gho, w = wdec(comp[s], &gho), lev = wlevel(w);
+        if (w && w < 9)
+            lev += (int)(gh(pseed(GP_CHORD, 0x100u), (uint32_t)(s + 16 * (pb & 1))) % 81u) - 40;
+        if ((w && lev >= 255 - pt->dens * 2) || (s == 8 && (c0.root != c1.root || c0.q != c1.q)))
+            hit[nh++] = s;
+    }
+    for (i = 0; i < nh; i++)
+        hp[i] = tpos(hit[i], 0, st->jit / 2, &r);
+    for (i = 0; i < nh; i++) {
+        uint8_t nt[6];
+        chord_t c = chord_step(hit[i]);
+        int k, n, pos = hp[i], dur, vel, end = i + 1 < nh ? hp[i + 1] : (int)GEN_BAR;
+        if (hit[i] < 8 && (i + 1 >= nh || hit[i + 1] > 8) && (c0.root != c1.root || c0.q != c1.q))
+            end = 8 * (int)GEN_STEP;
+        n = voicing(c, st->voicing, base, d->poly, nt);
+        dur = end - pos - 3;
+        if (len && dur > len * (int)GEN_STEP - 8)
+            dur = len * (int)GEN_STEP - 8;
+        vel = (hit[i] & 3) == 0 ? 96 : 84;
+        for (k = 0; k < n; k++)
+            gput_note(GP_CHORD, pos, nt[k], gclamp(vel + (int)rnd(&r, 10) - k * 2, 1, d->vmax), dur);
+        if (pt->flair && d->cc) {
+            int depth = pt->flair / 2;
+            if (!len && dur >= 6 * (int)GEN_STEP && chance(&r, pt->flair * 100 / 127)) {   /* a pad opens */
+                ramp_cc(GP_CHORD, pos, pos + dur - 12, d->rest, gclamp(d->rest + depth, 0, 127), 8);
+                gput_cc(GP_CHORD, pos + dur, d->rest);
+            } else if (len && chance(&r, pt->flair * 60 / 127)) {                          /* a stab barks */
+                gput_cc(GP_CHORD, pos, gclamp(d->rest + depth, 0, 127));
+                gput_cc(GP_CHORD, pos + dur, d->rest);
+            }
+        }
+    }
+}
+
+/* ------------------------------------------------------------------ arp --- */
+static void build_arp(void)
+{
+    const gen_part_t *pt = &g.c->part[GP_ARP];
+    const style_t *st = sty();
+    int div = st->arp_div ? st->arp_div : 1, s, base = 60 + 12 * pt->oct;
+    rng_t r;
+    r.s = gh(pseed(GP_ARP, 1), bb % (uint32_t)phrase_len() + epoch() * 64u);
+    if (div == 3)
+        div = 1;
+    for (s = 0; s < 16; s += div) {
+        uint8_t nt[6], seq[12];
+        chord_t c = chord_step(s);
+        int n = voicing(c, st->voicing == V_QUARTAL || st->voicing == V_POWER ? V_SEVENTH : st->voicing, base, 4, nt);
+        int m = 0, i, idx, per, pos, vel, dur, reps;
+        uint32_t k = (bb * 16u + (uint32_t)s) / (uint32_t)div;   /* counted from the start: the shape goes on */
+        if (!n)
+            continue;
+        for (i = 0; i < n; i++)
+            seq[m++] = nt[i];
+        for (i = 0; i < n && m < 12; i++)
+            seq[m++] = (uint8_t)gclamp(nt[i] + 12, 0, 127);
+        switch (pt->mode) {
+        case AM_DOWN: idx = m - 1 - (int)(k % (uint32_t)m); break;
+        case AM_UPDOWN:
+            per = m > 1 ? 2 * m - 2 : 1;
+            idx = (int)(k % (uint32_t)per);
+            idx = idx < m ? idx : per - idx;
+            break;
+        case AM_RANDOM: idx = (int)(gh(pseed(GP_ARP, 7), k % (16u * (uint32_t)phrase_len())) % (uint32_t)m); break;
+        case AM_CONVERGE:
+            idx = (int)(k % (uint32_t)m);
+            idx = (idx & 1) ? m - 1 - idx / 2 : idx / 2;
+            break;
+        case AM_PLAYED: {
+            static const uint8_t P[8] = {0, 2, 1, 3, 2, 4, 3, 5};
+            idx = P[k & 7] % m;
+            break;
+        }
+        default: idx = (int)(k % (uint32_t)m); break;
+        }
+        if ((int)(gh(pseed(GP_ARP, 3), (uint32_t)s + 16u * (bb % (uint32_t)phrase_len())) % 127u) > pt->dens + 26 && s)
+            continue;                                    /* Density: steps left out */
+        pos = tpos(s, 0, st->jit / 2, &r);
+        vel = ((s & 3) == 0 ? 100 : 84) + (int)rnd(&r, 10);
+        dur = div * (int)GEN_STEP * 6 / 10;
+        reps = chance(&r, pt->flair / 4) ? 2 : 1;        /* Flair: ratchets */
+        for (i = 0; i < reps; i++)
+            gput_note(GP_ARP, pos + i * div * (int)GEN_STEP / 2, seq[idx], vel - i * 12, dur / reps);
+    }
+}
+
+/* ------------------------------------------------- bass and lead: mono --- */
+#define MF_ACC 1u
+#define MF_SLIDE 2u
+#define MF_GHOST 4u
+#define MF_END 8u                        /* the phrase's last note */
+typedef struct { int16_t pos, len; uint8_t note, fl, step, rsv; } mnote_t;
+
+/* a line for one voice, as the device takes it: velocities, accents, slides as overlaps, ghost notes; and the
+ * flourishes: filter moves on the device's controller, scoops and falls on the pitch bend */
+static void render_mono(int p, mnote_t *m, int n, rng_t *r, int wobble)
+{
+    const gen_part_t *pt = &g.c->part[p];
+    const gdev_t *d = devp(p);
+    int i, fl = pt->flair, hi = gclamp(d->rest + 40 + fl / 2, 0, 127);
+    for (i = 0; i < n; i++) {
+        int pos = m[i].pos, gap = i + 1 < n ? m[i + 1].pos - pos : (int)GEN_BAR + 48 - pos, dur = m[i].len, vel;
+        int slide = (m[i].fl & MF_SLIDE) && i + 1 < n && (d->flags & DF_LEGATO);
+        if (slide)
+            dur = gap + 4;                               /* into the next note: legato, the 303's slide */
+        else if (dur > gap - 3)
+            dur = gap - 3;
+        if (dur < 4)
+            dur = 4;
+        vel = 86 + (int)rnd(r, 16);
+        if (vel > d->vmax)
+            vel = d->vmax;
+        if (m[i].fl & MF_ACC)
+            vel = d->acc;
+        if (m[i].fl & MF_GHOST) {
+            if (d->flags & DF_NOVEL)
+                dur = 5;
+            else
+                vel = 40 + (int)rnd(r, 12), dur = dur > 10 ? 10 : dur;
+        }
+        gput_note(p, pos, m[i].note, vel, dur);
+        if (!fl)
+            continue;
+        if (d->cc) {
+            if (wobble && dur >= 2 * (int)GEN_STEP) {    /* a filter wobble through a long note */
+                int rate = (int)GEN_STEP * (chance(r, 50) ? 2 : chance(r, 50) ? 4 : 3), t;
+                for (t = 0; t < dur; t += rate / 2)
+                    gput_cc(p, pos + t, (t / (rate / 2)) & 1 ? d->rest : hi);
+                gput_cc(p, pos + dur, d->rest);
+                g.moved[p] |= 1u;
+            } else if ((m[i].fl & MF_ACC) && ((d->flags & DF_NOVEL) || chance(r, fl * 100 / 127))) {
+                ramp_cc(p, pos, pos + (dur < 20 ? dur : 20), 127, d->rest + (127 - d->rest) / 5, 4);   /* a quack */
+                gput_cc(p, pos + (dur < 22 ? dur + 1 : 22), d->rest);
+                g.moved[p] |= 1u;
+            } else if (dur >= 3 * (int)GEN_STEP && chance(r, fl * 70 / 127)) {                       /* a swell */
+                ramp_cc(p, pos, pos + dur - 6, d->rest, hi, 7);
+                gput_cc(p, pos + dur, d->rest);
+                g.moved[p] |= 1u;
+            }
+        }
+        if (bend_range(p) && !slide && !(m[i].fl & MF_GHOST)) {
+            int bq = bend_range(p) * 4;
+            if ((m[i].fl & MF_END) && dur >= 2 * (int)GEN_STEP && chance(r, fl * 80 / 127)) {       /* a fall */
+                ramp_bend(p, pos + dur - 20, pos + dur - 1, 0, -(bq < 12 ? bq : 12), 6);
+                gput_bend(p, pos + dur + 2, 0);
+                g.moved[p] |= 2u;
+            } else if (dur >= (int)GEN_STEP && chance(r, fl * 30 / 127)) {                          /* a scoop */
+                ramp_bend(p, pos, pos + 10, -(bq < 6 ? bq : chance(r, 50) ? 4 : 6), 0, 5);
+                g.moved[p] |= 2u;
+            }
+        }
+    }
+}
+
+typedef struct { uint8_t kind, fl; } bstep_t;
+enum { BK_NONE, BK_ROOT, BK_OCT, BK_FIFTH, BK_COLOR, BK_UP, BK_DOWN, BK_APPR };
+
+static void bass_riff(int mode, uint32_t seed, int dens, bstep_t *o)
+{
+    const bass_t *b = &BASS[mode];
+    rng_t r;
+    int s;
+    r.s = seed;
+    for (s = 0; s < 16; s++) {
+        int gho, w = wdec(b->rhy[s], &gho), lev = wlevel(w), x;
+        o[s].kind = BK_NONE;
+        o[s].fl = 0;
+        if (w && w < 9)
+            lev += (int)rnd(&r, mode == BM_ACID ? 141 : 81) - (mode == BM_ACID ? 70 : 40);
+        x = (int)rnd(&r, 100);                           /* (drawn whether it plays or not: Density keeps the rest) */
+        if (!w || lev < 255 - dens * 2)
+            continue;
+        o[s].kind = s == 0 ? BK_ROOT : x < b->oct ? BK_OCT : x < b->oct + b->fifth ? BK_FIFTH
+                    : x < b->oct + b->fifth + b->color ? BK_COLOR
+                    : x < b->oct + b->fifth + b->color + b->pass ? (chance(&r, 50) ? BK_UP : BK_DOWN) : BK_ROOT;
+        if (mode == BM_OCTAVE && (s & 3) == 2)
+            o[s].kind = BK_OCT;
+        if (chance(&r, b->acc) || (s == 0 && mode == BM_BOOTSY))
+            o[s].fl |= MF_ACC;
+        if (chance(&r, b->slide))
+            o[s].fl |= MF_SLIDE;
+        if (s && !(o[s].fl & MF_ACC) && chance(&r, b->ghost))
+            o[s].fl |= MF_GHOST;
+    }
+}
+
+static void build_bass(void)
+{
+    const gen_part_t *pt = &g.c->part[GP_BASS];
+    int mode = pt->mode == BM_STYLE ? sty()->bass : pt->mode % NBM;
+    const bass_t *b = &BASS[mode];
+    int pl = phrase_len(), pb = (int)(bb % (uint32_t)pl), last = pl > 1 && pb == pl - 1, s, n = 0, prev = -1;
+    int base = 36 + 12 * pt->oct;
+    bstep_t rf[16], alt[16];
+    mnote_t m[16];
+    rng_t r;
+    r.s = gh(pseed(GP_BASS, 1), (uint32_t)pb + epoch() * 64u);
+    if (mode == BM_TURING) {                             /* a register of scale steps, turned as the phrase goes */
+        for (s = 0; s < 16; s++) {
+            uint32_t h = gh(pseed(GP_BASS, 0x600u), (uint32_t)((s + pb * (1 + g.c->mutate / 2)) & 15));
+            rf[s].kind = (uint8_t)((int)(h % 127u) < pt->dens + 20 || s == 0 ? BK_ROOT : BK_NONE);
+            rf[s].fl = (uint8_t)((h >> 8) % 100u < b->acc ? MF_ACC : (h >> 16) % 100u < b->slide ? MF_SLIDE : 0);
+        }
+    } else {
+        bass_riff(mode, pseed(GP_BASS, 0x10u + (uint32_t)(pb % b->riff)), pt->dens, rf);
+        if (last) {                                      /* the phrase's last bar: its second half goes elsewhere */
+            bass_riff(mode, pseed(GP_BASS, 0x20u) + epoch(), gclamp(pt->dens + 15, 0, 127), alt);
+            for (s = 8; s < 16; s++)
+                rf[s] = alt[s];
+        }
+    }
+    if (chord_step(0).root != chord_step(8).root && rf[8].kind == BK_NONE) {   /* a chord on the half bar: its root */
+        rf[8].kind = BK_ROOT;
+        rf[8].fl = 0;
+    }
+    for (s = 0; s < 16 && n < 16; s++) {
+        chord_t c = chord_step(s), cn = chord_after(s);
+        uint16_t mm = mel_mask(c, 0);
+        int root = root_note(c, base), nt, k, nexthit = 16, changes;
+        if (rf[s].kind == BK_NONE)
+            continue;
+        for (k = s + 1; k < 16; k++)
+            if (rf[k].kind != BK_NONE) {
+                nexthit = k;
+                break;
+            }
+        changes = (s < 8 ? nexthit >= 8 : nexthit >= 16) && cn.root != c.root;
+        switch (rf[s].kind) {
+        case BK_OCT: nt = root + 12; break;
+        case BK_FIFTH: nt = root + 7; break;
+        case BK_COLOR:                                   /* the seventh under the root, the fifth under it, the third */
+            k = (int)rnd(&r, 10);
+            nt = k < 6 ? root + (QN[c.q] >= 4 ? QIV[c.q][3] : 10) - 12 : k < 8 ? root - 5 : root + QIV[c.q][1];
+            break;
+        case BK_UP: nt = ladder(prev < 0 ? root : prev, 1, mm); break;
+        case BK_DOWN: nt = ladder(prev < 0 ? root : prev, -1, mm); break;
+        default: nt = root; break;
+        }
+        if (mode == BM_TURING) {
+            uint32_t h = gh(pseed(GP_BASS, 0x700u), (uint32_t)((s + pb * (1 + g.c->mutate / 2)) & 15));
+            nt = ladder(root, (int)(h % 8u) - 2, mm);
+        }
+        if (s == 8 && c.root != chord_step(0).root)      /* the chord changes on the half bar: its root */
+            nt = root;
+        if (changes && s > 0 && s != 8 && chance(&r, b->appr))   /* into the next chord from a semitone away */
+            nt = root_note(cn, base) + (chance(&r, 75) ? -1 : 1);
+        if (nt > base + 19)
+            nt -= 12;
+        m[n].step = (uint8_t)s;
+        m[n].pos = (int16_t)tpos(s, b->late, sty()->jit / 2, &r);
+        m[n].note = (uint8_t)gclamp(nt, 0, 127);
+        m[n].fl = rf[s].fl;
+        k = (nexthit - s) * (int)GEN_STEP;
+        m[n].len = (int16_t)(b->gate == 0 ? 11 : b->gate == 1 ? k * 7 / 10 : k);
+        if (m[n].len > 8 * (int)GEN_STEP)
+            m[n].len = 8 * (int)GEN_STEP;
+        prev = nt;
+        n++;
+    }
+    if (last && n && n < 13 && chance(&r, b->run * (40 + pt->flair) / 127)) {   /* a run into the next phrase */
+        chord_t c = chord_step(15), cn = chord_at(bb + 1u, 0);
+        uint16_t mm = mel_mask(c, 0);
+        int target = root_note(cn, base), up = chance(&r, 50), k;
+        while (n && m[n - 1].step >= 12)
+            n--;
+        for (k = 0; k < 4 && n < 16; k++) {
+            m[n].step = (uint8_t)(12 + k);
+            m[n].pos = (int16_t)tpos(12 + k, b->late, 0, &r);
+            m[n].note = (uint8_t)ladder(target + (up ? 0 : 12), up ? k - 4 : 4 - k, mm);
+            m[n].fl = (uint8_t)(k < 3 ? MF_SLIDE : 0);
+            m[n].len = (int16_t)(GEN_STEP - 4);
+            n++;
+        }
+    }
+    if (last && n)
+        m[n - 1].fl |= MF_END;
+    render_mono(GP_BASS, m, n, &r, mode == BM_WOBBLE);
+}
+
+static void lead_motif(uint32_t seed, const char *rhy, int dens, int busy, uint8_t *hit, int8_t *deg)
+{
+    rng_t r;
+    int s, cur = 0;
+    r.s = seed;
+    for (s = 0; s < 16; s++) {
+        static const int8_t STEPS[12] = {0, 0, 0, -1, -1, 1, 1, -2, 2, 0, -1, 1};   /* riffs: small moves, repeats */
+        int gho, w = wdec(rhy[s], &gho), lev = wlevel(w) + (int)rnd(&r, 121) - 60 + busy;
+        int d = STEPS[rnd(&r, 12)];
+        hit[s] = (uint8_t)(w && lev >= 255 - dens * 2);
+        if (hit[s]) {
+            cur = gclamp(cur + d, -4, 6);
+            deg[s] = (int8_t)cur;
+        }
+    }
+}
+
+static void build_lead(void)
+{
+    const gen_part_t *pt = &g.c->part[GP_LEAD];
+    const style_t *st = sty();
+    int mode = pt->mode == LM_STYLE ? st->lead : pt->mode % NLM;
+    int pl = phrase_len(), pb = (int)(bb % (uint32_t)pl), last = pb == pl - 1, s, n = 0;
+    int base = st->lead_base + 12 * pt->oct, glide, which, anchor;
+    const char *rhy = mode == LM_WHINE ? "9000000000700030" : mode == LM_SOLO ? "9597059790579507" : st->lead_rhy;
+    uint8_t hit[16];
+    int8_t deg[16];
+    mnote_t m[16];
+    rng_t r;
+    r.s = gh(pseed(GP_LEAD, 1), (uint32_t)pb + epoch() * 64u);
+    glide = mode == LM_WHINE ? 70 : mode == LM_SOLO ? 25 : 12;
+    if (mode == LM_WHINE)
+        base = (st->lead == LM_WHINE ? st->lead_base : 79) + 12 * pt->oct;
+    /* the phrase: the hook, the hook again, and an answer in the last bar (in two bars: hook, answer) */
+    which = pl == 1 ? 0 : last ? 1 : (pb & 3) == 1 && pl >= 4 ? 2 : 0;
+    if (mode == LM_CALL && !(pb & 1) && pl > 1)
+        which = -1;                                      /* the call is the others': the lead answers in the odd bars */
+    if (which < 0) {
+        memset(hit, 0, sizeof hit);
+        if (chance(&r, 40))                              /* a pickup */
+            hit[14] = 1, deg[14] = -1;
+    } else if (mode == LM_TURING) {
+        for (s = 0; s < 16; s++) {
+            uint32_t h = gh(pseed(GP_LEAD, 0x600u), (uint32_t)((s + pb * (1 + g.c->mutate / 2)) & 15));
+            hit[s] = (uint8_t)((int)(h % 127u) < pt->dens);
+            deg[s] = (int8_t)((int)((h >> 8) % 9u) - 3);
+        }
+    } else {
+        lead_motif(pseed(GP_LEAD, 0x10u + (uint32_t)(which == 2 ? 0 : which)) + (which == 1 ? epoch() : 0u), rhy,
+                   pt->dens, mode == LM_SOLO ? 20 : 0, hit, deg);
+        if (which == 2) {                                /* the hook with another ending */
+            uint8_t h2[16];
+            int8_t d2[16];
+            lead_motif(pseed(GP_LEAD, 0x30u), rhy, pt->dens, 0, h2, d2);
+            for (s = 10; s < 16; s++)
+                hit[s] = h2[s], deg[s] = d2[s];
+        }
+    }
+    anchor = (int)(pseed(GP_LEAD, 0x40u) % 3u);
+    for (s = 0; s < 16 && n < 16; s++) {
+        chord_t c = chord_step(s);
+        uint16_t mm = mel_mask(c, st->pent), cm = chord_mask(c);
+        int k, nexthit = 16, nt, a;
+        if (!hit[s])
+            continue;
+        for (k = s + 1; k < 16; k++)
+            if (hit[k]) {
+                nexthit = k;
+                break;
+            }
+        a = nearest(base + (anchor == 1 ? 3 : anchor == 2 ? -2 : 0), cm);   /* the line hangs from a chord tone */
+        nt = ladder(a, deg[s], mm);
+        if ((s & 3) == 0 || nexthit - s >= 4)            /* strong and long notes: chord tones */
+            nt = nearest(nt, cm);
+        if (last && nexthit == 16 && which >= 0)         /* the phrase ends on the chord's root or fifth */
+            nt = nearest(nt, (uint16_t)(1u << c.root | 1u << ((c.root + 7) % 12)));
+        while (nt > base + 14)                           /* within an octave and a bit of the centre */
+            nt -= 12;
+        while (nt < base - 10)
+            nt += 12;
+        m[n].step = (uint8_t)s;
+        m[n].pos = (int16_t)tpos(s, mode == LM_WHINE ? 1 : 0, st->jit / 2, &r);
+        m[n].note = (uint8_t)gclamp(nt, 0, 127);
+        m[n].fl = (uint8_t)((chance(&r, glide) && nexthit - s <= 4 ? MF_SLIDE : 0) | ((s & 3) == 0 && chance(&r, 30) ? MF_ACC : 0));
+        k = (nexthit - s) * (int)GEN_STEP;
+        m[n].len = (int16_t)(mode == LM_WHINE || nexthit - s >= 3 ? k * 9 / 10 : k * 6 / 10);
+        if (m[n].len > (mode == LM_WHINE ? 14 : 8) * (int)GEN_STEP)
+            m[n].len = (int16_t)((mode == LM_WHINE ? 14 : 8) * (int)GEN_STEP);
+        n++;
+    }
+    if (last && n)
+        m[n - 1].fl |= MF_END;
+    render_mono(GP_LEAD, m, n, &r, 0);
+}
+
+/* -------------------------------------------------------- melodic kick --- */
+static void build_kick(void)
+{
+    const gen_part_t *pt = &g.c->part[GP_KICK];
+    int s, hits[16], pos[16], nh = 0, i, lo = gclamp(g.c->mb_lo, 12, 96);
+    rng_t r;
+    r.s = gh(pseed(GP_KICK, 1), bb % (uint32_t)phrase_len() + epoch() * 64u);
+    for (s = 0; s < 16; s++) {
+        int v = pt->mode == KK_FOUR ? ((s & 3) == 0 ? 110 : 0) : style_hit(L_KICK, s, pt->mode == KK_808 ? pt->dens / 2 : pt->dens);
+        if (v > 60)
+            hits[nh++] = s;
+    }
+    for (i = 0; i < nh; i++)
+        pos[i] = tpos(hits[i], sty()->lk, 0, &r);
+    for (i = 0; i < nh; i++) {
+        chord_t c = chord_step(hits[i]), cn = chord_after(hits[i]);
+        int nt = c.root, dur, cap = (pt->mode == KK_808 ? 12 : 6) * (int)GEN_STEP;
+        if (i == nh - 1 && hits[i] >= 12 && cn.root != c.root && chance(&r, pt->flair * 100 / 127))
+            nt = cn.root + 11;                           /* into the next chord from below */
+        else if (hits[i] && (hits[i] & 3) && chance(&r, pt->flair * 40 / 127))
+            nt = c.root + 7;                             /* the fifth, off the beat */
+        nt = lo + ((nt - lo % 12) % 12 + 12) % 12 + g.c->mb_xpose;
+        dur = (i + 1 < nh ? pos[i + 1] : (int)GEN_BAR) - pos[i] - 3;
+        gput_ev(GP_KICK, pos[i], EV_NOTE, gclamp(nt, 0, 127), (hits[i] & 3) == 0 ? 118 : 100, dur < cap ? dur : cap,
+               pt->chan);
+    }
+}
+
+/* --------------------------------------------------------------- marble --- */
+/* After Mutable Instruments' Marbles: random notes drawn against the chord. A bar of them loops; Chance (the
+ * part's Flair) is how many are drawn afresh each time round: 0 the loop exactly, 127 never the same twice.
+ * Density is how many of the steps sound; the mode what the notes are held to: the chord, the pentatonic, the key. */
+static void build_marble(void)
+{
+    const gen_part_t *pt = &g.c->part[GP_RAND];
+    int s, base = 60 + 12 * pt->oct, div = pt->dens < 40 ? 2 : 1;
+    rng_t r;
+    r.s = gh(pseed(GP_RAND, 1), bb);
+    for (s = 0; s < 16; s += div) {
+        chord_t c = chord_step(s);
+        uint16_t m = pt->mode == RM_CHORD ? chord_mask(c) : mel_mask(c, pt->mode == RM_PENT);
+        int fresh = (int)(gh(pseed(GP_RAND, 2), bb * 16u + (uint32_t)s) % 127u) < pt->flair;
+        uint32_t h = fresh ? gh(pseed(GP_RAND, 3), bb * 16u + (uint32_t)s) : gh(pseed(GP_RAND, 4), (uint32_t)s);
+        int len = div * (int)GEN_STEP;
+        if ((int)(h % 100u) >= 30 + pt->dens / 2)
+            continue;
+        gput_note(GP_RAND, tpos(s, 0, sty()->jit, &r), ladder(root_note(c, base), (int)((h >> 8) % 11u) - 3, m),
+                  60 + (int)((h >> 16) % 50u), len * (30 + (int)((h >> 24) % 60u)) / 100);
+    }
+}
+
+/* ------------------------------------------------------------- playing --- */
+static void gsend(uint32_t st, uint32_t ch, uint32_t a, uint32_t b)
+{
+    if (g.out)
+        g.out(st | (ch & 15u), a & 127u, b & 127u);
+}
+void gen_part_off(int p)
+{
+    int i;
+    for (i = 0; i < GEN_MAXON; i++)
+        if (gon[p][i].left) {
+            gsend(0x80u, gon[p][i].ch, gon[p][i].note, 0);
+            gon[p][i].left = 0;
+        }
+    if (g.moved[p] & 1u)
+        gsend(0xB0u, g.c->part[p].chan, devp(p)->cc, devp(p)->rest);
+    if (g.moved[p] & 2u)
+        gsend(0xE0u, g.c->part[p].chan, 0, 64);
+    g.moved[p] = 0;
+}
+static void note_on(int p, const gev_t *e)
+{
+    int i, free = -1, oldest = 0;
+    for (i = 0; i < GEN_MAXON; i++) {
+        gon_t *o = &gon[p][i];
+        if (o->left && o->note == e->a && o->ch == e->ch) {   /* the same note again: its off first */
+            gsend(0x80u, o->ch, o->note, 0);
+            o->left = 0;
+        }
+        if (!o->left)
+            free = i;
+        else if (o->left < gon[p][oldest].left || !gon[p][oldest].left)
+            oldest = i;
+    }
+    if (free < 0) {                                      /* full: the note nearest its end makes room */
+        gsend(0x80u, gon[p][oldest].ch, gon[p][oldest].note, 0);
+        free = oldest;
+    }
+    gon[p][free].note = e->a;
+    gon[p][free].ch = e->ch;
+    gon[p][free].left = e->dur;
+    gsend(0x90u, e->ch, e->a, e->b);
+}
+static uint32_t cfg_sig(void)
+{
+    const uint8_t *b = (const uint8_t *)g.c;
+    uint32_t h = 2166136261u, i;
+    for (i = 0; i < sizeof *g.c; i++)
+        h = (h ^ b[i]) * 16777619u;
+    return h ^ (uint32_t)(g.man_pc + 1) * 0x9E3779B9u;
+}
+static int cur_good(uint32_t sig) { return g.run && gb[g.cur].ok && gb[g.cur].bar == g.bar && gb[g.cur].sig == sig; }
+/* the buffer becomes the one playing; late: mid bar, from where the bar is (within its first eighth of a beat:
+ * from its top, a little late rather than without its downbeat) */
+static void swap_in(int b, int late)
+{
+    int p;
+    g.cur = (uint8_t)b;
+    for (p = 0; p < GEN_NPARTS; p++) {
+        uint16_t i = 0;
+        if (late && g.pos > 12u)
+            while (i < gb[b].n[p] && gb[b].ev[GEV_OFF[p] + i].pos < g.pos)
+                i++;
+        g.i[p] = i;
+    }
+}
+/* The main loop's part: keeps the bar playing made from the settings as they are, and the next bar ready
+ * (stopped: the first). All the building is here; the lock is held only to look and to swap. */
+void gen_service(void)
+{
+    uint32_t sig, target, f;
+    int b, p;
+    if (!g.c)
+        return;
+    sig = cfg_sig();
+    f = GEN_LOCK();
+    b = 1 - g.cur;
+    target = !g.run ? 0u : cur_good(sig) ? g.bar + 1u : g.bar;
+    if (gb[b].ok && gb[b].bar == target && gb[b].sig == sig) {
+        GEN_UNLOCK(f);
+        return;
+    }
+    gb[b].ok = 0;                                        /* claimed: the tick leaves it alone */
+    GEN_UNLOCK(f);
+    wb = &gb[b];
+    bb = target;
+    memset(wb->n, 0, sizeof wb->n);
+    memset(wb->lanes, 0, sizeof wb->lanes);
+    for (p = 0; p < GEN_NPARTS; p++) {
+        if (!g.c->part[p].on)
+            continue;
+        switch (p) {
+        case GP_DRUMS: build_drums(); break;
+        case GP_CHORD: build_chords(); break;
+        case GP_ARP: build_arp(); break;
+        case GP_BASS: build_bass(); break;
+        case GP_LEAD: build_lead(); break;
+        case GP_KICK: build_kick(); break;
+        default: build_marble(); break;
+        }
+        sort_ev(p);
+    }
+    wb->bar = target;
+    wb->sig = sig;
+    f = GEN_LOCK();
+    wb->ok = 1;
+    if (g.run && g.bar == target && !cur_good(sig))
+        swap_in(b, 1);
+    GEN_UNLOCK(f);
+}
+/* The tick's part: note offs counted down, the events due sent, the bar turned over. No building, no sorting. */
+void gen_subtick(void)
+{
+    const gbuf_t *c;
+    int p, i;
+    if (!g.run || !g.c)
+        return;
+    c = &gb[g.cur];
+    for (p = 0; p < GEN_NPARTS; p++) {
+        if (!g.c->part[p].on) {
+            if (g.moved[p] || gen_part_heard(p))
+                gen_part_off(p);
+            continue;
+        }
+        for (i = 0; i < GEN_MAXON; i++)
+            if (gon[p][i].left && --gon[p][i].left == 0)
+                gsend(0x80u, gon[p][i].ch, gon[p][i].note, 0);
+        while (c->ok && g.i[p] < c->n[p] && c->ev[GEV_OFF[p] + g.i[p]].pos <= g.pos) {
+            const gev_t *e = &c->ev[GEV_OFF[p] + g.i[p]++];
+            if (e->kind == EV_NOTE)
+                note_on(p, e);
+            else
+                gsend(e->kind == EV_CC ? 0xB0u : 0xE0u, e->ch, e->a, e->b);
+        }
+    }
+    if (++g.pos >= GEN_BAR) {
+        g.pos = 0;
+        g.bar++;
+        if (gb[1 - g.cur].ok && gb[1 - g.cur].bar == g.bar)
+            swap_in(1 - g.cur, 0);
+        else
+            gb[g.cur].ok = 0;                            /* not ready (the main loop was held up): gen_service catches up */
+    }
+}
+void gen_start(void)
+{
+    gen_stop();
+    g.pos = 0;
+    g.bar = 0;
+    if (gb[1 - g.cur].ok && gb[1 - g.cur].bar == 0u)     /* (gen_service keeps the first bar ready while stopped) */
+        swap_in(1 - g.cur, 0);
+    else
+        gb[g.cur].ok = 0;
+    if (g.c && g.c->part[GP_KICK].on && g.c->mb_tune)    /* the MBase's pitch, so its notes land in tune */
+        gsend(0xB0u, g.c->part[GP_KICK].chan, 101, g.c->mb_tune);
+    g.run = 1;
+}
+void gen_continue(void) { g.run = 1; }
+void gen_stop(void)
+{
+    int p;
+    g.run = 0;
+    gb[g.cur].ok = 0;
+    if (!g.c)
+        return;
+    for (p = 0; p < GEN_NPARTS; p++)
+        gen_part_off(p);
+}
+void gen_chord_key(int pc) { g.man_pc = (int8_t)(((pc % 12) + 12) % 12); }
+int gen_running(void) { return g.run; }
+int gen_bar(void) { return g.c ? (int)(g.bar % (uint32_t)phrase_len()) : 0; }
+int gen_step(void) { return g.pos / (int)GEN_STEP; }
+int gen_phrase_bars(void) { return g.c ? phrase_len() : 1; }
+int gen_part_heard(int p)
+{
+    int i;
+    for (i = 0; i < GEN_MAXON; i++)
+        if (gon[p][i].left)
+            return 1;
+    return 0;
+}
+uint16_t gen_lane_steps(int lane) { return gb[g.cur].ok ? gb[g.cur].lanes[lane % GEN_NLANES] : 0u; }
+void gen_chord_text(char *b)
+{
+    chord_t c;
+    const char *s;
+    uint32_t keep = bb;
+    if (!g.c) {
+        *b = 0;
+        return;
+    }
+    c = chord_at(g.run ? g.bar : 0u, g.run && g.pos >= GEN_BAR / 2u);
+    bb = keep;
+    for (s = PC_NAME[c.root]; *s;)
+        *b++ = *s++;
+    for (s = QNAME[c.q]; *s;)
+        *b++ = *s++;
+    *b = 0;
+}
+
+/* ------------------------------------------------------------ settings --- */
+void gen_defaults(gen_cfg_t *c)
+{
+    static const uint8_t DDEV[GEN_NPARTS] = {DV_TANZBAR, DV_JV1010, DV_VOLCAFM, DV_MB33, DV_MONOLOGUE, DV_MBASE,
+                                             DV_JV1010};
+    int i;
+    memset(c, 0, sizeof *c);
+    c->style = GS_PFUNK;
+    c->root = 4;                                         /* E */
+    c->minor = 1;
+    c->phrase = 2;                                       /* four bars */
+    c->feel = 8;
+    c->seed = 1;
+    c->gx = c->gy = 64;
+    c->bend = 2;
+    c->mb_lo = 36;
+    c->dset = DS_KIT;                                    /* (the Simmons' notes are the Tanzbar's snare and kick) */
+    for (i = 0; i < GEN_NLANES; i++)
+        c->lane_note[i] = LANE_DEFAULT[i];
+    for (i = 0; i < GEN_NPARTS; i++) {
+        c->part[i].dev = DDEV[i];
+        c->part[i].dens = 64;
+        c->part[i].flair = 48;
+    }
+    c->part[GP_ARP].dens = 100;
+}
+int gen_valid(const gen_cfg_t *c)
+{
+    int i;
+    if (c->style >= GEN_NSTYLES || c->root > 11u || c->minor > 1u || c->phrase > 3u || c->feel > 16u || c->mutate > 8u ||
+        c->prog > 1u || c->swing > 26u || c->dset >= GEN_NDSET || c->gx > 127u || c->gy > 127u || c->chaos > 127u || c->sim2 > 2u ||
+        c->sim_chan > 16u || c->bend < 1u || c->bend > 12u || c->mb_xpose < -24 || c->mb_xpose > 24 || c->mb_tune > 127u ||
+        c->mb_lo < 12u || c->mb_lo > 96u)
+        return 0;
+    for (i = 0; i < GEN_NLANES; i++)
+        if (c->lane_note[i] > 127u)
+            return 0;
+    for (i = 0; i < GEN_NPARTS; i++) {
+        const gen_part_t *p = &c->part[i];
+        if (p->on > 1u || p->chan > 15u || p->dev >= GEN_NDEV || p->dens > 127u || p->flair > 127u ||
+            p->mode >= NMODES[i] || p->oct < -2 || p->oct > 2)
+            return 0;
+    }
+    return 1;
+}
+void gen_init(gen_cfg_t *c, gen_out_t out)
+{
+    memset(&g, 0, sizeof g);
+    memset(gb, 0, sizeof gb);
+    memset(gon, 0, sizeof gon);
+    wb = &gb[1];
+    g.c = c;
+    g.out = out;
+    g.man_pc = -1;
+}
+const char *gen_style_name(int s) { return STYLE[s % GEN_NSTYLES].name; }
+const char *gen_dev_name(int d) { return DEV[d % GEN_NDEV].name; }
+const char *gen_part_name(int p) { return PART_NAME[p % GEN_NPARTS]; }
+const char *gen_lane_name(int l) { return LANE_NAME[l % GEN_NLANES]; }
+const char *gen_dset_name(int d) { return DSET_NAME[d % GEN_NDSET]; }
+int gen_nmodes(int p) { return NMODES[p % GEN_NPARTS]; }
+const char *gen_mode_name(int p, int m)
+{
+    switch (p) {
+    case GP_DRUMS: return DM_NAME[m % NDM];
+    case GP_CHORD: return CM_NAME[m % NCM];
+    case GP_ARP: return AM_NAME[m % NAM];
+    case GP_BASS: return BM_NAME[m % NBM];
+    case GP_LEAD: return LM_NAME[m % NLM];
+    case GP_KICK: return KK_NAME[m % NKK];
+    default: return RM_NAME[m % NRM];
+    }
+}

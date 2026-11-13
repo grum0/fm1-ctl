@@ -1,4 +1,10 @@
-# CTL-1
+# GEN-1 (CTL-1 with generators)
+
+> This is the manual of **GEN-1**, a fork of CTL-1. Sections 1 to 16 are CTL-1's manual, changed only where the
+> fork differs (twelve knob banks, the sequencer's tracks muted at first). The fork's own part is
+> [section 17, Generators](#17-generators). The emulator and web installer linked in section 1 are CTL-1's: they
+> run and install CTL-1, not this fork. GEN-1's firmware file comes from this repository's Actions page; install it
+> with `python3 base/tools/fm1_install.py ctl.fwsc` (under "Install from the command line" below).
 
 CTL-1 turns your M-VAVE FM-1 into a MIDI controller. Play notes on the keys in any scale, with its chords
 under the black keys. Send controllers from the knobs, in four banks. Run an arpeggiator and a four-track
@@ -28,7 +34,8 @@ connected. If you like, the keys can sense how hard you play them, for velocity 
 14. Saving
 15. Troubleshooting
 16. Parameters
-17. Credits
+17. Generators
+18. Credits
 
 ---
 
@@ -167,8 +174,8 @@ while a computer, a tablet or a Bluetooth MIDI device is connected, and "ready" 
 
 ## 6. Knobs and banks
 
-On the Play page, KNOB 1–4 send controllers in four banks of four, 16 in all. Press FX or turn SELECT
-to move through banks A, B, C and D. Each knob remembers its value in each bank, so it picks up where
+On the Play page, KNOB 1–4 send controllers in twelve banks of four. Press FX or turn SELECT
+to move through them: A to D are general, E to L are the MFB Tanzbar Lite (below). Each knob remembers its value in each bank, so it picks up where
 you left it.
 
 | Bank | KNOB 1 | KNOB 2 | KNOB 3 | KNOB 4 |
@@ -177,6 +184,19 @@ you left it.
 | B | 73 attack | 72 release | 75 decay | 76 vibrato |
 | C | 16 | 17 | 18 | 19 |
 | D | 20 | 21 | 22 | 23 |
+| E Kick | 2 tone | 3 tune | 64 decay | |
+| F Snare | 11 tone | 13 noise | 67 decay | |
+| G Clap | 18 filter | 75 decay | 76 attack | 77 trigger |
+| H Toms | 19 tune | 20 decay | 73 pan | |
+| I Congas | 79 tune | 78 decay | 82 pan | |
+| J Cowbell, claves | 84 bell tune | 85 bell decay | 86 clave tune | 87 clave decay |
+| K Cymbal | 89 tune | 88 decay | 92 tone | |
+| L Hats | 91 closed decay | 90 open decay | | |
+
+A knob with no controller (the empty cells) is not shown and sends nothing. When you set numbers with FX held,
+one step past 119 is Off.
+
+![Bank E, Kick: Tone 64, Tune 64, Decay 64](img/screen-tanzbar.png "Bank E: the Tanzbar's kick")
 
 To use your own numbers, hold FX and turn KNOB 1–4. While you hold FX, they set the current bank's four
 controller numbers (0 to 119), and letting go doesn't change the bank. To set another bank, tap FX to
@@ -263,8 +283,9 @@ on the same grid, so the two stay in time. A chord you play between steps starts
 
 ## 10. Sequencer
 
-Press SEQ to open the Sequencer page. It has four drum tracks of sixteenth notes on the sequencer's
-channel, which is 10 by default. Each row on the screen is one track.
+Press SEQ to open the Sequencer page (press it again for [Generate](#17-generators)). It has four drum tracks of
+sixteenth notes on the sequencer's channel, which is 10 by default. Each row on the screen is one track. In this
+fork the four tracks start muted, so that PLAY starts only what you switched on: unmute a track with black keys 5 to 8.
 
 ![The Sequencer at 120, playing: rows of steps for Kick, Snare, Hat and Clap, Snare highlighted; track 2: Steps 16, Hits 2, Rotate 4, Note Snare](img/screen-seq.png "The Sequencer page, playing, track 2 selected")
 
@@ -530,7 +551,173 @@ small RP2040 board wired to the USB lines.
 
 ---
 
-## 17. Credits
+## 17. Generators
+
+Press SEQ twice to open **Generate**. Seven parts play here, all from one key, one chord progression and one
+style. They start with PLAY, or with your sequencer's start when Clock is Ext (section 11), and they follow its
+clock. Nothing is recorded on the FM-1: record what it sends on the sequencer or computer it's connected to.
+
+![Generate: P-Funk, E minor, the chord Emin7, bar 1 of 4, seed 1; seven parts, all off; Style, Key, Scale and Seed on the knobs](img/screen-gen.png "Generate, the Song page")
+
+### The screen
+
+- Top: the style and the key. Under them, large, the chord playing now.
+- The row of sixteen blocks is the bar; the lit one is the sixteenth playing. With the drums on, short lines mark
+  the kick (below) and the snare (above).
+- The seven tags are the parts: Drums, Chords, Arp, Bass, Lead, Kick, Marble. Grey is off, pale is on, red is
+  sounding now. The underlined one is the part whose page is up.
+- The line above the knobs names the page; on a part's page it shows its mode, instrument and channel. On the
+  right, the swing.
+
+### Buttons, keys and lights
+
+| | |
+|---|---|
+| SELECT | The next or the last page |
+| KNOB 1–4 | The page's four values |
+| FX held (on a part's page) | KNOB 1–4 become the part's Channel, Device, Variation and Octave |
+| REC | On a part's page: the part's next variation. On the other pages: a new seed |
+| PLAY | Start and stop (Clock Int), as on every page |
+| Black keys 1–7 | Switch the parts on and off, in the order of the tags |
+| Any key, with Chords set to Keys | The chord on that note |
+| SAVE | Saves it all (section 14) |
+
+PLAY blinks green on each beat. REC blinks when the phrase comes round to its first bar. On Generate, the sixteen
+white keys show the bar (the step playing is bright; the drums' kicks and snares glow), and the first seven black
+keys show the parts (bright while a part sounds).
+
+### One seed
+
+Everything is worked out from the **seed**, the style, the key, each part's **variation** and the number of the
+bar since the start. Nothing depends on what was played before. So:
+
+- Start again and you hear the same thing. Record the bass on one pass and the chords on the next, and they fit.
+- A new seed (REC on a song page) is a new progression and new patterns. A part's next variation (REC on its
+  page) changes only that part, on the same chords.
+- **Mutate** above 0 lets the phrase change a little as it repeats, more often the higher it is. It still comes
+  out the same every time you start from the top.
+
+Changes you make while it plays are heard at once (a part switched on) or within the bar.
+
+### The pages
+
+| Page | KNOB 1 | KNOB 2 | KNOB 3 | KNOB 4 |
+|---|---|---|---|---|
+| Song | Style | Key | Scale: Minor or Major | Seed 0–999 |
+| Groove | Swing | Feel | Mutate | Phrase: 1, 2, 4 or 8 bars |
+| Chords and clock | Chords: Auto or Keys | Tempo | Clock | |
+| Drums, Chords, Arp, Bass, Lead, Kick, Marble | Part: On or Off | Mode | Density | Flair |
+| the same, FX held | Channel | Device | Variation | Octave |
+| Drum set | Lanes | Sim ch | Sim 2 | |
+| Grids | Map X | Map Y | Chaos | |
+| Lane notes | Lane | Note | | |
+| Tuning | Bend | Kick low | Kick xpose | Kick tune |
+
+- **Scale**: Minor is the default and what most styles are written for. Major gives the soul and pop styles a
+  major key, and the funk and electronic styles their dominant side (ninth and thirteenth chords, power chords)
+  instead of a bright one.
+- **Swing**: Style uses the style's own swing. 50 % to 75 % sets it the way an MPC counts it: how far through each
+  pair of sixteenths the second one falls (50 % straight, 66 % triplets).
+- **Feel**: how loose the style's timing is (kick, snare and hats early or late, and jitter). 8 is as written, 0 is
+  on the grid, 16 twice as loose. It is part of the notes sent, not of the clock.
+- **Phrase**: the length that repeats. Its last bar gets the fill, the bass's run and the lead's answer.
+- **Chords**: Auto plays the style's progression. Keys holds the chord of the last key you pressed (the chord the
+  key's scale makes on that note), so you play the progression with one finger.
+- **Density**: how busy the part is. **Flair**: its ornaments: ratchets and bigger fills on drums, filter moves,
+  bends and runs on bass and lead, filter swells on chords. At 0 a part sends notes only.
+- **Variation**: another pattern on the same chords, 0–99.
+- **Device**: the instrument the part is for (below).
+
+### The 24 styles
+
+Each sets the drums' pattern, feel and fills, the progressions, the chords' voicing and rhythm, and how the bass
+and the lead play, unless the part's Mode says otherwise.
+
+| Style | After | Style | After |
+|---|---|---|---|
+| Dilla | J Dilla: loose, late snares | Electro | Bambaataa, Mantronix |
+| Soulquarian | D'Angelo, Questlove: behind the beat | Electro+ | darker, sparser electro |
+| G-Funk | Dr. Dre: steady hats, gliding bass, a high lead | Wonky | Flying Lotus: off the grid |
+| Bomb Squad | dense, busy, stabs | Big Beat | The Chemical Brothers |
+| Quincy | Off the Wall, Thriller: tight pop-funk | Drill n Bass | Squarepusher, Aphex Twin |
+| Justified | The Neptunes, Timbaland: sparse, claps | Detroit | Drexciya: fast, cold, arpeggios |
+| Mpls 80s | Prince and The Revolution, The Time | 808 Electro | Egyptian Lover: the 808 alone |
+| NPG 90s | Prince and the New Power Generation | Glitch Hop | Tipper: swing, edits, moving bass |
+| New Jack | Teddy Riley: swung sixteenths | Halftime | Two Fingers: the snare on three |
+| Boogie | Dam-Funk | Flat Beat | Mr. Oizo: four on the floor, a sliding riff |
+| P-Funk | Parliament-Funkadelic: on the One | Rave Breaks | The Prodigy: breakbeats, stabs |
+| Jazz-Funk | Herbie Hancock | Acid Dream | Aphex Twin: acid over wide pads |
+
+These are sketches of how those records are put together, not copies of any of them.
+
+### The parts
+
+**Drums.** Modes: Style (the style's pattern, with ghost notes, ratchets and a fill at the end of the phrase),
+Grids (the drum maps of Mutable Instruments' Grids: kick, snare and hat from Map X and Map Y, Chaos to stir
+them) and Turing (looping random patterns that shift a little each bar). The drums send up to fifteen lanes: kick,
+snare, rim, clap, closed and open hat, low and high tom, low and high conga, cowbell, claves, cymbal and two for
+a Simmons. **Lane notes** sets the note each lane sends; they start on the Tanzbar Lite's (kick 36, snare 37, rim
+38, open hat 39, tom 40, clap 41, closed hat 43, conga 44, cowbell 45, claves 46, cymbal 47) and on 37 and 36
+for the Simmons.
+
+**Drum set** chooses which lanes are sent: Kit (all but the Simmons, the default), Simmons (those two alone),
+All, Kick, or No kick. The Simmons' notes are the same numbers as the Tanzbar's snare and kick, so record them
+on their own pass with Lanes set to Simmons (or give them their own channel with Sim ch). Sim 2 is what the
+second Simmons lane does: a snare layer, a crash, or percussion. The first is a laser tom: it only turns up in
+fills and at the ends of phrases.
+
+**Chords.** Modes: Style, Pad, Stabs. Voiced close together so they move little from chord to chord, and cut down
+to the number of notes the device can play (three on a Volca FM).
+
+**Arp.** The chord's notes over two octaves: Up, Down, Up-down, Random, Converge, Played. It keeps its place
+when the chord changes. Density leaves steps out; Flair adds ratchets.
+
+**Bass.** Modes: Style (the style's own choice), Root, Acid, Bootsy, Worrell, Herbie, Quincy, Glide, Robot, Lazy,
+Live, Octave, Wobble, Turing. A riff of one or two bars follows the chords; the phrase's last bar may end in a
+run into the next.
+
+**Lead.** Modes: Style, Hook (a short figure, repeated, with an answer in the last bar), Call+resp (plays the
+odd bars only, leaving the others free), Solo, Whine (long high notes that glide), Turing.
+
+**Kick.** A kick with a pitch, for a Jomox MBase 11: the style's kick pattern (the same hits as the drums' kick)
+on the chord's root. Modes: Style, 4 floor, 808 (fewer, longer). Tuning: Kick low is the bottom of the octave
+its notes are kept in, Kick xpose shifts them by semitones, and Kick tune, unless Off, is sent as controller 101
+at the start so the MBase's own pitch can be set where its notes land in tune.
+
+**Marble.** Random notes held to the chord, after Mutable Instruments' Marbles. A bar of them loops; **Chance**
+(KNOB 4) is how many are drawn again each time round: 0 is the loop exactly, 127 never the same twice. Density is
+how many steps sound. Modes: Chord (chord notes only), Penta, Scale.
+
+### Devices
+
+| Device | Range | Accent | Slide | Flair moves |
+|---|---|---|---|---|
+| MB-33 | notes 24–72 | velocity 127 (others stay at 112 or less) | the notes overlap | |
+| Hades | 24–84 | the mod wheel jumps (it has no velocity; a ghost note is a short one) | the notes overlap | mod wheel (controller 1), bend of 3 semitones |
+| Monologue | 24–96 | velocity | the notes overlap: set the patch's Portamento Mode to Auto | cutoff (43), bend (Tuning: Bend, to match the patch) |
+| JV-1010 | 24–108 | velocity | | cutoff (74) |
+| Volca FM | 24–96, 3 notes | velocity (pajen's firmware) | | mod wheel (1) |
+| MBase 11 | 24–72 | velocity | | |
+| Tanzbar, Generic | all | velocity | Generic: overlap | Generic: 74, bend of 2 |
+
+With Flair above 0, a part moves its device's filter controller around a resting value (64; 0 on the Hades and
+the Volca) and puts it back there when it stops. On a Monologue or JV-1010 that takes over the cutoff while the
+part plays. Patch the Hades' mod output to its filter to hear its accents.
+
+### With an MPC
+
+Connect the FM-1 to one of the MPC's USB ports and set Clock to Ext (Chords and clock, KNOB 3). The MPC takes
+whatever arrives on the track you have selected, so switch on one part, select the track of the instrument it is
+for, and record; then the next part on the next track. They line up because of the seed. To run several parts at
+once, give them different channels (FX held, KNOB 1) and the tracks matching inputs.
+
+---
+
+## 18. Credits
+
+GEN-1's generators (`app/gen.c`) are free software under the GNU General Public License, version 3 or later; with
+them, and the Grids drum maps by Emilie Gillet (Mutable Instruments, GPL 3) that come by way of Hortator, the fork
+as a whole is under the GPL version 3. See [LICENSING.md](../LICENSING.md). The rest is CTL-1:
 
 CTL-1 is free software under the Mozilla Public License 2.0. If you share a changed version, you must
 also share the source of the files you changed.

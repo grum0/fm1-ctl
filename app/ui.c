@@ -26,9 +26,9 @@
  * Out: everything played goes to USB and Bluetooth. Thru: USB in -> Bluetooth, Bluetooth in -> USB,
  * the TRS jack in -> USB and Bluetooth. The USB-only build (FM1B_BLE 0) shows no Bluetooth. */
 
-enum { V_PLAY, V_SCALE, V_ARP, V_SEQ, V_SOUND, V_SETUP, NVIEWS };
-static const char *const VIEW_NAME[NVIEWS] = {"Play", "Keys", "Arp", "Sequencer", "Sound", "Setup"};
-static const uint8_t VIEW_BTN[NVIEWS] = {B_HOME, B_SEL, B_ARP, B_SEQ, B_EDIT, B_GLO};
+enum { V_PLAY, V_SCALE, V_ARP, V_SEQ, V_SOUND, V_SETUP, V_GEN, NVIEWS };
+static const char *const VIEW_NAME[NVIEWS] = {"Play", "Keys", "Arp", "Sequencer", "Sound", "Setup", "Generate"};
+static const uint8_t VIEW_BTN[NVIEWS] = {B_HOME, B_SEL, B_ARP, B_SEQ, B_EDIT, B_GLO, B_SEQ};
 static const char *const PORT_NAME[NPORTS] = {"USB", "BLE", "TRS"};
 static const char *const NOTE_NAME[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
 static const char *const SCALE_NAME[NSCALES] = {"Chromatic", "Major", "Minor", "Dorian", "Mixolydian",
@@ -74,6 +74,7 @@ static struct {
     uint8_t setup_pg;                  /* Setup's pages (SELECT): 0 the settings, 1 Touch, 2 Bluetooth */
     uint8_t last_vel;                  /* the last note's velocity from the keys (Touch shows it) */
     uint8_t track;                     /* the sequencer track the Sequencer page edits */
+    uint8_t gen_pg, gen_lane;          /* Generate's page (SELECT) and the drum lane its Lanes page edits */
     uint32_t btn, keys;
     uint32_t enc_t[NE];
     uint8_t kmode[NKEYS], knotes[NKEYS][3], kn[NKEYS];   /* per held key: how, which notes */
@@ -207,6 +208,8 @@ static void play(uint32_t st, uint32_t d1, uint32_t d2) { send(pkt3(st | proj.ch
 static void cc(uint32_t num, uint32_t v)
 {
     char *b;
+    if (num >= CC_OFF)
+        return;
     play(0xB0u, num, v);
     b = put_u(put_s(ui.last, "CC "), num);
     put_u(put_s(b, " = "), v);
@@ -427,13 +430,14 @@ static void pressure(void)
 }
 
 /* the analog keys' notes, as touch.c finds them (off the Sequencer page: there the keys edit, at the contact) */
+static int keys_edit(void);
 static void touch_events(void)
 {
     touch_ev_t e;
     if (!touch_live)
         return;
     while (touch_take(&e)) {
-        if (ui.view == V_SEQ)
+        if (keys_edit())
             continue;
         if (e.type == TOUCH_PRESS) {
             uint32_t v = proj.touch ? e.vel : proj.vel;
@@ -462,7 +466,10 @@ static uint32_t edge_vel(uint32_t k)
 /* what a knob edits: one of these */
 enum { K_VAL0, K_VAL1, K_VAL2, K_VAL3, K_CC0, K_CC1, K_CC2, K_CC3, K_ROOT, K_SCALE, K_VEL, K_HUMAN,
        K_AMODE, K_ARATE, K_AOCT, K_ARP, K_STEPS, K_HITS, K_ROT, K_NOTE, K_CLOCK, K_SEQCH, K_MASTER, K_GLOW,
-       K_TEMPO, K_SOUND, K_SNDIN, K_TOUCH, K_CURVE, K_ATM, K_ATS, K_DEV, K_BT, K_NONE };
+       K_TEMPO, K_SOUND, K_SNDIN, K_TOUCH, K_CURVE, K_ATM, K_ATS, K_DEV, K_BT,
+       K_GSTYLE, K_GKEY, K_GMINOR, K_GSEED, K_GPHRASE, K_GFEEL, K_GMUT, K_GPROG, K_GON, K_GPMODE, K_GDENS, K_GFLAIR,
+       K_GCHAN, K_GDEV, K_GVAR, K_GOCT, K_GDSET, K_GSIMCH, K_GSIM2, K_GGX, K_GGY, K_GCHAOS, K_GLANE, K_GLNOTE, K_GBEND,
+       K_GMBLO, K_GMBX, K_GMBT, K_GSWING, K_NONE };
 static const uint8_t VIEW_KNOB[NVIEWS][4] = {
     {K_VAL0, K_VAL1, K_VAL2, K_VAL3},
     {K_ROOT, K_SCALE, K_VEL, K_HUMAN},
@@ -470,7 +477,23 @@ static const uint8_t VIEW_KNOB[NVIEWS][4] = {
     {K_STEPS, K_HITS, K_ROT, K_NOTE},
     {K_SOUND, K_SNDIN, K_MASTER, K_NONE},
     {K_TEMPO, K_CLOCK, K_SEQCH, K_GLOW},
+    {K_GSTYLE, K_GKEY, K_GMINOR, K_GSEED},
 };
+/* Generate's pages (SELECT): the song twice, the six parts (FX held: the part's channel, device, variation and
+ * octave), the drum set, Grids, the lanes' notes, tuning */
+enum { GP_SONG, GP_SONG2, GP_SONG3, GP_PART0, GP_DSET = GP_PART0 + GEN_NPARTS, GP_GRIDS, GP_LANES, GP_TUNE, GEN_PAGES };
+static const uint8_t GEN_KNOB[GEN_PAGES][4] = {
+    {K_GSTYLE, K_GKEY, K_GMINOR, K_GSEED}, {K_GSWING, K_GFEEL, K_GMUT, K_GPHRASE}, {K_GPROG, K_TEMPO, K_CLOCK, K_NONE},
+    {K_GON, K_GPMODE, K_GDENS, K_GFLAIR},
+    {K_GON, K_GPMODE, K_GDENS, K_GFLAIR}, {K_GON, K_GPMODE, K_GDENS, K_GFLAIR}, {K_GON, K_GPMODE, K_GDENS, K_GFLAIR},
+    {K_GON, K_GPMODE, K_GDENS, K_GFLAIR}, {K_GON, K_GPMODE, K_GDENS, K_GFLAIR}, {K_GON, K_GPMODE, K_GDENS, K_GFLAIR},
+    {K_GDSET, K_GSIMCH, K_GSIM2, K_NONE}, {K_GGX, K_GGY, K_GCHAOS, K_NONE}, {K_GLANE, K_GLNOTE, K_NONE, K_NONE},
+    {K_GBEND, K_GMBLO, K_GMBX, K_GMBT}};
+static const uint8_t GEN_ALT[4] = {K_GCHAN, K_GDEV, K_GVAR, K_GOCT};
+static int gen_page_part(void) { return ui.gen_pg >= GP_PART0 && ui.gen_pg < GP_PART0 + GEN_NPARTS ? ui.gen_pg - GP_PART0 : -1; }
+static gen_part_t *gpart(void) { return &proj.gen.part[gen_page_part() < 0 ? 0 : gen_page_part()]; }
+static int gen_alt(void) { return ui.view == V_GEN && gen_page_part() >= 0 && (ui.btn >> B_FX & 1u); }
+static int keys_edit(void) { return ui.view == V_SEQ || ui.view == V_GEN; }
 static const uint8_t TOUCH_KNOB[4] = {K_TOUCH, K_CURVE, K_ATM, K_ATS};   /* Setup's second page */
 /* Setup's third page (FM1B_BLE): a Bluetooth MIDI device (FM1B_BLE_CENTRAL), and Bluetooth on or off */
 static const uint8_t BT_KNOB[4] = {FM1B_BLE_CENTRAL ? K_DEV : K_NONE, K_NONE, K_NONE, K_BT};
@@ -503,6 +526,10 @@ static int view_knob(int i)
 {
     if (fx_cc())
         return K_CC0 + i;
+    if (ui.view == V_GEN)
+        return gen_alt() ? GEN_ALT[i] : GEN_KNOB[ui.gen_pg][i];
+    if (ui.view == V_PLAY && proj.cc[proj.bank][i] >= CC_OFF)
+        return K_NONE;                   /* a knob with no controller */
     if (ui.view == V_SETUP && ui.setup_pg == 2)   /* (a device only while Bluetooth runs) */
         return i == 0 && (proj.ble_off || plat_ble_state() != BLE_READY) ? K_NONE : BT_KNOB[i];
     if (ui.view == V_SETUP && ui.setup_pg)
@@ -545,6 +572,35 @@ static int knob_get(int k)
     case K_ATS: return proj.at_sens;
     case K_DEV: return btdev_pick();
     case K_BT: return !proj.ble_off;
+    case K_GSTYLE: return proj.gen.style;
+    case K_GKEY: return proj.gen.root;
+    case K_GMINOR: return proj.gen.minor;
+    case K_GSEED: return proj.gen.seed;
+    case K_GPHRASE: return proj.gen.phrase;
+    case K_GFEEL: return proj.gen.feel;
+    case K_GMUT: return proj.gen.mutate;
+    case K_GPROG: return proj.gen.prog;
+    case K_GON: return gpart()->on;
+    case K_GPMODE: return gpart()->mode;
+    case K_GDENS: return gpart()->dens;
+    case K_GFLAIR: return gpart()->flair;
+    case K_GCHAN: return gpart()->chan;
+    case K_GDEV: return gpart()->dev;
+    case K_GVAR: return gpart()->var;
+    case K_GOCT: return gpart()->oct;
+    case K_GDSET: return proj.gen.dset;
+    case K_GSIMCH: return proj.gen.sim_chan;
+    case K_GSIM2: return proj.gen.sim2;
+    case K_GGX: return proj.gen.gx;
+    case K_GGY: return proj.gen.gy;
+    case K_GCHAOS: return proj.gen.chaos;
+    case K_GLANE: return ui.gen_lane;
+    case K_GLNOTE: return proj.gen.lane_note[ui.gen_lane];
+    case K_GBEND: return proj.gen.bend;
+    case K_GMBLO: return proj.gen.mb_lo;
+    case K_GMBX: return proj.gen.mb_xpose;
+    case K_GMBT: return proj.gen.mb_tune;
+    case K_GSWING: return proj.gen.swing;
     default: return 0;
     }
 }
@@ -572,16 +628,58 @@ static void knob_range(int k, int *lo, int *hi)
     case K_SEQCH: *hi = 15; break;
     case K_GLOW: *hi = 2; break;
     case K_NOTE: case K_VAL0: case K_VAL1: case K_VAL2: case K_VAL3: *hi = 127; break;
-    default: *hi = 119; break;           /* controller numbers, MASTER */
+    case K_CC0: case K_CC1: case K_CC2: case K_CC3: *hi = (int)CC_OFF; break;   /* the last: no controller */
+    case K_GSTYLE: *hi = GEN_NSTYLES - 1; break;
+    case K_GKEY: *hi = 11; break;
+    case K_GMINOR: case K_GPROG: case K_GON: *hi = 1; break;
+    case K_GSEED: *hi = 999; break;
+    case K_GPHRASE: *hi = 3; break;
+    case K_GFEEL: *hi = 16; break;
+    case K_GMUT: *hi = 8; break;
+    case K_GPMODE: *hi = gen_nmodes(gen_page_part() < 0 ? 0 : gen_page_part()) - 1; break;
+    case K_GDENS: case K_GFLAIR: case K_GGX: case K_GGY: case K_GCHAOS: case K_GLNOTE: case K_GMBT: *hi = 127; break;
+    case K_GCHAN: *hi = 15; break;
+    case K_GDEV: *hi = GEN_NDEV - 1; break;
+    case K_GVAR: *hi = 99; break;
+    case K_GOCT: *lo = -2; *hi = 2; break;
+    case K_GDSET: *hi = GEN_NDSET - 1; break;
+    case K_GSIMCH: *hi = 16; break;
+    case K_GSIM2: *hi = 2; break;
+    case K_GLANE: *hi = GEN_NLANES - 1; break;
+    case K_GBEND: *lo = 1; *hi = 12; break;
+    case K_GMBLO: *lo = 12; *hi = 96; break;
+    case K_GMBX: *lo = -24; *hi = 24; break;
+    case K_GSWING: *hi = 26; break;
+    default: *hi = 119; break;           /* MASTER */
     }
+}
+/* the Tanzbar banks (E-L): the voice, and a knob's parameter while it still has the voice's controller */
+static const char *const BANK_NAME[NBANKS] = {0, 0, 0, 0, "KICK", "SNARE", "CLAP", "TOMS", "CONGAS", "BELL CLAVE", "CYMBAL",
+                                              "HATS"};
+static const char *tz_name(int bank, int knob)
+{
+    static const char *const N[8][NKNOBS] = {
+        {"Tone", "Tune", "Decay", 0}, {"Tone", "Noise", "Decay", 0}, {"Filter", "Decay", "Attack", "Trigger"},
+        {"Tune", "Decay", "Pan", 0}, {"Tune", "Decay", "Pan", 0}, {"Bell tune", "Bell dec", "Clave tune", "Clave dec"},
+        {"Tune", "Decay", "Tone", 0}, {"Closed", "Open", 0, 0}};
+    return bank >= 4 && proj.cc[bank][knob] == CC_DEFAULT[bank][knob] ? N[bank - 4][knob] : 0;
 }
 static void knob_name(int k, char *b)
 {
     static const char *const N[] = {"Root", "Scale", "Velocity", "Humanize", "Mode", "Rate", "Octaves", "Arp",
                                     "Steps", "Hits", "Rotate", "Note", "Clock", "Seq ch", "MASTER", "Glow",
                                     "Tempo", "Sound", "MIDI in", "Velocity", "Curve", "Aftertouch", "AT sens", "Device",
-                                    "Bluetooth"};
-    if (k <= K_VAL3)
+                                    "Bluetooth", "Style", "Key", "Scale", "Seed", "Phrase", "Feel", "Mutate", "Chords",
+                                    "Part", "Mode", "Density", "Flair", "Channel", "Device", "Variation", "Octave",
+                                    "Lanes", "Sim ch", "Sim 2", "Map X", "Map Y", "Chaos", "Lane", "Note", "Bend",
+                                    "Kick low", "Kick xpose", "Kick tune", "Swing"};
+    if (k == K_GFLAIR && gen_page_part() == GP_RAND) {   /* Marble: how much of its loop is drawn afresh */
+        put_s(b, "Chance");
+        return;
+    }
+    if (k <= K_VAL3 && tz_name(proj.bank, k - K_VAL0))
+        put_s(b, tz_name(proj.bank, k - K_VAL0));
+    else if (k <= K_VAL3)
         put_u(put_s(b, "CC "), proj.cc[proj.bank][k - K_VAL0]);
     else if (k <= K_CC3)
         put_u(put_s(b, "Knob "), (uint32_t)(k - K_CC0 + 1));
@@ -635,7 +733,51 @@ static void knob_text(int k, char *b)
         else
             put_u(b, (uint32_t)v);
         break;
-    case K_CC0: case K_CC1: case K_CC2: case K_CC3: put_u(put_s(b, "#"), (uint32_t)v); break;
+    case K_CC0: case K_CC1: case K_CC2: case K_CC3:
+        if (v >= (int)CC_OFF)
+            put_s(b, "Off");
+        else
+            put_u(put_s(b, "#"), (uint32_t)v);
+        break;
+    case K_GSTYLE: put_s(b, gen_style_name(v)); break;
+    case K_GKEY: put_s(b, NOTE_NAME[v]); break;
+    case K_GMINOR: put_s(b, v ? "Minor" : "Major"); break;
+    case K_GPHRASE: put_s(put_u(b, 1u << v), v ? " bars" : " bar"); break;
+    case K_GPROG: put_s(b, v ? "Keys" : "Auto"); break;
+    case K_GON: put_s(b, v ? "On" : "Off"); break;
+    case K_GPMODE: put_s(b, gen_mode_name(gen_page_part() < 0 ? 0 : gen_page_part(), v)); break;
+    case K_GDEV: put_s(b, gen_dev_name(v)); break;
+    case K_GCHAN: put_u(b, (uint32_t)v + 1u); break;
+    case K_GDSET: put_s(b, gen_dset_name(v)); break;
+    case K_GSIMCH:
+        if (v)
+            put_u(b, (uint32_t)v);
+        else
+            put_s(b, "Drums'");
+        break;
+    case K_GSIM2: put_s(b, v == 2 ? "Perc" : v ? "Crash" : "Snare"); break;
+    case K_GSWING:
+        if (v)
+            put_s(put_u(b, 49u + (uint32_t)v), "%");
+        else
+            put_s(b, "Style");
+        break;
+    case K_GLANE: put_s(b, gen_lane_name(v)); b[10] = 0; break;
+    case K_GLNOTE: case K_GMBLO: put_note(b, v); break;
+    case K_GMBT:
+        if (v)
+            put_u(b, (uint32_t)v);
+        else
+            put_s(b, "Off");
+        break;
+    case K_GOCT: case K_GMBX:
+        if (v > 0)
+            put_u(put_s(b, "+"), (uint32_t)v);
+        else if (v < 0)
+            put_u(put_s(b, "-"), (uint32_t)-v);
+        else
+            put_s(b, "0");
+        break;
     default: put_u(b, (uint32_t)v); break;
     }
 }
@@ -650,6 +792,16 @@ static void track_regen(void)
     t->pat = euclid(t->steps, t->hits, t->rot);
 }
 
+/* a part's switch, channel or device: its notes end (and its controller and bend rest) where they started */
+static void gen_part_set(int on, int chan, int dev)
+{
+    uint32_t f = plat_lock();
+    gen_part_off(gen_page_part() < 0 ? 0 : gen_page_part());
+    gpart()->on = (uint8_t)on;
+    gpart()->chan = (uint8_t)chan;
+    gpart()->dev = (uint8_t)dev;
+    plat_unlock(f);
+}
 static void knob_set(int k, int v)
 {
     int lo, hi;
@@ -714,6 +866,35 @@ static void knob_set(int k, int v)
             plat_ble_enable(v);
             say("BLUETOOTH", v ? "ON" : "OFF");
             break;
+        case K_GSTYLE: proj.gen.style = (uint8_t)v; break;
+        case K_GKEY: proj.gen.root = (uint8_t)v; break;
+        case K_GMINOR: proj.gen.minor = (uint8_t)v; break;
+        case K_GSEED: proj.gen.seed = (uint16_t)v; break;
+        case K_GPHRASE: proj.gen.phrase = (uint8_t)v; break;
+        case K_GFEEL: proj.gen.feel = (uint8_t)v; break;
+        case K_GMUT: proj.gen.mutate = (uint8_t)v; break;
+        case K_GPROG: all_keys_up(); proj.gen.prog = (uint8_t)v; break;
+        case K_GON: gen_part_set(v, gpart()->chan, gpart()->dev); break;
+        case K_GPMODE: gpart()->mode = (uint8_t)v; break;
+        case K_GDENS: gpart()->dens = (uint8_t)v; break;
+        case K_GFLAIR: gpart()->flair = (uint8_t)v; break;
+        case K_GCHAN: gen_part_set(gpart()->on, v, gpart()->dev); break;
+        case K_GDEV: gen_part_set(gpart()->on, gpart()->chan, v); break;
+        case K_GVAR: gpart()->var = (uint8_t)v; break;
+        case K_GOCT: gpart()->oct = (int8_t)v; break;
+        case K_GDSET: proj.gen.dset = (uint8_t)v; break;
+        case K_GSIMCH: engine_panic(); proj.gen.sim_chan = (uint8_t)v; break;
+        case K_GSIM2: proj.gen.sim2 = (uint8_t)v; break;
+        case K_GGX: proj.gen.gx = (uint8_t)v; break;
+        case K_GGY: proj.gen.gy = (uint8_t)v; break;
+        case K_GCHAOS: proj.gen.chaos = (uint8_t)v; break;
+        case K_GLANE: ui.gen_lane = (uint8_t)v; return;      /* (which lane the page shows, not a setting) */
+        case K_GLNOTE: engine_panic(); proj.gen.lane_note[ui.gen_lane] = (uint8_t)v; break;
+        case K_GBEND: proj.gen.bend = (uint8_t)v; break;
+        case K_GMBLO: proj.gen.mb_lo = (uint8_t)v; break;
+        case K_GMBX: proj.gen.mb_xpose = (int8_t)v; break;
+        case K_GMBT: proj.gen.mb_tune = (uint8_t)v; break;
+        case K_GSWING: proj.gen.swing = (uint8_t)v; break;
         default: return;
         }
     }
@@ -741,7 +922,7 @@ static int32_t accel(int role, int32_t s, int range)
 /* ------------------------------------------------------------ buttons --- */
 static void set_view(int v)
 {
-    if (v == V_SEQ || ui.view == V_SEQ)
+    if (v == V_SEQ || ui.view == V_SEQ || v == V_GEN || ui.view == V_GEN)
         all_keys_up();                   /* the keys change meaning */
     ui.view = (uint8_t)v;
     ui.touched = -1;
@@ -763,13 +944,52 @@ static void octave(int d)
 #define SAVE_HOLD_MS 1000u               /* SAVE held this long on Setup: Bluetooth by hand */
 static void bank_to(int b)                     /* the knob bank, with a word on the top bar */
 {
-    char t[2] = {(char)('A' + b), 0};
+    char t[16];
+    t[0] = (char)('A' + b);
+    t[1] = 0;
+    if (BANK_NAME[b])
+        put_s(put_s(t + 1, " "), BANK_NAME[b]);
     proj.bank = (uint8_t)b;
     say_as("KNOB BANK", t, 0);                  /* a screen reader hears the page: the bank, its knobs */
     ui.touched = -1;
     mark_dirty();
 }
 
+/* Generate's keys: the first seven black keys switch the parts; with Chords = Keys every key sets the chord */
+static void gen_key(int k)
+{
+    int j;
+    for (j = 0; j < GEN_NPARTS; j++)
+        if (BLACK_K[j] == k) {
+            gen_part_t *q = &proj.gen.part[j];
+            uint32_t f = plat_lock();
+            gen_part_off(j);
+            q->on = (uint8_t)!q->on;
+            plat_unlock(f);
+            say(gen_part_name(j), q->on ? "ON" : "OFF");
+            ui.touched = -1;
+            mark_dirty();
+            return;
+        }
+    if (proj.gen.prog)
+        gen_chord_key(KEY0_NOTE + k);
+}
+static void gen_roll(void)
+{
+    char t[24];
+    int p = gen_page_part();
+    if (p < 0) {
+        proj.gen.seed = (uint16_t)(1u + gh(plat_ms(), proj.gen.seed) % 999u);
+        put_u(t, proj.gen.seed);
+        say("SEED", t);
+    } else {
+        proj.gen.part[p].var = (uint8_t)((proj.gen.part[p].var + 1u) % 100u);
+        put_u(put_s(put_s(t, gen_part_name(p)), " "), proj.gen.part[p].var);
+        say("VARIATION", t);
+    }
+    ui.touched = -1;
+    mark_dirty();
+}
 static void button_down(int b)
 {
     switch (b) {
@@ -793,7 +1013,14 @@ static void button_down(int b)
         engine_play(ui.playing);
         put_s(ui.last, ui.playing ? "Start" : "Stop");
         break;
-    case B_REC: panic(); sp_event(SE_PANIC, 0, 0); break;
+    case B_REC:
+        if (ui.view == V_GEN) {
+            gen_roll();                  /* another seed, or the part's next variation */
+            break;
+        }
+        panic();
+        sp_event(SE_PANIC, 0, 0);
+        break;
     case B_OCTDN: octave(-1); break;
     case B_OCTUP: octave(1); break;
     case B_SAVE:
@@ -801,6 +1028,10 @@ static void button_down(int b)
         ui.save_long = 0;
         break;
     case B_FX:
+        if (ui.view == V_GEN) {          /* held on a part's page: its channel, device, variation and octave */
+            ui.touched = -1;
+            break;
+        }
         set_view(V_PLAY);                /* held: the knobs set the controller numbers; a tap: the next bank */
         ui.fx_used = 0;
         ui.fx_t = plat_ms();
@@ -820,13 +1051,13 @@ static void button_up(int b)
         break;
     case B_LFO: engine_mod(0); break;
     case B_FX:
-        if (!ui.fx_used)
+        if (ui.view != V_GEN && !ui.fx_used)
             bank_to((proj.bank + 1) % NBANKS);
         ui.touched = -1;
         break;
     case B_HOME: set_view(V_PLAY); break;
     case B_SEL: set_view(V_SCALE); break;
-    case B_SEQ: set_view(V_SEQ); break;
+    case B_SEQ: set_view(ui.view == V_SEQ ? V_GEN : V_SEQ); break;   /* again: the generators */
     case B_ARP: set_view(V_ARP); break;
     case B_EDIT: set_view(V_SOUND); break;
     case B_GLO: set_view(V_SETUP); break;
@@ -902,11 +1133,13 @@ static void input(void)
     ui.keys = keys;
     for (i = 0; i < NKEYS; i++)
         if (ch >> i & 1u) {
-            if (ui.view != V_SEQ && touch_live && touch_sensed(i))
+            if (!keys_edit() && touch_live && touch_sensed(i))
                 continue;                        /* touch.c plays it (touch_events) */
             if (keys >> i & 1u) {
                 if (ui.view == V_SEQ)
                     seq_key((int)i);
+                else if (keys_edit())
+                    gen_key((int)i);
                 else
                     key_down((int)i, edge_vel(i));
             } else {
@@ -936,6 +1169,9 @@ static void input(void)
             ui.touched = -1;
         } else if (ui.view == V_SETUP && ui.setup_pg + d >= 0 && ui.setup_pg + d < SETUP_PAGES) {
             ui.setup_pg = (uint8_t)(ui.setup_pg + d);
+            ui.touched = -1;
+        } else if (ui.view == V_GEN && ui.gen_pg + d >= 0 && ui.gen_pg + d < GEN_PAGES) {
+            ui.gen_pg = (uint8_t)(ui.gen_pg + d);
             ui.touched = -1;
         }
     }
@@ -1525,6 +1761,43 @@ static void draw_sound(void)                     /* the onboard GM synth: what i
     cv_text(12, 90, &FONT_XS, t, K_DIM);
 }
 
+/* Generate: the style and key, the chord of the moment, the bar of the phrase and its sixteenths, the six parts
+ * (on, sounding, the page's), and the page's own line */
+static void draw_gen(void)
+{
+    char t[40];
+    int i, p = gen_page_part(), bars = gen_phrase_bars(), step = gen_running() ? gen_step() : -1;
+    int ls = proj.gen.part[GP_DRUMS].on && gen_running();
+    cv_text(8, 2, &FONT_B, gen_style_name(proj.gen.style), K_TEXT);
+    put_s(put_s(put_s(t, NOTE_NAME[proj.gen.root]), " "), proj.gen.minor ? "minor" : "major");
+    text_r(232, 2, &FONT_B, t, K_DIM);
+    gen_chord_text(t);
+    cv_text(8, 22, &FONT_L, t, K_HOT);
+    put_u(put_s(put_u(put_s(t, "BAR "), (uint32_t)(gen_running() ? gen_bar() + 1 : 1)), " / "), (uint32_t)bars);
+    text_r(232, 26, &FONT_XS, t, K_DIM);
+    put_u(put_s(t, proj.gen.prog ? "KEYS  SEED " : "SEED "), proj.gen.seed);
+    text_r(232, 40, &FONT_XS, t, K_DIM);
+    for (i = 0; i < 16; i++)                             /* the bar's sixteenths */
+        cv_round(8 + i * 14, 62, 12, 6, 2, i == step ? K_HOT : (i & 3) ? K_LINE : K_COOL_T);
+    for (i = 0; i < GEN_NPARTS; i++) {                   /* the parts */
+        static const char *const AB[GEN_NPARTS] = {"DRM", "CHD", "ARP", "BAS", "LEA", "KIK", "MRB"};
+        const gen_part_t *q = &proj.gen.part[i];
+        int32_t px = 6 + i * 33;
+        uint16_t bg = !q->on ? K_PANEL : gen_part_heard(i) ? K_HOT : K_COOL_T, fg = !q->on ? K_DIM : gen_part_heard(i) ? K_WHITE : K_COOL_D;
+        cv_round(px, 76, 30, 20, 4, bg);
+        text_c(px + 15, vc(&FONT_XS, 76, 20), &FONT_XS, AB[i], fg);
+        if (i == p)
+            cv_rect(px + 4, 99, 22, 2, K_HOT);
+    }
+    if (ls)                                              /* the drum part's kick and snare this bar, under the steps */
+        for (i = 0; i < 16; i++) {
+            if (gen_lane_steps(L_KICK) >> i & 1u)
+                cv_rect(8 + i * 14, 70, 12, 2, K_TEXT);
+            if (gen_lane_steps(L_SNARE) >> i & 1u)
+                cv_rect(8 + i * 14, 58, 12, 2, K_COOL_D);
+        }
+}
+
 static void draw_main(void)
 {
     uint32_t h = hash(2166136261u, ui.view), p;
@@ -1566,11 +1839,25 @@ static void draw_main(void)
         h = hash(hash(h, (uint32_t)proj.ble_off), plat_midi_count(PORT_BLE, 0) ^ plat_midi_count(PORT_BLE, 1) << 16);
         h = hash(hash(h, plat_midi_count(PORT_USB, 0) ^ plat_midi_count(PORT_USB, 1) << 16), plat_midi_count(PORT_TRS, 0));
     }
+    if (ui.view == V_GEN) {
+        char t[12];
+        gen_chord_text(t);
+        h = hash(hash_s(h, t), (uint32_t)gen_bar() | (uint32_t)gen_step() << 4 | (uint32_t)gen_running() << 8 |
+                                   (uint32_t)ui.gen_pg << 9 | (uint32_t)proj.gen.seed << 16);
+        h = hash(h, (uint32_t)gen_lane_steps(L_KICK) | (uint32_t)gen_lane_steps(L_SNARE) << 16);
+        h = hash(h, proj.gen.style | proj.gen.root << 8 | proj.gen.minor << 12 | proj.gen.phrase << 13 |
+                        (uint32_t)proj.gen.prog << 15 | (uint32_t)ui.gen_lane << 16);
+        for (i = 0; i < GEN_NPARTS; i++)
+            h = hash(h, proj.gen.part[i].on | (uint32_t)gen_part_heard(i) << 1 | (uint32_t)proj.gen.part[i].mode << 2 |
+                            (uint32_t)proj.gen.part[i].dev << 8 | (uint32_t)proj.gen.part[i].chan << 12 |
+                            (uint32_t)proj.gen.part[i].var << 16);
+    }
     if (h == ui.sig[1])
         return;
     ui.sig[1] = h;
     cv_begin(240, MAIN_H, K_BG);
     switch (ui.view) {
+    case V_GEN: draw_gen(); break;
     case V_PLAY: draw_play(); break;
     case V_SCALE: draw_scale(); break;
     case V_ARP: draw_arp(); break;
@@ -1590,10 +1877,38 @@ static void draw_status(void)
                                                  ui.sustain << 12 | ui.sus_lock << 16 | proj.arp_on << 13 | proj.arp_latch << 14 |
                                                  (uint32_t)(eng_mod_val() != 0) << 15),
                            proj.program | proj.sound << 8 | (uint32_t)proj.chan << 12), ui.view);
+    if (ui.view == V_GEN) {
+        const gen_part_t *q = gpart();
+        h = hash(hash(h, (uint32_t)ui.gen_pg | (uint32_t)proj.gen.swing << 8 | (uint32_t)proj.gen.feel << 16),
+                 (uint32_t)q->mode | (uint32_t)q->dev << 8 | (uint32_t)q->chan << 12 | (uint32_t)q->var << 16);
+    }
     if (h == ui.sig[3])
         return;
     ui.sig[3] = h;
     cv_begin(240, STAT_H, K_BG);
+    if (ui.view == V_GEN) {                              /* Generate: the page, and the swing */
+        static const char *const PG[GEN_PAGES] = {"Song", "Groove", "Chords and clock", 0, 0, 0, 0, 0, 0, 0,
+                                                  "Drum set", "Grids", "Lane notes", "Tuning"};
+        char g2[40], *e;
+        int p = gen_page_part();
+        if (p >= 0) {
+            const gen_part_t *q = &proj.gen.part[p];
+            e = put_s(put_s(put_s(g2, gen_mode_name(p, q->mode)), " > "), gen_dev_name(q->dev));
+            e = put_u(put_s(e, "  ch "), q->chan + 1u);
+            if (q->var)
+                put_u(put_s(e, "  v"), q->var);
+        } else {
+            put_s(g2, PG[ui.gen_pg]);
+        }
+        cv_text(4, vc(&FONT_XS, 0, 15), &FONT_XS, g2, K_TEXT);
+        if (proj.gen.swing)
+            put_s(put_u(put_s(g2, "SWING "), 49u + proj.gen.swing), "%");
+        else
+            put_s(g2, "SWING: STYLE");
+        text_r(236, vc(&FONT_XS, 0, 15), &FONT_XS, g2, K_DIM);
+        cv_blit(0, STAT_Y);
+        return;
+    }
     put_note(put_s(t, "Lowest "), proj.scale ? SCALE0_NOTE + proj.root + 12 * proj.octave : KEY0_NOTE + 12 * proj.octave);
     x = cv_text(4, vc(&FONT_XS, 0, 15), &FONT_XS, t, K_DIM) + 8;
     if (proj.arp_on)
@@ -1612,7 +1927,7 @@ static void draw_status(void)
  * its value; under them, the footer: what the page's buttons and keys do */
 static void knob_tag(char *t, int *dots, int *cur)
 {
-    static const char *const T[NVIEWS] = {"BANK", "KEYS", "ARP", "TRACK", "SOUND", "SETUP"};
+    static const char *const T[NVIEWS] = {"BANK", "KEYS", "ARP", "TRACK", "SOUND", "SETUP", "GENERATE"};
     char *b = put_s(t, T[ui.view]);
     *dots = 0;
     if (ui.view == V_PLAY) {
@@ -1621,8 +1936,19 @@ static void knob_tag(char *t, int *dots, int *cur)
         b[2] = 0;
         if (fx_cc())
             put_s(b + 2, ": CC NUMBERS");
+        else if (BANK_NAME[proj.bank])
+            put_s(put_s(b + 2, " "), BANK_NAME[proj.bank]);
         *dots = NBANKS;
         *cur = proj.bank;
+    } else if (ui.view == V_GEN) {
+        if (gen_page_part() >= 0) {
+            for (b = put_s(t, gen_part_name(gen_page_part())); *t; t++)
+                *t = (char)(*t >= 'a' && *t <= 'z' ? *t - 32 : *t);
+            if (gen_alt())
+                put_s(b, ": SETUP");
+        }
+        *dots = GEN_PAGES;
+        *cur = ui.gen_pg;
     } else if (ui.view == V_SEQ) {
         put_u(put_s(b, " "), ui.track + 1u);
         *dots = NTRACKS;
@@ -1652,6 +1978,16 @@ static void footer_text(const char **a, const char **b, const char **c)
     case V_ARP: *a = "HOLD NOTES OR A CHORD"; *b = "KNOB 1: OFF, ON, LATCH"; break;
     case V_SEQ: *a = "WHITE: STEPS"; *b = "SELECT, BLACK 1-4: TRACK"; *c = "5-8: MUTE"; break;
     case V_SOUND: *a = "PRESETS: THE SOUND"; *b = "MASTER: VOLUME"; break;
+    case V_GEN:
+        *a = "SELECT: PAGE";
+        if (gen_page_part() >= 0) {
+            *b = "FX: CH, DEVICE";
+            *c = "REC: VARIATION";
+        } else {
+            *b = "REC: NEW SEED";
+            *c = proj.gen.prog ? "KEYS: CHORD" : "BLACK KEYS: PARTS";
+        }
+        break;
     default:
         if (ui.setup_pg == 2) {
             *a = "SELECT: SETUP";
@@ -1677,7 +2013,8 @@ static void footer_text(const char **a, const char **b, const char **c)
 static int knob_switch(int k)                    /* a few named positions: pips, not an arc */
 {
     return k == K_ARP || k == K_CLOCK || k == K_GLOW || k == K_SOUND || k == K_SNDIN || k == K_AOCT ||
-           k == K_TOUCH || k == K_ATM || k == K_BT;
+           k == K_TOUCH || k == K_ATM || k == K_BT || k == K_GMINOR || k == K_GPROG || k == K_GON || k == K_GPHRASE ||
+           k == K_GSIM2 || k == K_GOCT || k == K_GDSET;
 }
 
 static void draw_knobs(void)
@@ -1685,6 +2022,7 @@ static void draw_knobs(void)
     uint32_t h = hash(2166136261u, ui.view | (uint32_t)ui.touched << 8 | proj.bank << 16 | ui.track << 20 |
                                        (uint32_t)fx_cc() << 24 | (uint32_t)ui.setup_pg << 25), i;
     int now_touch = plat_ms() < ui.touch_until, dots, cur = 0;
+    h = hash(h, (uint32_t)ui.gen_pg | (uint32_t)gen_alt() << 8 | (uint32_t)ui.gen_lane << 9 | (uint32_t)proj.gen.prog << 16);
     char t[32];
     for (i = 0; i < 4; i++)
         h = hash(hash(h, (uint32_t)knob_get(view_knob((int)i))), proj.cc[proj.bank][i]);
@@ -1761,7 +2099,26 @@ static void leds(void)
     /* PLAY is green, never its red (that would mean recording, which Ctl does not do): dim green when
      * stopped and between beats */
     db = (((1u << NB) - 1u) & ~b & ~(1u << B_PLAY)) | LED_PLAY_GREEN;
-    if (ui.view == V_SEQ) {
+    if (ui.playing && gen_running() && gen_bar() == 0 && gen_step() < 2 && gen_phrase_bars() > 1)
+        b |= 1u << B_REC;                        /* the phrase comes round: REC blinks on its first beat */
+    if (ui.view == V_GEN) {
+        /* the sixteen white keys: the bar, the step playing bright, the beats dim (the drum part on: its kick
+         * and snare dim instead); the first seven black keys: the parts, bright while sounding, dim when on */
+        uint16_t hits = proj.gen.part[GP_DRUMS].on ? (uint16_t)(gen_lane_steps(L_KICK) | gen_lane_steps(L_SNARE)) : 0x1111u;
+        for (i = 0; i < 16; i++) {
+            if (gen_running() && (int)i == gen_step())
+                k |= 1u << WHITE_K[i];
+            else if (hits >> i & 1u)
+                dk |= 1u << WHITE_K[i];
+        }
+        for (i = 0; i < GEN_NPARTS; i++)
+            if (proj.gen.part[i].on) {
+                if (gen_part_heard((int)i) || !gen_running())
+                    k |= 1u << BLACK_K[i];
+                else
+                    dk |= 1u << BLACK_K[i];
+            }
+    } else if (ui.view == V_SEQ) {
         const track_t *t = trk();
         int pos = eng_track_pos(ui.track);
         for (i = 0; i < 16; i++) {
@@ -2114,6 +2471,8 @@ static uint32_t sp_ctx_sig(void)
         h = hash(h, ui.track);
     else if (ui.view == V_SETUP)
         h = hash(h, ui.setup_pg);
+    else if (ui.view == V_GEN)
+        h = hash(h, (uint32_t)ui.gen_pg | (uint32_t)gen_alt() << 8);
     return h;
 }
 static void sp_snap(void)
@@ -2273,9 +2632,11 @@ static void speak_dump(void)
     for (v = 0; v < NVIEWS; v++) {                    /* every page (Play: each bank, and FX held; Sequencer:
                                                        * each track, on channel 10 and on another) */
         ui.view = (uint8_t)v;
-        for (q = 0; q < (v == V_PLAY ? 2 * NBANKS : v == V_SEQ ? 2 * NTRACKS : v == V_SETUP ? SETUP_PAGES : 1); q++) {
+        for (q = 0; q < (v == V_PLAY ? 2 * NBANKS : v == V_SEQ ? 2 * NTRACKS : v == V_SETUP ? SETUP_PAGES :
+                         v == V_GEN ? GEN_PAGES : 1); q++) {
             ui.btn = 0;
             ui.setup_pg = (uint8_t)(v == V_SETUP ? q : 0);
+            ui.gen_pg = (uint8_t)(v == V_GEN ? q : 0);
             if (v == V_PLAY) {
                 proj.bank = (uint8_t)(q % NBANKS);
                 ui.btn = q >= NBANKS ? 1u << B_FX : 0u;
@@ -2399,11 +2760,13 @@ static void dev_scan(void);
 void ui_frame(void)
 {
     input();
+    gen_service();                       /* the generators' bars are built here, never in the tick */
     dev_scan();
     autosave();
     draw_header();
     plat_yield();
     draw_main();
+    gen_service();
     plat_yield();
     draw_status();
     draw_knobs();
@@ -2428,5 +2791,6 @@ static void dev_scan(void)
 void ui_input_only(void)
 {
     input();
+    gen_service();
     dev_scan();
 }

@@ -99,6 +99,12 @@ said SAVED
 tap SEQ
 wait 300
 said Sequencer page, track 1: Steps 16, Hits 4, Rotate 0, Note kick
+# (the tracks are muted until unmuted, black keys 5-8: the generators play by default)
+tapkey 10
+tapkey 13
+tapkey 15
+tapkey 17
+wait 300
 tapkey 2
 wait 50
 said Step 2 on

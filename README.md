@@ -1,28 +1,42 @@
-# CTL-1 for the M-VAVE FM-1
+# GEN-1 for the M-VAVE FM-1
 
-CTL-1 turns the M-VAVE FM-1 into a MIDI controller. The keys play notes, with velocity and aftertouch read
-from the keys themselves, in any scale with its chords under the black keys; the knobs send controllers in four banks; an arpeggiator and a four-track
-Euclidean drum sequencer run on its clock. Everything goes out over USB and Bluetooth, MIDI from the TRS jack
-is passed along, and the FM-1 plays it all on its own General MIDI sounds too, so it works with nothing connected.
+GEN-1 is Grumo's fork of [CTL-1](https://github.com/charlesvestal/fm1-ctl), Charles Vestal's MIDI controller
+firmware for the M-VAVE FM-1. It keeps everything CTL-1 does and adds a **Generate** page: seven generative parts
+(drums, chords, arpeggio, bass, lead, a melodic kick and a random-note part after Mutable Instruments' Marbles)
+that follow one key, one chord progression and one of 24 styles, in time with an external MIDI clock. It makes no
+sound of its own that matters: it sends notes and controllers over USB for other instruments to play, and was
+written around one studio (an MPC Live II as clock and recorder, an MFB Tanzbar Lite, a MAM MB-33, a Dreadbox
+Hades, a Korg Monologue, a Roland JV-1010, a Volca FM, a Jomox MBase 11 and a Simmons SDS-200).
 
-![The Play page](docs/img/screen-play.png) ![The Keys page](docs/img/screen-keys.png) ![The Sequencer page](docs/img/screen-seq.png)
+![The Generate page](docs/img/screen-gen.png) ![Drums and bass playing](docs/img/screen-gen-bass.png) ![The Tanzbar's kick on the knobs](docs/img/screen-tanzbar.png)
 
-- **Try it in your browser** (no FM-1 needed): <https://charlesvestal.github.io/fm1-ctl/emu/>
-- **Install it** (Chrome or Edge, with the FM-1 plugged in): <https://charlesvestal.github.io/fm1-ctl/install/>
-- **Read the manual**: <https://charlesvestal.github.io/fm1-ctl/manual/> (source: [docs/MANUAL.md](docs/MANUAL.md))
-- **Download the firmware file**: [releases](https://github.com/charlesvestal/fm1-ctl/releases): `ctl-X.Y.fwsc` has
-  USB, TRS and Bluetooth MIDI, `ctl-usb-X.Y.fwsc` the same without Bluetooth
+What the fork adds:
 
-Installing it is at your own risk, though it's hard to get stuck: the web installer can put
-M-VAVE's own firmware back, and an FM-1 that fails to start twice comes up in a safe mode the
-installer can reach.
+- **Generate** (press SEQ twice): style, key, seed, swing; a page for each part; pages for the drum lanes' notes,
+  Grids and tuning. The first seven black keys switch the parts on and off.
+- **One seed.** Everything a part plays comes from the seed, the style, the key and the bar number, so parts
+  recorded one after another on a sequencer fit each other bar for bar.
+- **Instrument profiles**: each part knows how its instrument takes an accent and a slide, its range, and which
+  controller moves its filter.
+- **Twelve knob banks** on Play: CTL-1's four, and eight (E to L) with the Tanzbar Lite's controllers, voice by
+  voice.
+- CTL-1's own Euclidean sequencer is still on SEQ; its tracks now start muted.
+
+- **Manual**: [docs/MANUAL.md](docs/MANUAL.md); the generators are section 17
+- **Firmware file**: built on GitHub from this repository (Actions, "Build and attest firmware", Run workflow);
+  the run's `packages` artifact holds `ctl.fwsc` (USB, TRS and Bluetooth MIDI) and `ctl-usb.fwsc` (no Bluetooth)
+- **CTL-1 itself**, its emulator and its installer: <https://github.com/charlesvestal/fm1-ctl>
+
+This fork has run in the simulator only so far, not yet on an FM-1. Installing it is at your own risk, though it's
+hard to get stuck: the web installer can put M-VAVE's own firmware back, and an FM-1 that fails to start twice comes
+up in a safe mode the installer can reach.
 
 ## In short
 
 | | |
 |---|---|
 | Keys | Notes; with a scale, its notes on the white keys and its chords on the black keys |
-| KNOB 1–4 | The page's four values; on Play, four controllers in four banks |
+| KNOB 1–4 | The page's four values; on Play, four controllers in twelve banks |
 | HOME · SEL · ARP · SEQ · EDIT · GLO | The pages: Play, Keys, Arp, Sequencer, Sound, Setup |
 | SELECT | The page's own pages: the banks on Play, the tracks on the Sequencer |
 | ALGORITHM · PRESETS · MASTER | MIDI channel · program change (the sound follows) · volume |
@@ -45,7 +59,7 @@ Bluetooth.
 
 ## Building and testing
 
-CTL-1 is an app on [fm1-base](https://github.com/charlesvestal/fm1-base) (`base/`, a git submodule); clone with
+GEN-1, like CTL-1, is an app on [fm1-base](https://github.com/charlesvestal/fm1-base) (`base/`, a git submodule); clone with
 `--recursive`. The toolchain and prerequisites are in [BUILDING.md](BUILDING.md):
 
 ```

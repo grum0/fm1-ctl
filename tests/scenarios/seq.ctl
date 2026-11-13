@@ -1,6 +1,11 @@
 # the sequencer: four Euclidean tracks on channel 10, clock out, keys edit steps, mute, external clock
 tap SEQ
 expect view 3
+# (the tracks are muted until unmuted, black keys 5-8: the generators play by default)
+tapkey 10
+tapkey 13
+tapkey 15
+tapkey 17
 expect pat0 4369
 out
 wait 500

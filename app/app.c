@@ -3,6 +3,8 @@
 /* CTL-1 on fm1-base: the app's unity build (compiled into fm1-base's, after the platform and its lib/touch.c) and
  * the glue between fm1-base's contract (app.h) and Ctl's parts: the settings (project.c), the engine (engine.c), the
  * UI (ui.c) and the GM synth (dsp/gm.c, its own -O2 unit). */
+#include "logo.h"
+#include "gen.c"                         /* the generators (their own names: no platform, no screen) */
 #include "project.c"
 #include "engine.c"
 #include "ui.c"
@@ -31,6 +33,7 @@ static uint8_t synth_ok;
 void app_init(void)
 {
     project_load();                      /* defaults when nothing (or another format) is saved */
+    engine_gen_init();
     if (!synth_ok)
         synth_ok = gm_init() == 0;       /* the onboard GM synth, once */
 }
@@ -61,18 +64,23 @@ void app_ui_init(void)
 void app_frame(void) { ui_frame(); }
 void app_input_only(void) { ui_input_only(); }
 void app_say(const char *a, const char *b) { ui_say(a, b); }
-void app_splash(void)                    /* ui.c's paper and ink */
+void app_splash(void)                    /* ui.c's paper and ink: the owner's mark, the name under it */
 {
+    uint32_t i;
     lcd_fill(0, 0, 240, 240, RGB(251, 248, 241));
+    cv_begin(240, LOGO_H + 4, RGB(251, 248, 241));
+    for (i = 0; i < sizeof LOGO_RUN / sizeof LOGO_RUN[0]; i++)
+        cv_rect((240 - LOGO_W) / 2 + LOGO_RUN[i][1], 2 + LOGO_RUN[i][0], LOGO_RUN[i][2], 1, RGB(30, 43, 90));
+    cv_blit(0, 62);
     cv_begin(240, 64, RGB(251, 248, 241));
     {
-        int32_t w = text_w(&FONT_L, APP_NAME);
-        cv_text((240 - w) / 2, 0, &FONT_L, APP_NAME, RGB(30, 43, 90));
-        cv_rect((240 - w) / 2, 37, w, 2, RGB(229, 72, 46));
+        int32_t w = text_w(&FONT_B, APP_NAME);
+        cv_text((240 - w) / 2, 4, &FONT_B, APP_NAME, RGB(30, 43, 90));
+        cv_rect((240 - w) / 2, 26, w, 2, RGB(229, 72, 46));
         w = text_w(&FONT_S, APP_TAGLINE);
-        cv_text((240 - w) / 2, 44, &FONT_S, APP_TAGLINE, RGB(122, 128, 152));
+        cv_text((240 - w) / 2, 34, &FONT_S, APP_TAGLINE, RGB(122, 128, 152));
     }
-    cv_blit(0, 92);
+    cv_blit(0, 126);
 }
 
 #ifdef PLAT_HOST

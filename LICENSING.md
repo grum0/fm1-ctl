@@ -41,3 +41,11 @@ independent firmware; it is not affiliated with, endorsed by or supported by any
 
 The build with Bluetooth enables the radio at start (not after a crashed Bluetooth run; then only when SAVE is
 held on the Setup page), and only as a BLE peripheral (BLE MIDI). The build without it never enables the radio.
+
+## This fork: the generators
+
+`app/gen.c`, `app/gen.h` and `tests/host/gen_test.c` (the Generate page's harmony core, styles and parts) are
+GPL-3.0-or-later. `app/grids_tables.h` holds the drum maps of Mutable Instruments Grids, Copyright 2012 Emilie Gillet,
+GPL-3.0-or-later, taken from Hortator's C port (DEADACTIVE). A firmware built with them is, as a whole, under the GPL
+version 3; the build with JieLi's Bluetooth libraries is then for personal use only, the build without Bluetooth
+(`--no-ble`) may be shared with its source.

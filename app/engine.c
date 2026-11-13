@@ -58,6 +58,34 @@ static void eng_send(uint32_t st, uint32_t d1, uint32_t d2)
     ctl_send((st >> 4) | st << 8 | d1 << 16 | d2 << 24, TO_USB | TO_BLE);
 }
 
+/* ------------------------------------------------------------ generators --- */
+/* gen.c counts 96 subticks a quarter note, four a clock tick: the first on the tick, the other three spread over
+ * the time the last tick took (measured, so it holds for a clock from outside), caught up at the next tick */
+static struct { uint32_t last_ms, period, next_q; uint8_t pend; } gsub;
+static void gen_out(uint32_t st, uint32_t d1, uint32_t d2) { eng_send(st, d1, d2); }
+void engine_gen_init(void) { gen_init(&proj.gen, gen_out); }
+static void gen_clock(void)                      /* a clock tick while playing */
+{
+    uint32_t now = plat_ms(), per = now - gsub.last_ms;
+    for (; gsub.pend; gsub.pend--)
+        gen_subtick();
+    if (per < 3u || per > 150u)                  /* the first tick, or after a gap: the tempo's */
+        per = 2500u / proj.tempo;
+    gsub.last_ms = now;
+    gsub.period = per;
+    gen_subtick();
+    gsub.pend = 3;
+    gsub.next_q = now * 4u + per;                /* in quarter milliseconds: a subtick is a quarter of the period */
+}
+static void gen_ms(void)
+{
+    if (gsub.pend && eng.running && (int32_t)(plat_ms() * 4u - gsub.next_q) >= 0) {
+        gen_subtick();
+        gsub.pend--;
+        gsub.next_q += gsub.period;
+    }
+}
+
 /* ------------------------------------------------------------ arpeggiator --- */
 static int arp_seq(uint8_t *out)                 /* the notes in playing order, octaves included */
 {
@@ -214,6 +242,7 @@ static void clock_tick(void)                     /* one 24th of a beat */
         arp_off();
     }
     if (eng.running) {
+        gen_clock();
         if (eng.seq_tick % SEQ_TICKS == 0u)
             seq_step();
         eng.seq_tick++;
@@ -245,6 +274,7 @@ static int eng_mod_val(void) { return eng.mod_sent; }
 void engine_tick(void)                           /* every millisecond (device: TIMER5 interrupt) */
 {
     mod_tick();
+    gen_ms();
     if (proj.clock == CLK_EXT)
         return;
     eng.phase += proj.tempo * 24u;
@@ -261,13 +291,19 @@ static void seq_start(int from_top)
     if (from_top) {
         eng.seq_tick = 0;
         eng.seq_step = 0;
+        gen_start();
+    } else {
+        gen_continue();
     }
+    gsub.pend = 0;
     eng.running = 1;
 }
 
 static void seq_stop(void)
 {
     eng.running = 0;
+    gsub.pend = 0;
+    gen_stop();
     seq_offs();
 }
 
@@ -306,9 +342,12 @@ void engine_play(int on)                         /* main loop: PLAY */
 
 void engine_panic(void)
 {
+    int p;
     uint32_t f = plat_lock();
     arp_off();
     seq_offs();
+    for (p = 0; p < GEN_NPARTS; p++)
+        gen_part_off(p);
     eng.mod_up = 0;                              /* the mod wheel straight down */
     eng.mod_q = 0;
     if (eng.mod_sent) {

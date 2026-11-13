@@ -86,6 +86,21 @@ int app_expect(const char *what, int *got)
         g = out_count(1);
     else if (!strcmp(what, "notes_on"))
         g = out_count(2);
+    else if (!strcmp(what, "splash")) {  /* draws the boot screen (the simulator has no boot), for a screenshot */
+        app_splash();
+        g = 1;
+    } else if (!strcmp(what, "gen_pg"))
+        g = ui.gen_pg;
+    else if (!strcmp(what, "gen_style"))
+        g = proj.gen.style;
+    else if (!strcmp(what, "gen_seed"))
+        g = proj.gen.seed;
+    else if (!strcmp(what, "gen_bar"))
+        g = gen_bar();
+    else if (!strncmp(what, "gen_on", 6))   /* gen_onN: part N plays */
+        g = proj.gen.part[atoi(what + 6) % GEN_NPARTS].on;
+    else if (!strncmp(what, "gen_var", 7))
+        g = proj.gen.part[atoi(what + 7) % GEN_NPARTS].var;
     else if (!strncmp(what, "cc", 2))    /* ccN: knob N's controller number */
         g = proj.cc[proj.bank][atoi(what + 2) & 3];
     else if (!strncmp(what, "val", 3))   /* valN: knob N's value */

@@ -81,3 +81,30 @@ tap ENV
 tap ENV
 wait 200
 shot screen-sus.png
+# Generate (SEQ twice): the Song page; then drums and bass playing in the P-Funk style, the bass's page up
+tap SEQ
+tap SEQ
+wait 1300
+shot screen-gen.png
+turn SELECT 1
+wait 300
+shot screen-gen-groove.png
+turn SELECT 2
+spin K1 1
+turn SELECT 3
+spin K1 1
+tap PLAY
+wait 2700
+shot screen-gen-bass.png
+tap PLAY
+turn SELECT 6
+spin K1 2
+wait 300
+shot screen-gen-lanes.png
+# banks E-L: the Tanzbar Lite, voice by voice
+tap HOME
+turn SELECT 4
+wait 1300
+shot screen-tanzbar.png
+expect splash 1
+shot screen-splash.png

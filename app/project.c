@@ -6,7 +6,13 @@ project_t proj;
 
 /* the knob banks: A filter cutoff, resonance, modulation, volume; B attack, release, decay, vibrato;
  * C and D the general-purpose controllers 16-23 */
-static const uint8_t CC_DEFAULT[NBANKS][NKNOBS] = {{74, 71, 1, 7}, {73, 72, 75, 76}, {16, 17, 18, 19}, {20, 21, 22, 23}};
+static const uint8_t CC_DEFAULT[NBANKS][NKNOBS] = {
+    {74, 71, 1, 7}, {73, 72, 75, 76}, {16, 17, 18, 19}, {20, 21, 22, 23},
+    /* E-L, the MFB Tanzbar Lite: kick (tone tune decay), snare (tone noise decay), clap (filter decay attack trigger),
+     * toms (tune decay pan), congas (tune decay pan), cowbell and claves (tune decay each), cymbal (tune decay tone),
+     * hats (closed decay, open decay) */
+    {2, 3, 64, CC_OFF}, {11, 13, 67, CC_OFF}, {18, 75, 76, 77}, {19, 20, 73, CC_OFF}, {79, 78, 82, CC_OFF},
+    {84, 85, 86, 87}, {89, 88, 92, CC_OFF}, {91, 90, CC_OFF, CC_OFF}};
 /* the sequencer: General MIDI drums (kick, snare, closed hat, clap) */
 static const uint8_t TRK_DEFAULT[NTRACKS][4] = {{16, 4, 0, 36}, {16, 2, 4, 38}, {16, 8, 0, 42}, {12, 3, 2, 39}};
 
@@ -52,7 +58,9 @@ void project_defaults(void)
         t->rot = TRK_DEFAULT[k][2];
         t->note = TRK_DEFAULT[k][3];
         t->pat = euclid(t->steps, t->hits, t->rot);
+        t->mute = 1;                             /* (the generators play by default: a track plays once unmuted) */
     }
+    gen_defaults(&proj.gen);
 }
 
 static int project_valid(void)
@@ -70,7 +78,7 @@ static int project_valid(void)
         return 0;
     for (b = 0; b < NBANKS; b++)
         for (k = 0; k < NKNOBS; k++)
-            if (proj.cc[b][k] > 119u || proj.val[b][k] > 127u)
+            if (proj.cc[b][k] > CC_OFF || proj.val[b][k] > 127u)
                 return 0;
     for (k = 0; k < NTRACKS; k++) {
         const track_t *t = &proj.trk[k];
@@ -78,7 +86,7 @@ static int project_valid(void)
             t->mute > 1u)
             return 0;
     }
-    return 1;
+    return gen_valid(&proj.gen);
 }
 
 int project_load(void)

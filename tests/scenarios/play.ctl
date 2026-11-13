@@ -32,6 +32,20 @@ expect_out USB B2 49 43
 tap FX
 tap FX
 tap FX
+# E: the Tanzbar's kick (tone, tune, decay; no fourth knob)
+expect bank 4
+expect cc0 2
+spin K1 1
+expect_out USB B2 02 41
+spin K4 1
+tap FX
+tap FX
+tap FX
+tap FX
+tap FX
+tap FX
+tap FX
+tap FX
 expect bank 0
 press ENV
 expect_out USB B2 40 7F
