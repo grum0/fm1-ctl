@@ -386,6 +386,42 @@ static void test_arp_seq(void)
     check_no_stuck("sequencer");
 }
 
+static void test_bass_range(void)
+{
+    /* No style, bass mode or octave setting may put a bass note outside its device's range, or above G5 on any device. */
+    int style, mode, oct, dev, i, top = 0, n = 0;
+    static const int DEVS[3] = {DV_GENERIC, DV_MB33, DV_HADES};
+    static const int HI[3] = {79, 72, 79};
+    for (style = 0; style < GEN_NSTYLES; style++)
+        for (mode = 0; mode < 14; mode++)
+            for (oct = -2; oct <= 2; oct += 2)
+                for (dev = 0; dev < 3; dev++) {
+                    fresh();
+                    eng_set(F_CLOCK, CLK_INT, vnow);
+                    eng_set(F_STYLE, style, vnow);
+                    eng_set(F_SEED, 100 + style * 31 + mode, vnow);
+                    eng_set(F_PART(GP_BASS, PF_ON), 1, vnow);
+                    eng_set(F_PART(GP_BASS, PF_CHAN), 9, vnow);
+                    eng_set(F_PART(GP_BASS, PF_DEV), DEVS[dev], vnow);
+                    eng_set(F_PART(GP_BASS, PF_MODE), mode, vnow);
+                    eng_set(F_PART(GP_BASS, PF_OCT), oct, vnow);
+                    eng_play(1, vnow);
+                    run_internal(6000);
+                    eng_play(0, vnow);
+                    for (i = 0; i < nlog; i++)
+                        if (log_[i].n == 3 && log_[i].m[0] == 0x99 && log_[i].m[2]) {
+                            n++;
+                            if (log_[i].m[1] > top)
+                                top = log_[i].m[1];
+                            if (log_[i].m[1] > HI[dev]) {
+                                CHECK(0, "bass note %d (style %d, mode %d, octave %d, device %d)", log_[i].m[1], style,
+                                      mode, oct, DEVS[dev]);
+                                return;
+                            }
+                        }
+                }
+    printf("bass range: %d notes, the highest %d\n", n, top);
+}
 static void test_panic(void)
 {
     fresh();
@@ -402,6 +438,7 @@ int main(void)
     test_parts_fit();
     test_channels_follow();
     test_arp_seq();
+    test_bass_range();
     test_panic();
     printf(fails ? "FAILED (%d)\n" : "ok\n", fails);
     free(log_);

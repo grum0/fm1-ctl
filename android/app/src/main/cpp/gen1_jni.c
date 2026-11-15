@@ -38,6 +38,45 @@ static uint16_t bend_moved;              /* channels with the pitch bend off cen
 static int64_t close_t;                  /* when the port was last lost or closed */
 #define DETECT_NS 200000000LL            /* a dropout is noticed late: look back this far */
 
+/* A note-off is sent again 60 ms and 250 ms after it sounded, unless that note has been struck since: a USB packet
+ * lost on a poor cable would otherwise leave the note held (a mono synth falls back to it when the next ends). */
+#define NREP 64
+static struct { int64_t due; uint8_t ch, note, stage; } rep[NREP];
+static int rep_head;
+
+static void rep_add(int64_t when, int ch, int note, int stage, int64_t gap)
+{
+    int i = rep_head++ & (NREP - 1);
+    rep[i].due = when + gap;
+    rep[i].ch = (uint8_t)ch;
+    rep[i].note = (uint8_t)note;
+    rep[i].stage = (uint8_t)stage;
+}
+
+static void rep_run(int64_t now)         /* (mu held) */
+{
+    int i;
+    if (!out_port)
+        return;
+    for (i = 0; i < NREP; i++) {
+        if (!rep[i].due || rep[i].due > now)
+            continue;
+        if (on_t[rep[i].ch][rep[i].note] <= offs_t[rep[i].ch][rep[i].note]) {
+            uint8_t m[3];
+            m[0] = (uint8_t)(0x80 | rep[i].ch);
+            m[1] = rep[i].note;
+            m[2] = 0;
+            AMidiInputPort_sendWithTimestamp(out_port, m, 3, 0);
+            if (rep[i].stage == 0) {
+                rep[i].stage = 1;
+                rep[i].due = now + 190000000LL;
+                continue;
+            }
+        }
+        rep[i].due = 0;
+    }
+}
+
 static void track(int64_t when, const uint8_t *m, int len)
 {
     int ch, k;
@@ -47,8 +86,10 @@ static void track(int64_t when, const uint8_t *m, int len)
     k = m[0] & 0xF0;
     if (k == 0x90 && m[2])
         on_t[ch][m[1] & 127] = when ? when : 1;
-    else if (k == 0x80 || k == 0x90)
+    else if (k == 0x80 || k == 0x90) {
         offs_t[ch][m[1] & 127] = when;
+        rep_add(when > 0 ? when : now_ns(), ch, m[1] & 127, 0, 60000000LL);
+    }
     else if (k == 0xE0) {
         if (m[1] == 0 && m[2] == 64)
             bend_moved &= (uint16_t)~(1u << ch);
@@ -83,6 +124,7 @@ static void settle(void)                 /* (mu held, the port open) */
         }
     }
     bend_moved = 0;
+    memset(rep, 0, sizeof rep);
 }
 
 static void sink(void *ud, int64_t when, const uint8_t *m, int len)   /* (mu held) */
@@ -102,6 +144,7 @@ static void *loop(void *arg)
         struct timespec nap = {0, PERIOD_NS};
         pthread_mutex_lock(&mu);
         eng_pump(now_ns());
+        rep_run(now_ns());
         pthread_mutex_unlock(&mu);
         nanosleep(&nap, 0);
     }
