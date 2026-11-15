@@ -29,12 +29,69 @@ static int64_t now_ns(void)
     return (int64_t)ts.tv_sec * 1000000000LL + ts.tv_nsec;
 }
 
+/* What has been sent to the instruments, and when it should sound: so that a cable that drops out (taking with it the
+ * note-offs made meanwhile, and those still queued in Android's MIDI service) cannot leave a note hanging. When the
+ * port is back, every note that may still be sounding is ended and a pitch bend left off-centre is centred. */
+static int64_t on_t[16][128];            /* the time of each note's last note-on that went out, or 0 */
+static int64_t offs_t[16][128];          /* ... and of its last note-off */
+static uint16_t bend_moved;              /* channels with the pitch bend off centre */
+static int64_t close_t;                  /* when the port was last lost or closed */
+#define DETECT_NS 200000000LL            /* a dropout is noticed late: look back this far */
+
+static void track(int64_t when, const uint8_t *m, int len)
+{
+    int ch, k;
+    if (len < 3)
+        return;
+    ch = m[0] & 15;
+    k = m[0] & 0xF0;
+    if (k == 0x90 && m[2])
+        on_t[ch][m[1] & 127] = when ? when : 1;
+    else if (k == 0x80 || k == 0x90)
+        offs_t[ch][m[1] & 127] = when;
+    else if (k == 0xE0) {
+        if (m[1] == 0 && m[2] == 64)
+            bend_moved &= (uint16_t)~(1u << ch);
+        else
+            bend_moved |= (uint16_t)(1u << ch);
+    }
+}
+
+static void settle(void)                 /* (mu held, the port open) */
+{
+    int ch, n;
+    int64_t t0 = close_t - DETECT_NS;
+    for (ch = 0; ch < 16; ch++) {
+        for (n = 0; n < 128; n++) {
+            int64_t on = on_t[ch][n], off = offs_t[ch][n];
+            if (on && (on > off || off > t0)) {      /* no off after it, or an off that may not have arrived */
+                uint8_t m[3];
+                m[0] = (uint8_t)(0x80 | ch);
+                m[1] = (uint8_t)n;
+                m[2] = 0;
+                AMidiInputPort_sendWithTimestamp(out_port, m, 3, 0);
+            }
+            on_t[ch][n] = 0;
+            offs_t[ch][n] = 0;
+        }
+        if (bend_moved >> ch & 1u) {
+            uint8_t m[3];
+            m[0] = (uint8_t)(0xE0 | ch);
+            m[1] = 0;
+            m[2] = 64;
+            AMidiInputPort_sendWithTimestamp(out_port, m, 3, 0);
+        }
+    }
+    bend_moved = 0;
+}
+
 static void sink(void *ud, int64_t when, const uint8_t *m, int len)   /* (mu held) */
 {
     (void)ud;
     if (!out_port)
-        return;
-    AMidiInputPort_sendWithTimestamp(out_port, m, (size_t)len, when <= now_ns() ? 0 : when);
+        return;                          /* (not tracked: it never went out) */
+    if (AMidiInputPort_sendWithTimestamp(out_port, m, (size_t)len, when <= now_ns() ? 0 : when) >= 0)
+        track(when, m, len);
 }
 
 static void *loop(void *arg)
@@ -95,12 +152,15 @@ JNIEXPORT jint JNICALL J(nOpenOut)(JNIEnv *env, jobject self, jobject midi_devic
         return (jint)st;
     }
     pthread_mutex_lock(&mu);
-    if (out_port)
+    if (out_port) {
+        close_t = now_ns();
         AMidiInputPort_close(out_port);
+    }
     if (out_dev)
         AMidiDevice_release(out_dev);
     out_dev = d;
     out_port = p;
+    settle();                            /* whatever the last connection left sounding, off */
     pthread_mutex_unlock(&mu);
     return 0;
 }
@@ -109,6 +169,7 @@ JNIEXPORT void JNICALL J(nCloseOut)(JNIEnv *env, jobject self)
 {
     (void)env, (void)self;
     pthread_mutex_lock(&mu);
+    close_t = now_ns();
     if (out_port)
         AMidiInputPort_close(out_port);
     if (out_dev)
