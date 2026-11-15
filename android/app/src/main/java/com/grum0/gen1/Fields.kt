@@ -36,7 +36,16 @@ object F {
     const val LANE0 = 30
     const val PART0 = 45
     const val TRK0 = 101
-    const val COUNT = 121
+    const val HAT_DENS = 121
+    const val FLAM = 122
+    const val FILL_EVERY = 123
+    const val HAT_STRAIGHT = 124
+    const val SPACE = 125
+    const val SPREAD = 126
+    const val COUPLE = 127
+    const val VOICE = 128
+    const val RATCHET = 129
+    const val COUNT = 130
 
     const val PF_ON = 0
     const val PF_CHAN = 1
@@ -54,10 +63,11 @@ object F {
 
     const val NPARTS = 7
     const val NLANES = 15
-    const val NSTYLES = 24
+    const val NSTYLES = 33
     const val NDEV = 8
     const val NDSET = 5
     const val NTRACKS = 4
+    const val NCATS = 9
 
     const val GP_DRUMS = 0
     const val GP_CHORD = 1

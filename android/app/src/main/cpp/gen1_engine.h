@@ -22,7 +22,7 @@ enum { RATE_4, RATE_8, RATE_8T, RATE_16, RATE_16T, RATE_32, NRATE };
 #define NTRACKS 4
 #define ENG_LOOKAHEAD_NS 30000000LL      /* how far ahead the internal clock is made */
 
-/* A setting is one integer with an id; Kotlin has the same ids (tools/gen_fields.py makes Fields.kt). */
+/* A setting is one integer with an id; Kotlin has the same ids (tools/gen_fields.sh makes Fields.kt). */
 enum {
     F_STYLE, F_ROOT, F_MINOR, F_PHRASE, F_FEEL, F_MUTATE, F_PROG, F_DSET, F_SEED, F_GX, F_GY, F_CHAOS, F_SIM2,
     F_SIM_CHAN, F_BEND, F_MB_XPOSE, F_MB_TUNE, F_MB_LO, F_SWING,
@@ -30,7 +30,9 @@ enum {
     F_LANE0,                             /* + lane: the note it sends */
     F_PART0 = F_LANE0 + GEN_NLANES,      /* + part * 8 + PF_* */
     F_TRK0 = F_PART0 + GEN_NPARTS * 8,   /* + track * 5 + TF_* */
-    F_COUNT = F_TRK0 + NTRACKS * 5
+    F_X0 = F_TRK0 + NTRACKS * 5,         /* added since: at the end, so settings saved before keep their numbers */
+    F_HAT_DENS = F_X0, F_FLAM, F_FILL_EVERY, F_HAT_STRAIGHT, F_SPACE, F_SPREAD, F_COUPLE, F_VOICE, F_RATCHET,
+    F_COUNT
 };
 enum { PF_ON, PF_CHAN, PF_DEV, PF_VAR, PF_DENS, PF_FLAIR, PF_MODE, PF_OCT };
 enum { TF_STEPS, TF_HITS, TF_ROT, TF_NOTE, TF_MUTE };

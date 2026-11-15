@@ -1,6 +1,10 @@
 package com.grum0.gen1
 
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import androidx.core.content.ContextCompat
 import android.content.SharedPreferences
 import android.media.midi.MidiDevice
 import android.media.midi.MidiDeviceInfo
@@ -19,7 +23,7 @@ import androidx.compose.runtime.setValue
  * The phone's MIDI interface. Messages go out through one device's input port (the native side holds it, so it can
  * stamp each message with its time); the clock from the MPC comes in through another (or the same) device's output port.
  */
-class MidiHub(ctx: Context, private val prefs: SharedPreferences) {
+class MidiHub(private val ctx: Context, private val prefs: SharedPreferences) {
     private val mgr = ctx.getSystemService(Context.MIDI_SERVICE) as MidiManager
     private val handler = Handler(Looper.getMainLooper())
 
@@ -30,6 +34,9 @@ class MidiHub(ctx: Context, private val prefs: SharedPreferences) {
     var recvPort by mutableIntStateOf(prefs.getInt("recv_port", 0))
     var sendStatus by mutableStateOf("Not connected")
     var recvStatus by mutableStateOf("Not connected")
+    var sendOk by mutableStateOf(false)           // the output port is open
+    /** The phone is plugged into a USB host (the MPC) as a device, and its USB is not set to MIDI (so: charging only). */
+    var usbNotMidi by mutableStateOf(false)
 
     private var outDev: MidiDevice? = null
     private var inDev: MidiDevice? = null
@@ -64,8 +71,26 @@ class MidiHub(ctx: Context, private val prefs: SharedPreferences) {
                 autoConnect()
             }
         }, handler)
+        // Android tells every app what its USB port is doing as a device: plugged into a host or not, and as what.
+        // (Plugged into the MPC, the phone falls back to charging only after a replug or a lock: then no MIDI passes.)
+        runCatching {
+            val sticky = ContextCompat.registerReceiver(ctx, object : BroadcastReceiver() {
+                override fun onReceive(c: Context, i: Intent) = usbState(i)
+            }, IntentFilter("android.hardware.usb.action.USB_STATE"), ContextCompat.RECEIVER_EXPORTED)
+            if (sticky != null) usbState(sticky)
+        }
         refresh()
         autoConnect()
+    }
+
+    private fun usbState(i: Intent) {
+        val connected = i.getBooleanExtra("connected", false)
+        val midi = i.getBooleanExtra("midi", false)
+        usbNotMidi = connected && !midi
+        if (connected && midi) handler.postDelayed({
+            refresh()
+            autoConnect()
+        }, 700)
     }
 
     @Suppress("DEPRECATION")
@@ -116,6 +141,7 @@ class MidiHub(ctx: Context, private val prefs: SharedPreferences) {
             val r = Native.nOpenOut(dev, port)
             if (r == 0) {
                 outDev = dev
+                sendOk = true
                 sendStatus = "Sending to ${nameOf(info)}, port ${port + 1}"
             } else {
                 dev.close()
@@ -151,6 +177,7 @@ class MidiHub(ctx: Context, private val prefs: SharedPreferences) {
         Native.nCloseOut()
         runCatching { outDev?.close() }
         outDev = null
+        sendOk = false
         sendStatus = "Not connected"
     }
 

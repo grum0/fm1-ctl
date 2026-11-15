@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
-/* GEN: the generators (gen.c). A harmony core (key, style, progression, seed) that six parts follow: drums,
- * chords, arpeggio, bass, lead and a melodic kick. Everything a part plays is a pure function of the settings,
- * the seed and the bar number, so parts recorded one after another line up bar for bar. */
+/* GEN: the generators (gen.c). A harmony core (key, style, progression, seed) that seven parts follow: drums,
+ * chords, arpeggio, bass, lead, a melodic kick and Marble. Everything a part plays is a pure function of the
+ * settings, the seed and the bar number, so parts recorded one after another line up bar for bar. */
 #pragma once
 #include <stdint.h>
 
@@ -14,7 +14,12 @@ enum { L_KICK, L_SNARE, L_RIM, L_CLAP, L_CHH, L_OHH, L_TOML, L_TOMH, L_CONGL, L_
 enum { DV_GENERIC, DV_MB33, DV_HADES, DV_MONOLOGUE, DV_JV1010, DV_VOLCAFM, DV_MBASE, DV_TANZBAR, GEN_NDEV };
 enum { GS_DILLA, GS_SOULQ, GS_GFUNK, GS_BOMB, GS_QUINCY, GS_JUSTIFIED, GS_MPLS, GS_NPG, GS_NJS, GS_BOOGIE, GS_PFUNK,
        GS_JAZZFUNK, GS_ELECTRO, GS_ELECTRO2, GS_WONKY, GS_BIGBEAT, GS_BRAINDANCE, GS_DETROIT, GS_808, GS_GLITCH,
-       GS_HALFTIME, GS_FLAT, GS_RAVE, GS_ACIDDREAM, GEN_NSTYLES };
+       GS_HALFTIME, GS_FLAT, GS_RAVE, GS_ACIDDREAM,
+       /* (new styles go at the end: a saved style number keeps its meaning) */
+       GS_BOOMBAP, GS_NEP_MIN, GS_NEP_CLICK, GS_NEP_CLUB, GS_NEP_SYNTH, GS_NEP_DARK, GS_NEP_STOMP, GS_NERD, GS_DUB,
+       GEN_NSTYLES };
+/* the styles' families, for a picker in two steps and a three-letter prefix */
+enum { CAT_HIP, CAT_FNK, CAT_RNB, CAT_ELC, CAT_BRK, CAT_HSE, CAT_BAS, CAT_IDM, CAT_WLD, GEN_NCATS };
 enum { DS_ALL, DS_KIT, DS_SIM, DS_KICK, DS_NOKICK, GEN_NDSET };   /* which drum lanes the drum part sends */
 
 typedef struct {
@@ -46,10 +51,18 @@ typedef struct {
     uint8_t mb_tune;                     /* MBase: CC 101 sent at start (0: not sent) */
     uint8_t mb_lo;                       /* the melodic kick's lowest note (an octave from here) */
     uint8_t swing;                       /* 0: the style's; 1..26: 50..75 %, as an MPC counts swing */
-    uint8_t rsv0[4];
+    /* (the next five were reserved, and zero: zero is each one's "as before") */
+    uint8_t hat_dens;                    /* the closed hat: 0 with the kit (Density), 1 quarters, 2 eighths, 3 sixteenths */
+    uint8_t flam;                        /* 0..127: how many of the snare's backbeats get a grace note before them */
+    uint8_t fill_every;                  /* the fill: 0 at the phrase's end, 1 never, 2..6 every 1, 2, 4, 8, 16 bars */
+    uint8_t hat_straight;                /* 0..100: percent of the swing taken off the hats */
     uint8_t lane_note[GEN_NLANES];       /* the drum lanes' notes */
-    uint8_t rsv1;
+    uint8_t space;                       /* 0..100: hats and percussion leave the end of the phrase open (35: a beat, 75: two) */
     gen_part_t part[GEN_NPARTS];
+    uint8_t spread;                      /* Marble: how many scale steps its notes range over, 1..24 (0: 11) */
+    uint8_t couple;                      /* the bass and the kick: 0 the style's, 1 free, 2 the bass follows the kick, 3 locked to it */
+    uint8_t voice;                       /* the chords' voicing: 0 the style's, 1 tight (rootless, close), 2 wide, 3 octaves */
+    uint8_t ratchet;                     /* 0: the style's (by Flair); 1..127: 32nd-note hat ratchets and snare rushes */
 } gen_cfg_t;
 
 typedef void (*gen_out_t)(uint32_t status, uint32_t d1, uint32_t d2);
@@ -73,6 +86,10 @@ int gen_part_heard(int p);               /* the part has a note on now */
 uint16_t gen_lane_steps(int lane);       /* the drum part's hits this bar (for the screen) */
 
 const char *gen_style_name(int s);
+int gen_style_cat(int s);                /* CAT_* */
+void gen_style_bpm(int s, int *lo, int *hi);   /* the tempos it sits at, as set on the MPC (half-time styles counted fast) */
+const char *gen_cat_name(int c);         /* "Hip-hop" */
+const char *gen_cat_code(int c);         /* "HIP" */
 const char *gen_dev_name(int d);
 const char *gen_part_name(int p);
 const char *gen_lane_name(int l);

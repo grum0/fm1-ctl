@@ -10,6 +10,7 @@ on:
       - 'android/**'
       - 'app/gen.c'
       - 'app/gen.h'
+      - 'app/gen_cad.h'
       - 'app/grids_tables.h'
       - '.github/workflows/android.yml'
 

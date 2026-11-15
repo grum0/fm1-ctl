@@ -96,7 +96,15 @@ static void ecfg_defaults(void)
 void eng_range(int id, int *lo, int *hi)
 {
     int l = 0, h = 127;
-    if (id >= F_TRK0) {
+    if (id >= F_X0) {
+        switch (id) {
+        case F_HAT_DENS: case F_COUPLE: case F_VOICE: h = 3; break;
+        case F_FILL_EVERY: h = 6; break;
+        case F_HAT_STRAIGHT: case F_SPACE: h = 100; break;
+        case F_SPREAD: l = 1; h = 24; break;
+        default: break;                  /* flam, ratchets: 0..127 */
+        }
+    } else if (id >= F_TRK0) {
         switch ((id - F_TRK0) % 5) {
         case TF_STEPS: l = 1; h = 16; break;
         case TF_HITS: h = 16; break;
@@ -150,6 +158,19 @@ int eng_get(int id)
 {
     if (id < 0 || id >= F_COUNT)
         return 0;
+    if (id >= F_X0) {
+        switch (id) {
+        case F_HAT_DENS: return E.g.hat_dens;
+        case F_FLAM: return E.g.flam;
+        case F_FILL_EVERY: return E.g.fill_every;
+        case F_HAT_STRAIGHT: return E.g.hat_straight;
+        case F_SPACE: return E.g.space;
+        case F_SPREAD: return E.g.spread;
+        case F_COUPLE: return E.g.couple;
+        case F_VOICE: return E.g.voice;
+        default: return E.g.ratchet;
+        }
+    }
     if (id >= F_TRK0) {
         const trk_t *t = &E.c.trk[(id - F_TRK0) / 5];
         switch ((id - F_TRK0) % 5) {
@@ -524,7 +545,7 @@ void eng_set(int id, int v, int64_t now)
     if (id < 0 || id >= F_COUNT)
         return;
     eng_range(id, &lo, &hi);
-    if (id >= F_TRK0) {
+    if (id >= F_TRK0 && id < F_X0) {
         trk_t *t = &E.c.trk[(id - F_TRK0) / 5];
         int f = (id - F_TRK0) % 5;
         if (f == TF_HITS)
@@ -535,6 +556,20 @@ void eng_set(int id, int v, int64_t now)
     v = v < lo ? lo : v > hi ? hi : v;
     E.now = now;
     E.t_cur = now;
+    if (id >= F_X0) {
+        switch (id) {
+        case F_HAT_DENS: E.g.hat_dens = (uint8_t)v; break;
+        case F_FLAM: E.g.flam = (uint8_t)v; break;
+        case F_FILL_EVERY: E.g.fill_every = (uint8_t)v; break;
+        case F_HAT_STRAIGHT: E.g.hat_straight = (uint8_t)v; break;
+        case F_SPACE: E.g.space = (uint8_t)v; break;
+        case F_SPREAD: E.g.spread = (uint8_t)v; break;
+        case F_COUPLE: E.g.couple = (uint8_t)v; break;
+        case F_VOICE: E.g.voice = (uint8_t)v; break;
+        default: E.g.ratchet = (uint8_t)v; break;
+        }
+        return;
+    }
     if (id >= F_TRK0) {
         trk_t *t = &E.c.trk[(id - F_TRK0) / 5];
         switch ((id - F_TRK0) % 5) {
@@ -630,11 +665,13 @@ void eng_set(int id, int v, int64_t now)
     }
 }
 
-/* The Simmons lanes go to the MPC's CV track, whose pads A01 and A02 are notes 0 and 1 (not 36 and 37) */
+/* The app's own defaults over the generators': the Simmons lanes go to the MPC's CV track, whose pads A01 and A02
+ * are notes 0 and 1 (not 36 and 37); Marble's spread is shown as a number (11: what the generators' 0 means) */
 static void cv_pads(void)
 {
     E.g.lane_note[L_SIM1] = 0;
     E.g.lane_note[L_SIM2] = 1;
+    E.g.spread = 11;
 }
 
 void eng_init(eng_sink_t sink, void *ud)

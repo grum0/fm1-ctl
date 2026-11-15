@@ -46,6 +46,9 @@ held on the Setup page), and only as a BLE peripheral (BLE MIDI). The build with
 
 `app/gen.c`, `app/gen.h` and `tests/host/gen_test.c` (the Generate page's harmony core, styles and parts) are
 GPL-3.0-or-later. `app/grids_tables.h` holds the drum maps of Mutable Instruments Grids, Copyright 2012 Emilie Gillet,
-GPL-3.0-or-later, taken from Hortator's C port (DEADACTIVE). A firmware built with them is, as a whole, under the GPL
-version 3; the build with JieLi's Bluetooth libraries is then for personal use only, the build without Bluetooth
+GPL-3.0-or-later, taken from Hortator's C port (DEADACTIVE). `app/gen_cad.h` (so far only on the `android` branch) is
+the drum pattern generator of [Cut-A-Dor](https://github.com/kidbee85-beep/cut-a-dor-release) by Kid Bunka: its
+`cad_generate`, `cad_mutate` and `cad_step_tick` with their tables, GPL-3.0-only, without its sounds, sampler and
+effects; a program built with it (the Android app, `android/`) is under GPL-3.0-only as a whole. A firmware built
+with them is, as a whole, under the GPL version 3; the build with JieLi's Bluetooth libraries is then for personal use only, the build without Bluetooth
 (`--no-ble`) may be shared with its source.

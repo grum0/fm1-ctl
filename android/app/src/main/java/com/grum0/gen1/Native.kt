@@ -29,4 +29,5 @@ object Native {
     external fun nName(kind: Int, idx: Int): String
     external fun nCount(kind: Int): Int
     external fun nModeCount(part: Int): Int
+    external fun nStyleInfo(style: Int, out: IntArray)
 }

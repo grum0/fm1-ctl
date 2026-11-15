@@ -13,12 +13,14 @@
  *   devices   per instrument: range, how an accent and a slide are sent, the filter controller, bend range.
  *
  * The Grids drum maps: Mutable Instruments Grids by Emilie Gillet (grids_tables.h, GPL-3.0-or-later), by way of
- * Hortator's C port. */
+ * Hortator's C port. The Boom Bap family of drum modes: Cut-A-Dor's pattern generator by Kid Bunka (gen_cad.h,
+ * GPL-3.0-only; so a program built with it is under GPL-3.0-only as a whole). */
 #include "gen.h"
 #ifdef GEN_STANDALONE
 #include <string.h>
 #endif
 #include "grids_tables.h"
+#include "gen_cad.h"
 
 #define GEN_MAXON 10
 enum { EV_BEND, EV_CC, EV_NOTE };        /* in the order they go out within a subtick */
@@ -110,13 +112,14 @@ static const gdev_t DEV[GEN_NDEV] = {
 };
 
 /* styles */
-enum { FILL_NONE, FILL_SNARE, FILL_TOMS, FILL_ELECTRO, FILL_LIVE, FILL_DROP, FILL_DNB, FILL_BUSY };
-enum { V_TRIAD, V_SEVENTH, V_RICH, V_QUARTAL, V_POWER };
-enum { DM_STYLE, DM_GRIDS, DM_TURING, NDM };
+enum { FILL_NONE, FILL_SNARE, FILL_TOMS, FILL_ELECTRO, FILL_LIVE, FILL_DROP, FILL_DNB, FILL_BUSY, FILL_CAD };
+enum { V_TRIAD, V_SEVENTH, V_RICH, V_QUARTAL, V_POWER, V_TIGHT, V_WIDE, V_OCT };   /* (the last three: the Voicing setting's) */
+enum { DM_STYLE, DM_GRIDS, DM_TURING, DM_CAD0, NDM = DM_CAD0 + CAD_NSTYLES };       /* DM_CAD0 + n: Cut-A-Dor's style n */
+enum { CP_FREE, CP_FOLLOW, CP_LOCK };    /* the bass and the kick */
 enum { CM_STYLE, CM_PAD, CM_STABS, NCM };
 enum { AM_UP, AM_DOWN, AM_UPDOWN, AM_RANDOM, AM_CONVERGE, AM_PLAYED, NAM };
 enum { BM_STYLE, BM_ROOT, BM_ACID, BM_BOOTSY, BM_WORRELL, BM_HERBIE, BM_QUINCY, BM_GLIDE, BM_ROBOT, BM_LAZY, BM_LIVE,
-       BM_OCTAVE, BM_WOBBLE, BM_TURING, NBM };
+       BM_OCTAVE, BM_WOBBLE, BM_TURING, BM_DUB, NBM };
 enum { LM_STYLE, LM_HOOK, LM_CALL, LM_SOLO, LM_WHINE, LM_TURING, NLM };
 enum { KK_STYLE, KK_FOUR, KK_808, NKK };
 enum { RM_CHORD, RM_PENT, RM_SCALE, NRM };
@@ -133,6 +136,8 @@ typedef struct {
     uint8_t bass, lead;                  /* BM_*, LM_* */
     const char *lead_rhy;
     uint8_t lead_base, pent, arp_div;    /* the lead's centre note; pentatonic; the arpeggio's step in 16ths */
+    uint8_t couple;                      /* CP_*: the bass and the kick */
+    uint8_t cad;                         /* 0: the lanes above; 1 + n: its drums are Cut-A-Dor's style n */
 } style_t;
 
 static const style_t STYLE[GEN_NSTYLES] = {
@@ -249,7 +254,7 @@ static const style_t STYLE[GEN_NSTYLES] = {
         {[L_KICK] = "9000000000300600", [L_SNARE] = "0000000090000000", [L_CLAP] = "0000000050000000",
          [L_RIM] = "0003000000030002", [L_CHH] = "9050905090509757", [L_OHH] = "0000000000000300"},
         2, 0, 0, 0, 1, 25, FILL_DNB, {{24, 11, 21, 9}, {12, 12, 10, 14}}, V_POWER, "9000000000000000", 0, BM_LAZY,
-        LM_CALL, "7000000030000700", 70, 1, 2},
+        LM_CALL, "7000000030000700", 70, 1, 2, CP_FOLLOW, 0},
     /* Mr. Oizo: four on the floor, dry, and a bass riff that slides about */
     [GS_FLAT] = {"Flat Beat",
         {[L_KICK] = "9000900090009000", [L_CLAP] = "0000900000009000", [L_OHH] = "0090009000900090",
@@ -268,7 +273,80 @@ static const style_t STYLE[GEN_NSTYLES] = {
          [L_CHH] = "9797979797979797", [L_OHH] = "0030000000300000", [L_RIM] = "0000003000000300"},
         0, 0, 0, 0, 1, 15, FILL_SNARE, {{22, 3, 5, 0}, {14, 11, 0, 7}}, V_RICH, "9000000000000000", 0, BM_ACID, LM_TURING,
         "7000300070003000", 72, 0, 1},
+    /* Cut-A-Dor's Boom Bap: its drums (gen_cad.h) under dusty minor chords, a lazy bass on the kicks, a short hook */
+    [GS_BOOMBAP] = {"Boom Bap",
+        {[L_KICK] = "9000000300900030", [L_SNARE] = "0000900000009000", [L_CHH] = "9070907090709070"},
+        4, 0, 2, 0, 2, 0, FILL_CAD, {{7, 3, 13, 22}, {1, 11, 7, 14}}, V_RICH, "9000000000300000", 0, BM_LAZY, LM_HOOK,
+        "7000300000700030", 70, 1, 2, CP_FOLLOW, 1 + CAD_BOOMBAP},
+    /* The Neptunes, seven ways. Bare: a drum machine and its gaps, knocks for a tune, the sub only where the kick is */
+    [GS_NEP_MIN] = {"Neptunes Minimal",
+        {[L_KICK] = "9009000090090000", [L_SNARE] = "0000900000009000", [L_CLAP] = "0000900000009090",
+         [L_RIM] = "0090000900000000", [L_TOML] = "0000000000900900", [L_CLAVE] = "0000030000000003"},
+        0, 0, 0, 0, 0, 0, FILL_DROP, {{11, 24, 9, 11}, {12, 12, 10, 4}}, V_POWER, "9000000000000000", 1, BM_ROOT, LM_CALL,
+        "9000000000007000", 72, 1, 2, CP_LOCK, 0},
+    /* clicks for hats and a rim for the snare, a long sliding sub, one whining synth line, and room */
+    [GS_NEP_CLICK] = {"Neptunes Click",
+        {[L_KICK] = "9000000000900300", [L_SNARE] = "0000300000003000", [L_RIM] = "0000900000009000",
+         [L_CLAVE] = "9009009030090090", [L_CONGH] = "0000000300000030"},
+        2, 0, 0, 0, 1, 0, FILL_NONE, {{0, 9, 25, 21}, {4, 10, 13, 4}}, V_TRIAD, "0000000000900300", 2, BM_GLIDE, LM_WHINE,
+        "9000000000700030", 76, 1, 2, CP_FOLLOW, 0},
+    /* the party: a chunky kick, claps, cowbell off the beat, congas, chord chops */
+    [GS_NEP_CLUB] = {"Neptunes Club",
+        {[L_KICK] = "9000000090090030", [L_SNARE] = "0000900000009000", [L_CLAP] = "0000900000009000",
+         [L_CHH] = "9070907090709070", [L_OHH] = "0000000000000050", [L_COWB] = "0090009000900090",
+         [L_CONGH] = "0030030000300300"},
+        3, 0, 0, 0, 1, 0, FILL_SNARE, {{16, 20, 1, 12}, {4, 5, 9, 13}}, V_SEVENTH, "9000000090000900", 1, BM_ROOT, LM_HOOK,
+        "9000709000507000", 72, 1, 1, CP_FOLLOW, 0},
+    /* bleeping keys in eighths over a light bounce, a synth bass that walks and slides */
+    [GS_NEP_SYNTH] = {"Neptunes Synth-funk",
+        {[L_KICK] = "9000009000090000", [L_SNARE] = "0000900000009000", [L_CLAP] = "0000700000007000",
+         [L_RIM] = "0000000300000300", [L_CHH] = "9090909090909090", [L_OHH] = "0000000000000030",
+         [L_CLAVE] = "0030000000300000"},
+        2, 0, 0, 0, 1, 5, FILL_DROP, {{3, 6, 21, 2}, {7, 0, 8, 2}}, V_TRIAD, "9090009090000090", 1, BM_WORRELL, LM_HOOK,
+        "9070007000907000", 76, 1, 1, CP_FREE, 0},
+    /* cold and stripped: two minor chords or a flat second, hats only off the beat, the lead answers and leaves */
+    [GS_NEP_DARK] = {"Neptunes Dark",
+        {[L_KICK] = "9000000090000090", [L_SNARE] = "0000900000009000", [L_CHH] = "0090009000900090",
+         [L_RIM] = "0000000000030000", [L_TOML] = "0000000000000090"},
+        0, 0, 0, 0, 0, 0, FILL_DROP, {{24, 21, 9, 25}, {12, 10, 12, 6}}, V_TRIAD, "9000000000000000", 0, BM_LAZY, LM_CALL,
+        "7000000030000700", 70, 0, 2, CP_FOLLOW, 0},
+    /* a marching band's stomp, stomp, clap; snare drags; a chant for a tune */
+    [GS_NEP_STOMP] = {"Neptunes Stomp",
+        {[L_KICK] = "9090000090900000", [L_SNARE] = "0000900a0000900a", [L_CLAP] = "0000900000009000",
+         [L_TOML] = "0000000000000090"},
+        0, 0, 0, 0, 0, 20, FILL_SNARE, {{11, 0, 10, 18}, {12, 6, 4, 9}}, V_POWER, "9000000000000000", 1, BM_ROOT, LM_HOOK,
+        "9090009090009000", 72, 1, 1, CP_LOCK, 0},
+    /* N.E.R.D.: the band in the room: a tight kick and snare, sixteenths on the hat, fifths for guitars, a busy bass */
+    [GS_NERD] = {"N.E.R.D. Funk-rock",
+        {[L_KICK] = "9000000390300000", [L_SNARE] = "000090030a009000", [L_CHH] = "9595959595959595",
+         [L_OHH] = "0000000500000050"},
+        1, 0, 1, 0, 2, 0, FILL_LIVE, {{16, 20, 23, 10}, {4, 6, 9, 5}}, V_POWER, "9000009090000900", 2, BM_LIVE, LM_CALL,
+        "9070509070307050", 72, 1, 1, CP_FOLLOW, 0},
+    /* one drop: nothing on the one, kick and rim together on three, the chords on every off beat, the bass leads */
+    [GS_DUB] = {"Dub One-drop",
+        {[L_KICK] = "0000000090000000", [L_SNARE] = "000000000000000a", [L_RIM] = "0000000090000000",
+         [L_CHH] = "5090509050905090", [L_OHH] = "0000000000000030", [L_CONGL] = "0000030000000300"},
+        4, 0, 1, 0, 2, 0, FILL_TOMS, {{2, 6, 10, 18}, {6, 9, 0, 2}}, V_TRIAD, "0090009000900090", 1, BM_DUB, LM_CALL,
+        "7000000030007000", 72, 1, 2, CP_FREE, 0},
 };
+
+/* the styles' families and the tempos they sit at (as set on the MPC: half-time styles are counted fast) */
+static const struct { uint8_t cat, lo, hi; } STYLE_META[GEN_NSTYLES] = {
+    [GS_DILLA] = {CAT_HIP, 80, 95}, [GS_SOULQ] = {CAT_HIP, 80, 95}, [GS_GFUNK] = {CAT_HIP, 88, 100},
+    [GS_BOMB] = {CAT_HIP, 94, 112}, [GS_QUINCY] = {CAT_RNB, 100, 125}, [GS_JUSTIFIED] = {CAT_RNB, 90, 120},
+    [GS_MPLS] = {CAT_RNB, 100, 130}, [GS_NPG] = {CAT_RNB, 85, 110}, [GS_NJS] = {CAT_RNB, 100, 115},
+    [GS_BOOGIE] = {CAT_RNB, 105, 125}, [GS_PFUNK] = {CAT_FNK, 90, 115}, [GS_JAZZFUNK] = {CAT_FNK, 90, 115},
+    [GS_ELECTRO] = {CAT_ELC, 110, 130}, [GS_ELECTRO2] = {CAT_ELC, 120, 140}, [GS_WONKY] = {CAT_BRK, 85, 130},
+    [GS_BIGBEAT] = {CAT_BRK, 100, 135}, [GS_BRAINDANCE] = {CAT_IDM, 150, 190}, [GS_DETROIT] = {CAT_HSE, 120, 135},
+    [GS_808] = {CAT_ELC, 110, 130}, [GS_GLITCH] = {CAT_BRK, 95, 115}, [GS_HALFTIME] = {CAT_BAS, 140, 170},
+    [GS_FLAT] = {CAT_BRK, 105, 125}, [GS_RAVE] = {CAT_BRK, 135, 165}, [GS_ACIDDREAM] = {CAT_HSE, 120, 140},
+    [GS_BOOMBAP] = {CAT_HIP, 85, 98}, [GS_NEP_MIN] = {CAT_HIP, 85, 105}, [GS_NEP_CLICK] = {CAT_HIP, 78, 95},
+    [GS_NEP_CLUB] = {CAT_HIP, 100, 110}, [GS_NEP_SYNTH] = {CAT_HIP, 100, 115}, [GS_NEP_DARK] = {CAT_HIP, 75, 100},
+    [GS_NEP_STOMP] = {CAT_HIP, 105, 115}, [GS_NERD] = {CAT_HIP, 95, 130}, [GS_DUB] = {CAT_WLD, 65, 85},
+};
+static const char *const CAT_NAME[GEN_NCATS] = {"Hip-hop", "Funk", "R&B and pop", "Electro", "Breaks and beats",
+                                                "House and techno", "UK bass", "IDM", "Caribbean and world"};
+static const char *const CAT_CODE[GEN_NCATS] = {"HIP", "FNK", "RNB", "ELC", "BRK", "HSE", "BAS", "IDM", "WLD"};
 
 /* bass presets: the rhythm, then percentages: octave, fifth, colour (3rd, 7th), passing, chromatic approach, slide,
  * accent, ghost; the gate (0 short, 1 medium, 2 to the next note); late (subticks); a run at the phrase's end */
@@ -288,6 +366,7 @@ static const bass_t BASS[NBM] = {
     [BM_OCTAVE] = {"9070907090709070", 1, 0, 5, 5, 0, 10, 0, 15, 0, 0, 0, 10},
     [BM_WOBBLE] = {"9000000090000030", 2, 10, 20, 10, 0, 10, 30, 0, 0, 2, 2, 0},
     [BM_TURING] = {"9797979797979797", 1, 0, 0, 0, 0, 0, 15, 20, 0, 1, 0, 0},
+    [BM_DUB] = {"9009000000907050", 2, 5, 30, 20, 15, 10, 10, 5, 0, 1, 1, 20},   /* low, few notes, its own tune */
 };
 
 static const char *const PART_NAME[GEN_NPARTS] = {"Drums", "Chords", "Arp", "Bass", "Lead", "Kick", "Marble"};
@@ -296,11 +375,11 @@ static const char *const LANE_NAME[GEN_NLANES] = {"Kick", "Snare", "Rim", "Clap"
                                                   "High tom", "Low conga", "High conga", "Cowbell", "Claves", "Cymbal",
                                                   "Simmons 1", "Simmons 2"};
 static const char *const DSET_NAME[GEN_NDSET] = {"All", "Kit", "Simmons", "Kick", "No kick"};
-static const char *const DM_NAME[NDM] = {"Style", "Grids", "Turing"};
+static const char *const DM_NAME[DM_CAD0] = {"Style", "Grids", "Turing"};   /* (then Cut-A-Dor's: CAD_NAME) */
 static const char *const CM_NAME[NCM] = {"Style", "Pad", "Stabs"};
 static const char *const AM_NAME[NAM] = {"Up", "Down", "Up-down", "Random", "Converge", "Played"};
 static const char *const BM_NAME[NBM] = {"Style", "Root", "Acid", "Bootsy", "Worrell", "Herbie", "Quincy", "Glide",
-                                         "Robot", "Lazy", "Live", "Octave", "Wobble", "Turing"};
+                                         "Robot", "Lazy", "Live", "Octave", "Wobble", "Turing", "Dub"};
 static const char *const LM_NAME[NLM] = {"Style", "Hook", "Call+resp", "Solo", "Whine", "Turing"};
 static const char *const KK_NAME[NKK] = {"Style", "4 floor", "808"};
 static const uint8_t NMODES[GEN_NPARTS] = {NDM, NCM, NAM, NBM, NLM, NKK, NRM};
@@ -389,14 +468,15 @@ static int swing_sub(void)
 {
     return g.c->swing ? (g.c->swing - 1) * 2 * (int)GEN_STEP / 100 : feel(sty()->sw);
 }
-/* a sixteenth's subtick: swing on the off sixteenths, the lane's lateness and jitter, by Feel */
-static int tpos(int step, int late, int jit, rng_t *r)
+/* a sixteenth's subtick: swing (sw) on the off sixteenths, the lane's lateness and jitter, by Feel */
+static int tpos_sw(int step, int sw, int late, int jit, rng_t *r)
 {
-    int p = step * (int)GEN_STEP + ((step & 1) ? swing_sub() : 0) + feel(late), j = feel(jit);
+    int p = step * (int)GEN_STEP + ((step & 1) ? sw : 0) + feel(late), j = feel(jit);
     if (j > 0)
         p += (int)rnd(r, 2u * (uint32_t)j + 1u) - j;
     return gclamp(p, 0, (int)GEN_BAR - 1);
 }
+static int tpos(int step, int late, int jit, rng_t *r) { return tpos_sw(step, swing_sub(), late, jit, r); }
 
 /* ------------------------------------------------------------- events --- */
 static void gput_ev(int p, int pos, int kind, int a, int b, int dur, int ch)
@@ -568,12 +648,68 @@ static int lane_sent(int l)
     default: return 1;
     }
 }
-static void drum_hit(int l, int pos, int vel)
+static int is_hat(int l) { return l == L_CHH || l == L_OHH; }
+/* the hats' share of a swing: Hat swing takes some of it off */
+static int hat_sw(int sw) { return sw * (100 - gclamp(g.c->hat_straight, 0, 100)) / 100; }
+/* a drum lane's sixteenth: as tpos, with the lane's swing */
+static int dpos(int l, int step, int late, int jit, rng_t *r)
+{
+    return tpos_sw(step, is_hat(l) ? hat_sw(swing_sub()) : swing_sub(), late, jit, r);
+}
+static void drum_put(int l, int pos, int vel)
 {
     if (!lane_sent(l))
         return;
     gput_ev(GP_DRUMS, pos, EV_NOTE, g.c->lane_note[l], gclamp(vel, 1, 127), 8, lane_ch(l));
     wb->lanes[l] |= (uint16_t)(1u << (gclamp(pos, 0, (int)GEN_BAR - 1) / (int)GEN_STEP));
+}
+/* a hit; Flam: a grace note before some of the snare's loud ones (which ones: by the seed, the bar and the place) */
+static void drum_hit(int l, int pos, int vel)
+{
+    if (l == L_SNARE && g.c->flam && vel >= 96 && pos >= 8 &&
+        (int)(gh(pseed(GP_DRUMS, 0x900u), bb * 512u + (uint32_t)pos) % 127u) < g.c->flam)
+        drum_put(l, pos - 4 - g.c->flam / 40, vel * 45 / 100);
+    drum_put(l, pos, vel);
+}
+/* Hat density: the closed hat's steps (0: as the pattern has them) */
+static int hat_keep(int s)
+{
+    return g.c->hat_dens == 1 ? (s & 3) == 0 : g.c->hat_dens == 2 ? (s & 1) == 0 : 1;
+}
+/* the fill: is this bar one? At the phrase's end, never, or every 1, 2, 4, 8, 16 bars */
+static int fill_bar(uint32_t bar)
+{
+    int pl = phrase_len(), fe = g.c->fill_every;
+    uint32_t n;
+    if (fe == 1)
+        return 0;
+    if (fe == 0)
+        return pl > 1 && (int)(bar % (uint32_t)pl) == pl - 1;
+    n = 1u << (fe - 2);
+    return bar % n == n - 1u;
+}
+/* which of Cut-A-Dor's styles the drums are (-1: none): the drum part's mode, or the style's own */
+static int drum_cad(void)
+{
+    int m = g.c->part[GP_DRUMS].mode;
+    return m >= DM_CAD0 && m < NDM ? m - DM_CAD0 : m == DM_STYLE && sty()->cad ? sty()->cad - 1 : -1;
+}
+/* its two bars, from the seed, the drum part's Density, Space; Mutate: the last four of the changes made as the
+ * phrase repeats, so it moves on a little at a time. Kept until a setting it is made from changes. */
+static struct { cad_pat_t pat; uint32_t key; uint8_t ok; } cadc;
+static const cad_pat_t *cad_pat(int cs)
+{
+    int dens = gclamp(g.c->part[GP_DRUMS].dens * 100 / 104, 0, 100), space = gclamp(g.c->space, 0, 100);
+    uint32_t seed = pseed(GP_DRUMS, 0xCADu), ep = epoch(), e;
+    uint32_t key = gh(gh(seed, (uint32_t)cs * 7919u + (uint32_t)dens * 131u + (uint32_t)space), ep);
+    if (!cadc.ok || cadc.key != key) {
+        cad_generate(&cadc.pat, cs, dens, space, seed);
+        for (e = ep > 3u ? ep - 3u : 1u; e <= ep; e++)
+            cad_mutate(&cadc.pat, cs, space, seed + e * 0x9e3779b9u);
+        cadc.key = key;
+        cadc.ok = 1;
+    }
+    return &cadc.pat;
 }
 /* a lane's step in the style: 0 no hit, else its velocity. The same for the drum part and the melodic kick. */
 static int style_hit(int l, int step, int dens)
@@ -599,10 +735,17 @@ static int style_hit(int l, int step, int dens)
         return 30 + (int)rnd(&r, 20);
     return (w >= 8 ? 108 : 82) + (int)rnd(&r, 14) + ((step & 3) == 0 ? 4 : 0);
 }
-
-static void drums_fill(int from, rng_t *r)
+/* the kick this bar, step by step (0, or its velocity), for the parts that go with it: Cut-A-Dor's when the drums
+ * are, else the style's lane at this density */
+static int kick_src(int step, int dens)
 {
-    int f = sty()->fill, s, i, fl = g.c->part[GP_DRUMS].flair;
+    int cs = drum_cad();
+    return cs >= 0 ? cad_pat(cs)->vel[C_KICK][(int)(bb & 1u) * 16 + step] : style_hit(L_KICK, step, dens);
+}
+
+static void drums_fill(int f, int from, rng_t *r)
+{
+    int s, i, fl = g.c->part[GP_DRUMS].flair;
     switch (f) {
     case FILL_SNARE:
         for (s = from; s < 16; s++)
@@ -650,9 +793,13 @@ static void drums_fill(int from, rng_t *r)
                 drum_hit(L_SIM2, tpos(s, 0, 0, r), 100);
         }
         break;
+    case FILL_CAD:                                       /* Cut-A-Dor's: quiet sixteenths, percussion and snare by turns, */
+        for (s = from; s < 16; s++)                      /* over the pattern, which goes on under them */
+            drum_hit((s & 1) ? L_SNARE : L_CONGH, tpos(s, 0, 0, r), 50 + (s * (int)GEN_STEP) % 31);
+        break;
     default: break;
     }
-    if (f != FILL_ELECTRO && f != FILL_NONE && f != FILL_DROP && chance(r, 30 + fl / 3))
+    if (f != FILL_ELECTRO && f != FILL_NONE && f != FILL_DROP && f != FILL_CAD && chance(r, 30 + fl / 3))
         drum_hit(L_SIM1, tpos(15, 0, 0, r), 105);          /* the laser tom: a zap at the phrase's end */
 }
 
@@ -671,13 +818,49 @@ static void build_drums(void)
 {
     const gen_part_t *pt = &g.c->part[GP_DRUMS];
     const style_t *st = sty();
-    int pl = phrase_len(), pb = (int)(bb % (uint32_t)pl), l, s, from = 16;
+    int pl = phrase_len(), pb = (int)(bb % (uint32_t)pl), l, s, from = 16, cs = drum_cad();
+    int ftype = cs >= 0 ? FILL_CAD : pt->mode == DM_STYLE ? st->fill : FILL_NONE;
+    int sp = g.c->space >= 75 ? 8 : g.c->space >= 35 ? 4 : 0;
+    int gap = sp && (pl == 1 || pb == pl - 1) ? 16 - sp : 16;    /* Space: hats and percussion stop here */
+    int rat = g.c->ratchet ? g.c->ratchet * 70 / 127 : st->rat * pt->flair / 127;
+    uint16_t hats = 0;                                   /* the closed hat's steps so far */
     rng_t r, fr;
     r.s = gh(pseed(GP_DRUMS, 1), (uint32_t)pb + epoch() * 64u);
     fr.s = gh(pseed(GP_DRUMS, 2), (uint32_t)pb + epoch() * 64u);
-    if (pl > 1 && pb == pl - 1 && st->fill != FILL_NONE && pt->mode == DM_STYLE)
+    if (ftype != FILL_NONE && fill_bar(bb))
         from = chance(&fr, 25 + pt->flair / 4) ? 8 : 12;
-    if (pt->mode == DM_GRIDS) {
+    if (cs >= 0) {
+        /* Cut-A-Dor's two bars: this one's half, each hit in its pocket (Feel: 8 its Human as shipped), swing as
+         * the Swing setting or its own 58 % */
+        static const uint8_t CL[CAD_TRACKS] = {L_KICK, L_SNARE, L_CHH, L_OHH, L_CLAP, L_CONGH, L_RIM, L_CLAVE};
+        const cad_pat_t *q = cad_pat(cs);
+        int half = (int)(bb & 1u) * 16, human = g.c->feel * 65 / 8, t, sw0 = g.c->swing ? swing_sub() : feel(4);
+        uint32_t seed = pseed(GP_DRUMS, 0xCADu);
+        for (t = 0; t < CAD_TRACKS; t++) {
+            l = CL[t];
+            for (s = 0; s < 16; s++) {
+                int v = q->vel[t][half + s], pos;
+                if (!v || (t == C_HAT && !hat_keep(s)))
+                    continue;
+                if (g.c->space > 60 && bb % 8u >= 4u && t >= C_HAT && s >= 8)
+                    continue;                            /* Space, further: the second half of every other four bars */
+                pos = s * (int)GEN_STEP + ((s & 1) ? (is_hat(l) ? hat_sw(sw0) : sw0) : 0) +
+                      cad_pocket(q, cs, human, seed, t, half + s);
+                pos = gclamp(pos, 0, (int)GEN_BAR - 1);
+                drum_hit(l, pos, v);
+                if (t == C_HAT) {
+                    hats |= (uint16_t)(1u << s);
+                    if (g.c->ratchet && v > 40 && chance(&r, rat / 2))
+                        drum_hit(l, pos + 12, v - 12);
+                }
+            }
+        }
+        if (g.c->hat_dens)                               /* Hat density: the steps the pattern left empty */
+            for (s = 0; s < 16; s++)
+                if (hat_keep(s) && !(hats >> s & 1u) && !cad_gap(g.c->space, C_HAT, half + s))
+                    drum_hit(L_CHH, gclamp(s * (int)GEN_STEP + ((s & 1) ? hat_sw(sw0) : 0), 0, (int)GEN_BAR - 1),
+                             (s & 3) == 0 ? 78 : (s & 3) == 2 ? 51 : 35);
+    } else if (pt->mode == DM_GRIDS) {
         static const uint8_t GL[3] = {L_KICK, L_SNARE, L_CHH};
         uint32_t x = (uint32_t)gclamp(g.c->gx, 0, 127) * 2u, y = (uint32_t)gclamp(g.c->gy, 0, 127) * 2u, ch;
         for (ch = 0; ch < 3u; ch++) {
@@ -686,8 +869,15 @@ static void build_drums(void)
                 uint32_t lev = grids_level((uint32_t)s, ch, x, y);
                 lev = lev + pert > 255u ? 255u : lev + pert;
                 if (lev > (uint32_t)(255 - pt->dens * 2)) {
-                    int pos = tpos(s / 2, lane_late(GL[ch]), st->jit, &r) + (s & 1) * 12;
-                    drum_hit(ch == 2 && lev > 235u ? L_OHH : GL[ch], pos, lev > 192u ? 112 : 84);
+                    int hl = ch == 2 && lev > 235u ? L_OHH : GL[ch];
+                    int pos = dpos(hl, s / 2, lane_late(GL[ch]), st->jit, &r) + (s & 1) * 12;
+                    if (ch == 2 && g.c->hat_dens && ((s & 1) || !hat_keep(s / 2)))
+                        continue;
+                    if (ch == 2 && s / 2 >= gap)
+                        continue;
+                    drum_hit(hl, pos, lev > 192u ? 112 : 84);
+                    if (hl == L_CHH)
+                        hats |= (uint16_t)(1u << (s / 2));
                 }
             }
         }
@@ -714,11 +904,18 @@ static void build_drums(void)
                     reg ^= (uint16_t)(1u << rnd(&q, 16));
             }
             for (s = 0; s < 16; s++)
-                if (reg >> s & 1u)
-                    drum_hit(TL[k], tpos(s, lane_late(TL[k]), st->jit, &r), ((s & 3) == 0 ? 105 : 80) + (int)rnd(&r, 12));
+                if (reg >> s & 1u) {
+                    int pos = dpos(TL[k], s, lane_late(TL[k]), st->jit, &r), v = ((s & 3) == 0 ? 105 : 80) + (int)rnd(&r, 12);
+                    if ((TL[k] == L_CHH && !hat_keep(s)) || (k >= 2 && s >= gap))
+                        continue;
+                    drum_hit(TL[k], pos, v);
+                    if (TL[k] == L_CHH)
+                        hats |= (uint16_t)(1u << s);
+                }
         }
     } else {
         for (l = 0; l < GEN_NLANES; l++) {
+            int perc = l != L_KICK && l != L_SNARE && l != L_CLAP && l != L_SIM1 && l != L_SIM2;
             if (l == L_SIM2 && !st->lane[L_SIM2]) {          /* the second Simmons lane by its role */
                 if (g.c->sim2 == 0 && from > 12)
                     drum_hit(l, tpos(12, st->ls, st->jit, &r), 96);
@@ -731,35 +928,63 @@ static void build_drums(void)
                 continue;
             }
             for (s = 0; s < from; s++) {
-                int v = style_hit(l, s, pt->dens), pos;
+                int v, pos, loud;
+                if ((perc && s >= gap) || (l == L_CHH && !hat_keep(s)))
+                    continue;
+                v = style_hit(l, s, pt->dens);
                 if (!v)
                     continue;
-                pos = tpos(s, lane_late(l), st->jit, &r);
+                loud = v > 60;
+                if (l == L_CHH) {                            /* the hat in three levels: the beat, the eighth, the sixteenth */
+                    hats |= (uint16_t)(1u << s);
+                    if (loud)
+                        v -= (s & 3) == 2 ? 10 : (s & 1) ? 22 : 0;
+                }
+                pos = dpos(l, s, lane_late(l), st->jit, &r);
                 drum_hit(l, pos, v);
-                if ((l == L_CHH || l == L_SNARE) && v > 60 && chance(&r, st->rat * pt->flair / 127)) {
+                if ((l == L_CHH || l == L_SNARE) && loud && chance(&r, rat)) {
                     int n = chance(&r, 40) ? 3 : 2, i;       /* a ratchet */
                     for (i = 1; i < n; i++)
                         drum_hit(l, pos + i * (int)GEN_STEP / n, v - 15 - (int)rnd(&r, 15));
                 }
             }
         }
-        if (from < 16)
-            drums_fill(from, &fr);
-        if (pb == 0 && bb && pl > 1 && st->fill != FILL_NONE && st->fill != FILL_DROP && pt->dens >= 40)
-            drum_hit(L_CYM, 0, 100);                         /* a crash after the fill */
     }
+    if (cs < 0 && g.c->hat_dens)                         /* Hat density: the steps the pattern left empty */
+        for (s = 0; s < (from < gap ? from : gap); s++)
+            if (hat_keep(s) && !(hats >> s & 1u))
+                drum_hit(L_CHH, dpos(L_CHH, s, st->lh, 0, &r), (s & 3) == 0 ? 100 : (s & 1) == 0 ? 84 : 62);
+    if (from < 16)
+        drums_fill(ftype, from, &fr);
+    else if (g.c->ratchet && (int)(gh(pseed(GP_DRUMS, 0xA00u), bb) % 254u) < g.c->ratchet)
+        for (s = 0; s < 4; s++)                              /* a snare rush into the next bar, in 32nds */
+            drum_put(L_SNARE, 14 * (int)GEN_STEP + s * 12, 52 + s * 16);
+    if (bb && fill_bar(bb - 1u) && g.c->fill_every != 2 && ftype != FILL_NONE && ftype != FILL_DROP && ftype != FILL_CAD &&
+        pt->dens >= 40)
+        drum_hit(L_CYM, 0, 100);                             /* a crash after the fill */
 }
 
 /* --------------------------------------------------------------- chords --- */
 static int voicing(chord_t c, int type, int base, int poly, uint8_t *out)
 {
     static const uint8_t ORD_RICH[6] = {1, 3, 4, 2, 0, 5}, ORD_7[6] = {1, 3, 0, 2, 4, 5}, ORD_3[6] = {0, 1, 2, 3, 4, 5};
-    const uint8_t *ord = type == V_RICH && QN[c.q] >= 5 ? ORD_RICH : type == V_TRIAD ? ORD_3 : ORD_7;
-    int want = type == V_TRIAD ? 3 : 4, n = 0, i, j;
+    const uint8_t *ord = (type == V_RICH && QN[c.q] >= 5) || type == V_TIGHT ? ORD_RICH : type == V_TRIAD ? ORD_3 : ORD_7;
+    int want = type == V_TRIAD ? 3 : type == V_TIGHT && QN[c.q] == 4 ? 3 : 4, n = 0, i, j, open = 0;
     uint8_t iv[6];
-    if (type == V_POWER || c.q == Q_P5) {
+    if (type == V_OCT) {                                 /* the root in octaves */
+        iv[0] = 0, iv[1] = 12, iv[2] = 24;
+        n = 3;
+        open = 1;
+        base -= 12;
+    } else if (type == V_WIDE) {                         /* root and fifth low, the seventh and the third above them */
+        iv[0] = 0, iv[1] = 7, iv[2] = (uint8_t)(QN[c.q] >= 4 ? QIV[c.q][3] : 12), iv[3] = (uint8_t)(QIV[c.q][1] + 12);
+        n = 4;
+        open = 1;
+        base -= 12;
+    } else if (type == V_POWER || c.q == Q_P5) {
         iv[0] = 0, iv[1] = 7, iv[2] = 12;
         n = 3;
+        open = 1;
     } else if (type == V_QUARTAL) {                      /* fourths under minor and sus chords, fifths under major */
         int min = QIV[c.q][1] == 3 || QIV[c.q][1] == 5;
         iv[0] = 0, iv[1] = (uint8_t)(min ? 5 : 7), iv[2] = (uint8_t)(min ? 10 : 14);
@@ -773,7 +998,7 @@ static int voicing(chord_t c, int type, int base, int poly, uint8_t *out)
         n = poly;
     for (i = 0; i < n; i++) {                            /* each tone in the octave from base: close voicings that */
         int nt = c.root + iv[i];                         /* move little from chord to chord */
-        nt = type == V_POWER || c.q == Q_P5 ? root_note(c, base) + iv[i] : base + ((nt - base % 12) % 12 + 12) % 12;
+        nt = open ? root_note(c, base) + iv[i] : base + ((nt - base % 12) % 12 + 12) % 12;
         out[i] = (uint8_t)gclamp(nt, 0, 127);
     }
     for (i = 1; i < n; i++) {                            /* low to high */
@@ -793,6 +1018,7 @@ static void build_chords(void)
     const char *comp = pt->mode == CM_PAD ? "9000000000000000" : pt->mode == CM_STABS ? "9000009000900300" : st->comp;
     int len = pt->mode == CM_PAD ? 0 : pt->mode == CM_STABS ? 1 : st->comp_len;
     int pl = phrase_len(), pb = (int)(bb % (uint32_t)pl), s, i, hit[16], hp[16], nh = 0, base = 52 + 12 * pt->oct;
+    int vt = g.c->voice == 1 ? V_TIGHT : g.c->voice == 2 ? V_WIDE : g.c->voice == 3 ? V_OCT : st->voicing;
     chord_t c0 = chord_step(0), c1 = chord_step(8);
     rng_t r;
     r.s = gh(pseed(GP_CHORD, 1), (uint32_t)pb + epoch() * 64u);
@@ -811,7 +1037,7 @@ static void build_chords(void)
         int k, n, pos = hp[i], dur, vel, end = i + 1 < nh ? hp[i + 1] : (int)GEN_BAR;
         if (hit[i] < 8 && (i + 1 >= nh || hit[i + 1] > 8) && (c0.root != c1.root || c0.q != c1.q))
             end = 8 * (int)GEN_STEP;
-        n = voicing(c, st->voicing, base, d->poly, nt);
+        n = voicing(c, vt, base, d->poly, nt);
         dur = end - pos - 3;
         if (len && dur > len * (int)GEN_STEP - 8)
             dur = len * (int)GEN_STEP - 8;
@@ -989,7 +1215,7 @@ static void build_bass(void)
     int mode = pt->mode == BM_STYLE ? sty()->bass : pt->mode % NBM;
     const bass_t *b = &BASS[mode];
     int pl = phrase_len(), pb = (int)(bb % (uint32_t)pl), last = pl > 1 && pb == pl - 1, s, n = 0, prev = -1;
-    int base = 36 + 12 * pt->oct;
+    int base = 36 + 12 * pt->oct, cp = g.c->couple ? g.c->couple - 1 : sty()->couple;
     bstep_t rf[16], alt[16];
     mnote_t m[16];
     rng_t r;
@@ -1012,6 +1238,16 @@ static void build_bass(void)
         rf[8].kind = BK_ROOT;
         rf[8].fl = 0;
     }
+    if (cp != CP_FREE)                                   /* with the kick: a note on each of its hits; locked: only there */
+        for (s = 0; s < 16; s++) {
+            int k = kick_src(s, g.c->part[GP_DRUMS].dens) > 60;
+            if (k && rf[s].kind == BK_NONE) {
+                rf[s].kind = BK_ROOT;
+                rf[s].fl = 0;
+            } else if (!k && cp == CP_LOCK) {
+                rf[s].kind = BK_NONE;
+            }
+        }
     for (s = 0; s < 16 && n < 16; s++) {
         chord_t c = chord_step(s), cn = chord_after(s);
         uint16_t mm = mel_mask(c, 0);
@@ -1046,7 +1282,7 @@ static void build_bass(void)
         if (nt > base + 19)
             nt -= 12;
         m[n].step = (uint8_t)s;
-        m[n].pos = (int16_t)tpos(s, b->late, sty()->jit / 2, &r);
+        m[n].pos = (int16_t)tpos(s, cp == CP_LOCK ? sty()->lk : b->late, sty()->jit / 2, &r);
         m[n].note = (uint8_t)gclamp(nt, 0, 127);
         m[n].fl = rf[s].fl;
         k = (nexthit - s) * (int)GEN_STEP;
@@ -1056,7 +1292,7 @@ static void build_bass(void)
         prev = nt;
         n++;
     }
-    if (last && n && n < 13 && chance(&r, b->run * (40 + pt->flair) / 127)) {   /* a run into the next phrase */
+    if (last && n && n < 13 && cp != CP_LOCK && chance(&r, b->run * (40 + pt->flair) / 127)) {   /* a run into the next phrase */
         chord_t c = chord_step(15), cn = chord_at(bb + 1u, 0);
         uint16_t mm = mel_mask(c, 0);
         int target = root_note(cn, base), up = chance(&r, 50), k;
@@ -1179,7 +1415,7 @@ static void build_kick(void)
     rng_t r;
     r.s = gh(pseed(GP_KICK, 1), bb % (uint32_t)phrase_len() + epoch() * 64u);
     for (s = 0; s < 16; s++) {
-        int v = pt->mode == KK_FOUR ? ((s & 3) == 0 ? 110 : 0) : style_hit(L_KICK, s, pt->mode == KK_808 ? pt->dens / 2 : pt->dens);
+        int v = pt->mode == KK_FOUR ? ((s & 3) == 0 ? 110 : 0) : kick_src(s, pt->mode == KK_808 ? pt->dens / 2 : pt->dens);
         if (v > 60)
             hits[nh++] = s;
     }
@@ -1202,11 +1438,12 @@ static void build_kick(void)
 /* --------------------------------------------------------------- marble --- */
 /* After Mutable Instruments' Marbles: random notes drawn against the chord. A bar of them loops; Chance (the
  * part's Flair) is how many are drawn afresh each time round: 0 the loop exactly, 127 never the same twice.
- * Density is how many of the steps sound; the mode what the notes are held to: the chord, the pentatonic, the key. */
+ * Density is how many of the steps sound; the mode what the notes are held to: the chord, the pentatonic, the key;
+ * Spread how many scale steps they range over. */
 static void build_marble(void)
 {
     const gen_part_t *pt = &g.c->part[GP_RAND];
-    int s, base = 60 + 12 * pt->oct, div = pt->dens < 40 ? 2 : 1;
+    int s, base = 60 + 12 * pt->oct, div = pt->dens < 40 ? 2 : 1, sp = g.c->spread ? g.c->spread : 11;
     rng_t r;
     r.s = gh(pseed(GP_RAND, 1), bb);
     for (s = 0; s < 16; s += div) {
@@ -1217,7 +1454,7 @@ static void build_marble(void)
         int len = div * (int)GEN_STEP;
         if ((int)(h % 100u) >= 30 + pt->dens / 2)
             continue;
-        gput_note(GP_RAND, tpos(s, 0, sty()->jit, &r), ladder(root_note(c, base), (int)((h >> 8) % 11u) - 3, m),
+        gput_note(GP_RAND, tpos(s, 0, sty()->jit, &r), ladder(root_note(c, base), (int)((h >> 8) % (uint32_t)sp) - sp * 3 / 11, m),
                   60 + (int)((h >> 16) % 50u), len * (30 + (int)((h >> 24) % 60u)) / 100);
     }
 }
@@ -1454,7 +1691,8 @@ int gen_valid(const gen_cfg_t *c)
     if (c->style >= GEN_NSTYLES || c->root > 11u || c->minor > 1u || c->phrase > 3u || c->feel > 16u || c->mutate > 8u ||
         c->prog > 1u || c->swing > 26u || c->dset >= GEN_NDSET || c->gx > 127u || c->gy > 127u || c->chaos > 127u || c->sim2 > 2u ||
         c->sim_chan > 16u || c->bend < 1u || c->bend > 12u || c->mb_xpose < -24 || c->mb_xpose > 24 || c->mb_tune > 127u ||
-        c->mb_lo < 12u || c->mb_lo > 96u)
+        c->mb_lo < 12u || c->mb_lo > 96u || c->hat_dens > 3u || c->flam > 127u || c->fill_every > 6u ||
+        c->hat_straight > 100u || c->space > 100u || c->spread > 24u || c->couple > 3u || c->voice > 3u || c->ratchet > 127u)
         return 0;
     for (i = 0; i < GEN_NLANES; i++)
         if (c->lane_note[i] > 127u)
@@ -1472,12 +1710,21 @@ void gen_init(gen_cfg_t *c, gen_out_t out)
     memset(&g, 0, sizeof g);
     memset(gb, 0, sizeof gb);
     memset(gon, 0, sizeof gon);
+    cadc.ok = 0;
     wb = &gb[1];
     g.c = c;
     g.out = out;
     g.man_pc = -1;
 }
 const char *gen_style_name(int s) { return STYLE[s % GEN_NSTYLES].name; }
+int gen_style_cat(int s) { return STYLE_META[s % GEN_NSTYLES].cat; }
+void gen_style_bpm(int s, int *lo, int *hi)
+{
+    *lo = STYLE_META[s % GEN_NSTYLES].lo;
+    *hi = STYLE_META[s % GEN_NSTYLES].hi;
+}
+const char *gen_cat_name(int c) { return CAT_NAME[c % GEN_NCATS]; }
+const char *gen_cat_code(int c) { return CAT_CODE[c % GEN_NCATS]; }
 const char *gen_dev_name(int d) { return DEV[d % GEN_NDEV].name; }
 const char *gen_part_name(int p) { return PART_NAME[p % GEN_NPARTS]; }
 const char *gen_lane_name(int l) { return LANE_NAME[l % GEN_NLANES]; }
@@ -1486,7 +1733,7 @@ int gen_nmodes(int p) { return NMODES[p % GEN_NPARTS]; }
 const char *gen_mode_name(int p, int m)
 {
     switch (p) {
-    case GP_DRUMS: return DM_NAME[m % NDM];
+    case GP_DRUMS: return m % NDM < DM_CAD0 ? DM_NAME[m % NDM] : CAD_NAME[m % NDM - DM_CAD0];
     case GP_CHORD: return CM_NAME[m % NCM];
     case GP_ARP: return AM_NAME[m % NAM];
     case GP_BASS: return BM_NAME[m % NBM];

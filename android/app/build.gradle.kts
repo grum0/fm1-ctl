@@ -13,8 +13,8 @@ android {
         applicationId = "com.grum0.gen1"
         minSdk = 29                       // the NDK's MIDI API (AMidi) starts at Android 10
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
     }
 
@@ -22,6 +22,17 @@ android {
         cmake {
             path = file("src/main/cpp/CMakeLists.txt")
             version = "3.22.1"
+        }
+    }
+
+    // One debug key, kept in the repository (android/debug.keystore, the usual debug password), so that every build
+    // from GitHub is signed alike and a new APK installs over the last one, keeping its settings. It protects nothing.
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("../debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
         }
     }
 

@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 private val KEYS = listOf("C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B")
 private val CLOCKS = listOf("Send clock", "Internal", "Follow MPC")
 private val PHRASES = listOf(1, 2, 4, 8)
+val VOICINGS = listOf("Style", "Tight", "Wide", "Octaves")
 
 @Composable
 fun StepStrip(s: Store) {
@@ -41,7 +42,7 @@ fun PlayScreen(s: Store) {
         StepStrip(s)
 
         Section("Song") {
-            Pick("Style", s.styleNames.getOrElse(s.vals[F.STYLE]) { "?" }, s.styleNames) { s.set(F.STYLE, it) }
+            StylePicker(s)
             Text("Key", style = MaterialTheme.typography.bodyMedium)
             ChipGrid(KEYS, { it == s.vals[F.ROOT] }, 6) { s.set(F.ROOT, it) }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -66,6 +67,7 @@ fun PlayScreen(s: Store) {
         Section("Groove") {
             SliderRow(s, "Swing", F.SWING, { if (it == 0) "Style" else "${49 + it}%" })
             SliderRow(s, "Feel", F.FEEL, { if (it == 8) "8 (as written)" else "$it" })
+            SliderRow(s, "Straighten the hats", F.HAT_STRAIGHT, { if (it == 0) "off: they swing with the kit" else if (it == 100) "straight" else "$it%" })
             SliderRow(s, "Mutate", F.MUTATE)
             Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                 Text("Phrase", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
@@ -82,6 +84,8 @@ fun PlayScreen(s: Store) {
                 Text("Tap a note to set the chord", style = MaterialTheme.typography.bodySmall)
                 ChipGrid(KEYS, { false }, 6) { Native.nChordKey(it) }
             }
+            Text("Voicing", Modifier.padding(top = 6.dp), style = MaterialTheme.typography.bodyMedium)
+            ChipGrid(VOICINGS, { it == s.vals[F.VOICE] }, 4) { s.set(F.VOICE, it) }
         }
 
         Section("Clock") {
@@ -97,6 +101,8 @@ fun PlayScreen(s: Store) {
                 color = if (following && !s.clockSeen) Accent else Color.Unspecified,
             )
             SliderRow(s, if (following) "Tempo (until the clock comes)" else "Tempo", F.TEMPO, { "$it BPM" })
+            val st = s.vals[F.STYLE].coerceIn(0, s.styleNames.size - 1)
+            Text("${s.styleNames[st]} sits at ${s.styleLo[st]} to ${s.styleHi[st]} BPM", style = MaterialTheme.typography.bodySmall)
         }
     }
 }

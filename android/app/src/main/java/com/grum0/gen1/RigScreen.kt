@@ -1,6 +1,11 @@
 package com.grum0.gen1
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -97,6 +102,15 @@ fun RigScreen(s: Store) {
         }
 
         Section("Settings") {
+            SwitchRow("Keep the screen on", s.keepAwake) {
+                s.keepAwake = it
+                s.touch()
+            }
+            Text(
+                "The clock and the parts keep going with the screen off or the app in the background: see the GEN-1 " +
+                    "notification. “Stop and quit” there ends it.",
+                style = MaterialTheme.typography.bodySmall,
+            )
             if (!sure) {
                 SmallButton("Reset everything to the defaults…") { sure = true }
             } else {
@@ -109,6 +123,22 @@ fun RigScreen(s: Store) {
                     SmallButton("No") { sure = false }
                 }
             }
+        }
+
+        Section("About") {
+            Image(
+                painter = painterResource(R.drawable.ic_logo),
+                contentDescription = "Grumo",
+                colorFilter = ColorFilter.tint(Color.White),
+                modifier = Modifier.padding(vertical = 6.dp).size(width = 118.dp, height = 40.dp),
+            )
+            Text("GEN-1 for Android ${s.version}", style = MaterialTheme.typography.bodyMedium)
+            Text(
+                "Free software under the GNU GPL, version 3. The drum modes Boom Bap, Lo-Fi, Funk Break, Half Time, Hip-Hop " +
+                    "and Fast Break are the pattern generator of Cut-A-Dor by Kid Bunka. The Grids maps are from Mutable " +
+                    "Instruments Grids by Emilie Gillet. The clock, arpeggiator and sequencer come from CTL-1 by Charles Vestal.",
+                style = MaterialTheme.typography.bodySmall,
+            )
         }
     }
 }

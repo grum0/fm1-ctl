@@ -363,7 +363,8 @@ JNIEXPORT jint JNICALL J(nLaneSteps)(JNIEnv *env, jobject self, jint lane)
     return v;
 }
 
-/* names: kind 0 style, 1 device, 2 part, 3 lane, 4 drum set, 5 a part's mode (idx = part << 8 | mode) */
+/* names: kind 0 style, 1 device, 2 part, 3 lane, 4 drum set, 5 a part's mode (idx = part << 8 | mode), 6 a style
+ * family, 7 its three letters */
 JNIEXPORT jstring JNICALL J(nName)(JNIEnv *env, jobject self, jint kind, jint idx)
 {
     const char *s = "";
@@ -378,6 +379,8 @@ JNIEXPORT jstring JNICALL J(nName)(JNIEnv *env, jobject self, jint kind, jint id
         if ((idx >> 8) >= 0 && (idx >> 8) < GEN_NPARTS && (idx & 255) < gen_nmodes(idx >> 8))
             s = gen_mode_name(idx >> 8, idx & 255);
         break;
+    case 6: s = idx >= 0 && idx < GEN_NCATS ? gen_cat_name(idx) : ""; break;
+    case 7: s = idx >= 0 && idx < GEN_NCATS ? gen_cat_code(idx) : ""; break;
     default: break;
     }
     return (*env)->NewStringUTF(env, s);
@@ -393,8 +396,24 @@ JNIEXPORT jint JNICALL J(nCount)(JNIEnv *env, jobject self, jint kind)
     case 3: return GEN_NLANES;
     case 4: return GEN_NDSET;
     case 5: return F_COUNT;
+    case 6: return GEN_NCATS;
     default: return 0;
     }
+}
+
+/* a style's family and the tempos it sits at: out[0] CAT_*, [1] lowest BPM, [2] highest */
+JNIEXPORT void JNICALL J(nStyleInfo)(JNIEnv *env, jobject self, jint style, jintArray out)
+{
+    jint r[3] = {0, 0, 0};
+    int lo = 0, hi = 0;
+    (void)self;
+    if (style >= 0 && style < GEN_NSTYLES) {
+        gen_style_bpm(style, &lo, &hi);
+        r[0] = gen_style_cat(style);
+        r[1] = lo;
+        r[2] = hi;
+    }
+    (*env)->SetIntArrayRegion(env, out, 0, 3, r);
 }
 
 JNIEXPORT jint JNICALL J(nModeCount)(JNIEnv *env, jobject self, jint part)

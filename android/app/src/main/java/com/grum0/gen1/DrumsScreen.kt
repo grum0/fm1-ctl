@@ -21,6 +21,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
 private val SIM2 = listOf("Snare layer", "Crash", "Percussion")
+private val HATS = listOf("With the kit", "1/4", "1/8", "1/16")
+private val FILLS = listOf("at the phrase's end", "never", "every bar", "every 2 bars", "every 4 bars", "every 8 bars", "every 16 bars")
 
 @Composable
 fun DrumsScreen(s: Store) {
@@ -39,6 +41,17 @@ fun DrumsScreen(s: Store) {
                 if (s.vals[F.SIM_CHAN] == 0) "same as the drums" else "ch ${s.vals[F.SIM_CHAN]}",
                 listOf("same as the drums") + List(16) { "ch ${it + 1}" },
             ) { s.set(F.SIM_CHAN, it) }
+        }
+
+        Section("Hats, flams, fills") {
+            Text("Closed hat", style = MaterialTheme.typography.bodyMedium)
+            ChipGrid(HATS, { it == s.vals[F.HAT_DENS] }, 4) { s.set(F.HAT_DENS, it) }
+            SliderRow(s, "Flam (grace notes before the snare)", F.FLAM, { if (it == 0) "off" else "$it" })
+            Pick("Fill", FILLS.getOrElse(s.vals[F.FILL_EVERY]) { "?" }, FILLS) { s.set(F.FILL_EVERY, it) }
+            SliderRow(s, "Ratchets (32nd hats, snare rushes)", F.RATCHET, { if (it == 0) "the style's" else "$it" })
+            SliderRow(s, "Space (hats and percussion leave the phrase's end)", F.SPACE, {
+                if (it < 35) "off" else if (it < 61) "the last beat" else if (it < 75) "the last beat, thinner" else "the last two beats"
+            })
         }
 
         Section("Grids (mode Grids)") {

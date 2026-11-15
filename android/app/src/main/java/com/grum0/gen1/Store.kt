@@ -14,18 +14,22 @@ import androidx.compose.runtime.setValue
 /** A piece of hardware on the MIDI splitter: its profile in the generators and the channel it listens on. */
 data class Instrument(val key: String, val name: String, val dev: Int, val defChan: Int)
 
-// The channels are only guesses (the Tanzbär's 4 is the one known): set each to what the instrument is set to.
+// The channels as Grumo's instruments are set (2026-11-15). The JV-1010's two are still placeholders.
 val INSTRUMENTS = listOf(
     Instrument("tanzbar", "Tanzbär Lite", F.DV_TANZBAR, 4),
     Instrument("mbase", "Jomox MBase 11", F.DV_MBASE, 8),
-    Instrument("mb33", "MAM MB-33", F.DV_MB33, 1),
-    Instrument("hades", "Dreadbox Hades", F.DV_HADES, 2),
+    Instrument("mb33", "MAM MB-33", F.DV_MB33, 12),
+    Instrument("hades", "Dreadbox Hades", F.DV_HADES, 9),
     Instrument("monologue", "Korg Monologue", F.DV_MONOLOGUE, 3),
     Instrument("jv1010", "Roland JV-1010", F.DV_JV1010, 6),
     Instrument("jv1010b", "Roland JV-1010, 2nd part", F.DV_JV1010, 7),   // (it is multitimbral: a second part, a second channel)
-    Instrument("volca", "Volca FM", F.DV_VOLCAFM, 5),
+    Instrument("volca", "Volca FM", F.DV_VOLCAFM, 2),
     Instrument("other", "Other (generic)", F.DV_GENERIC, 16),
 )
+
+/** The first build's placeholder channels: saved channels equal to these were never set by hand, and give way to the real ones. */
+val OLD_DEFAULT_CHAN = listOf(4, 8, 1, 2, 3, 6, 7, 5, 16)
+const val RIG_VERSION = 2
 
 /** The firmware's own pairing: drums Tanzbär, chords JV-1010, arp Volca FM, bass MB-33, lead Monologue, kick MBase, Marble JV-1010 (2nd part). */
 val DEFAULT_TARGET = listOf(0, 5, 7, 2, 4, 1, 6)
@@ -63,6 +67,13 @@ class Store(ctx: Context) {
     val laneNames: List<String>
     val dsetNames: List<String>
     val modeNames: List<List<String>>
+    val catNames: List<String>                  // the styles' families ("Hip-hop") and their three letters ("HIP")
+    val catCodes: List<String>
+    val styleCat: List<Int>                     // each style's family, and the tempos it sits at
+    val styleLo: List<Int>
+    val styleHi: List<Int>
+    val version: String = runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName }.getOrNull() ?: "?"
+    var keepAwake by mutableStateOf(true)       // the screen stays on while the app is up
 
     val chan = mutableStateListOf<Int>()        // each instrument's MIDI channel, 1..16
     val target = mutableStateListOf<Int>()      // each part's instrument
@@ -103,6 +114,21 @@ class Store(ctx: Context) {
         laneNames = List(Native.nCount(3)) { Native.nName(3, it) }
         dsetNames = List(Native.nCount(4)) { Native.nName(4, it) }
         modeNames = List(F.NPARTS) { p -> List(Native.nModeCount(p)) { m -> Native.nName(5, (p shl 8) or m) } }
+        catNames = List(F.NCATS) { Native.nName(6, it) }
+        catCodes = List(F.NCATS) { Native.nName(7, it) }
+        val info = IntArray(3)
+        val cats = ArrayList<Int>()
+        val los = ArrayList<Int>()
+        val his = ArrayList<Int>()
+        for (i in styleNames.indices) {
+            Native.nStyleInfo(i, info)
+            cats.add(info[0].coerceIn(0, F.NCATS - 1))
+            los.add(info[1])
+            his.add(info[2])
+        }
+        styleCat = cats
+        styleLo = los
+        styleHi = his
         INSTRUMENTS.forEach { chan.add(it.defChan) }
         DEFAULT_TARGET.forEach { target.add(it) }
         repeat(F.NLANES) { lanes.add(0) }
@@ -245,6 +271,8 @@ class Store(ctx: Context) {
             .putInt("keysTarget", keysTarget)
             .putInt("seqTarget", seqTarget)
             .putInt("keyOct", keyOct)
+            .putInt("rig_version", RIG_VERSION)
+            .putBoolean("keepAwake", keepAwake)
             .putString("tanz", tanz.entries.joinToString(",") { "${it.key}=${it.value}" })
             .apply()
     }
@@ -254,12 +282,16 @@ class Store(ctx: Context) {
     fun load() {
         prefs.getString("fields", null)?.let { s ->
             val a = ints(s)
-            if (a.size == F.COUNT) a.forEachIndexed { id, v -> Native.nSet(id, v) }
+            // settings added since go at the end (F.HAT_DENS on): a shorter list from an older build is still good
+            if (a.size in F.HAT_DENS..F.COUNT) a.forEachIndexed { id, v -> Native.nSet(id, v) }
         }
+        val rigV = prefs.getInt("rig_version", 1)
         prefs.getString("chan", null)?.let { s ->
             val a = ints(s)
-            if (a.size == INSTRUMENTS.size) a.forEachIndexed { i, v -> chan[i] = v.coerceIn(1, 16) }
+            if (a.size == INSTRUMENTS.size && !(rigV < RIG_VERSION && a == OLD_DEFAULT_CHAN))
+                a.forEachIndexed { i, v -> chan[i] = v.coerceIn(1, 16) }
         }
+        keepAwake = prefs.getBoolean("keepAwake", true)
         prefs.getString("target", null)?.let { s ->
             val a = ints(s)
             if (a.size == F.NPARTS) a.forEachIndexed { p, v -> target[p] = v.coerceIn(0, INSTRUMENTS.size - 1) }
@@ -275,5 +307,6 @@ class Store(ctx: Context) {
         }
         applyRig()
         dirty = false
+        if (rigV < RIG_VERSION) save()
     }
 }

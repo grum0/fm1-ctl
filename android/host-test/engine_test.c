@@ -394,7 +394,7 @@ static void test_bass_range(void)
     static const int DEVS[3] = {DV_GENERIC, DV_MB33, DV_HADES};
     static const int HI[3] = {79, 72, 79};
     for (style = 0; style < GEN_NSTYLES; style++)
-        for (mode = 0; mode < 14; mode++)
+        for (mode = 0; mode < NBM; mode++)
             for (oct = -2; oct <= 2; oct += 2)
                 for (dev = 0; dev < 3; dev++) {
                     fresh();
@@ -423,6 +423,106 @@ static void test_bass_range(void)
                 }
     printf("bass range: %d notes, the highest %d\n", n, top);
 }
+static int count_note(int ch, int note)
+{
+    int i, c = 0;
+    for (i = 0; i < nlog; i++)
+        c += log_[i].n == 3 && log_[i].m[0] == (0x90 | ch) && log_[i].m[1] == note && log_[i].m[2];
+    return c;
+}
+/* a little over four bars at 120 BPM of the drums (channel 4) and the bass (channel 1), fills off */
+static void run_band(int style, int seed, int id, int v, int id2, int v2)
+{
+    fresh();
+    eng_set(F_CLOCK, CLK_INT, vnow);
+    eng_set(F_STYLE, style, vnow);
+    eng_set(F_SEED, seed, vnow);
+    eng_set(F_FILL_EVERY, 1, vnow);
+    eng_set(F_PART(GP_DRUMS, PF_ON), 1, vnow);
+    eng_set(F_PART(GP_DRUMS, PF_CHAN), 3, vnow);
+    eng_set(F_PART(GP_BASS, PF_ON), 1, vnow);
+    eng_set(F_PART(GP_BASS, PF_CHAN), 0, vnow);
+    if (id >= 0)
+        eng_set(id, v, vnow);
+    if (id2 >= 0)
+        eng_set(id2, v2, vnow);
+    eng_play(1, vnow);
+    run_internal(8100);
+    eng_play(0, vnow);
+}
+static void test_new_controls(void)
+{
+    /* The settings added at the end keep the old ones' numbers, so settings saved by the first app still load. */
+    int k, hats, a, b, m;
+    CHECK(F_TRK0 == 101 && F_X0 == 121 && GS_ACIDDREAM == 23, "saved setting and style numbers moved");
+    /* Hat density: quarters, eighths, sixteenths of closed hat (note 43), whatever the style has */
+    for (k = 1; k <= 3; k++) {
+        int want = 4 << (k - 1);
+        run_band(GS_PFUNK, 5, F_HAT_DENS, k, -1, 0);
+        hats = count_note(3, 43);
+        CHECK(hats >= want * 4 && hats <= want * 4 + want / 2 + 1, "hat density %d: %d hats in four bars", k, hats);
+        run_band(GS_NEP_MIN, 5, F_HAT_DENS, k, -1, 0);       /* (a style with no hat lane) */
+        hats = count_note(3, 43);
+        CHECK(hats >= want * 4 && hats <= want * 4 + want / 2 + 1, "hat density %d, no hat lane: %d hats", k, hats);
+        run_band(GS_BOOMBAP, 5, F_HAT_DENS, k, -1, 0);       /* (Cut-A-Dor's drums) */
+        hats = count_note(3, 43);
+        CHECK(hats >= want * 4 && hats <= want * 4 + want / 2 + 1, "hat density %d, Boom Bap: %d hats", k, hats);
+    }
+    /* Bass and kick: locked, the bass plays where the kick does and nowhere else */
+    run_band(GS_PFUNK, 9, F_COUPLE, 3, -1, 0);
+    a = count_note(3, 36);
+    b = count(0x90, 0);
+    CHECK(a > 6 && a == b, "locked: %d kicks, %d bass notes", a, b);
+    run_band(GS_PFUNK, 9, F_COUPLE, 2, -1, 0);
+    CHECK(count(0x90, 0) >= a, "following: at least a bass note a kick (%d, %d kicks)", count(0x90, 0), a);
+    run_band(GS_NEP_MIN, 9, -1, 0, -1, 0);                   /* (this style locks by itself) */
+    CHECK(count_note(3, 36) == count(0x90, 0), "Neptunes Minimal: %d kicks, %d bass notes", count_note(3, 36), count(0x90, 0));
+    /* Flam: more snare notes; Ratchets: more hats and snares */
+    run_band(GS_PFUNK, 9, -1, 0, -1, 0);
+    a = count_note(3, 37);
+    b = count_note(3, 43);
+    run_band(GS_PFUNK, 9, F_FLAM, 127, -1, 0);
+    CHECK(count_note(3, 37) >= a + 6, "flam: %d snare notes, %d without", count_note(3, 37), a);
+    check_no_stuck("flam");
+    run_band(GS_PFUNK, 9, F_RATCHET, 127, -1, 0);
+    CHECK(count_note(3, 43) > b + 8 && count_note(3, 37) > a, "ratchets: hats %d (%d), snares %d (%d)", count_note(3, 43), b,
+          count_note(3, 37), a);
+    check_no_stuck("ratchets");
+    /* Hat swing off: no closed hat is late any more (the hat lane has no lateness in this style) */
+    run_band(GS_PFUNK, 9, F_SWING, 20, F_HAT_STRAIGHT, 100);
+    CHECK(count_note(3, 43) == b, "straight hats: %d hats, %d before", count_note(3, 43), b);
+    /* Cut-A-Dor's six: a kick on every bar's one, a backbeat, nothing left on, and the same twice */
+    for (m = 0; m < CAD_NSTYLES; m++)
+        for (k = 0; k < 6; k++) {
+            run_band(GS_DILLA, 40 + k * 17, F_PART(GP_DRUMS, PF_MODE), DM_CAD0 + m, F_MUTATE, k);
+            a = count_note(3, 36);
+            b = count_note(3, 37);
+            hats = nlog;
+            CHECK(a >= 5 && b >= (m == CAD_HALFTIME ? 4 : 8), "%s, seed %d: %d kicks, %d snares", CAD_NAME[m], 40 + k * 17, a, b);
+            check_no_stuck(CAD_NAME[m]);
+            check_order(CAD_NAME[m]);
+            run_band(GS_DILLA, 40 + k * 17, F_PART(GP_DRUMS, PF_MODE), DM_CAD0 + m, F_MUTATE, k);
+            CHECK(nlog == hats && count_note(3, 36) == a, "%s is not the same twice", CAD_NAME[m]);
+        }
+    /* Fills every bar, and the chords' voicings, leave nothing on */
+    for (k = 2; k <= 6; k++) {
+        run_band(GS_NERD, 3, F_FILL_EVERY, k, F_SPACE, 80);
+        check_no_stuck("fill every");
+    }
+    for (k = 0; k <= 3; k++)
+        for (m = 0; m < GEN_NSTYLES; m++) {
+            run_band(m, 3, F_VOICE, k, F_PART(GP_CHORD, PF_ON), 1);
+            check_no_stuck("voicing");
+        }
+    for (m = 0; m < GEN_NSTYLES; m++) {                      /* every style has a family and a tempo range */
+        int lo, hi;
+        gen_style_bpm(m, &lo, &hi);
+        CHECK(gen_style_cat(m) < GEN_NCATS && lo >= 40 && hi > lo && hi <= 240, "%s: family %d, %d to %d BPM", gen_style_name(m),
+              gen_style_cat(m), lo, hi);
+    }
+    printf("new controls: hat density, coupling, flam, ratchets, Cut-A-Dor modes, fills, voicings ok\n");
+}
+
 static void test_panic(void)
 {
     fresh();
@@ -440,6 +540,7 @@ int main(void)
     test_channels_follow();
     test_arp_seq();
     test_bass_range();
+    test_new_controls();
     test_panic();
     printf(fails ? "FAILED (%d)\n" : "ok\n", fails);
     free(log_);

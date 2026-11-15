@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# The native half of GEN-1 for Android: the firmware's own generators (app/gen.c, unchanged) and the engine around them.
+# The native half of GEN-1 for Android: the generators (app/gen.c, with app/gen_cad.h) and the engine around them.
+# gen_cad.h is GPL-3.0-only (Cut-A-Dor's drum generator), so the library as a whole is under GPL-3.0-only.
 cmake_minimum_required(VERSION 3.22.1)
 project(gen1 C)
 
