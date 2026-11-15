@@ -6,6 +6,7 @@
     <uses-feature android:name="android.hardware.usb.host" android:required="false" />
 
     <application
+        android:name=".Gen1App"
         android:allowBackup="true"
         android:label="GEN-1"
         android:theme="@style/Theme.Gen1">
