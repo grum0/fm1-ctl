@@ -30,6 +30,9 @@ jobs:
       - name: Engine host test (clock, channels, arpeggiator, sequencer, settings)
         run: sh android/host-test/run.sh
 
+      - name: Native functions and field ids agree between Kotlin and C
+        run: sh android/tools/check.sh
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -49,6 +52,13 @@ jobs:
       - name: Build the debug APK
         working-directory: android
         run: gradle --no-daemon --stacktrace assembleDebug
+
+      - name: What is in the APK
+        run: |
+          APK=android/app/build/outputs/apk/debug/app-debug.apk
+          ls -l "$APK"
+          unzip -l "$APK" | grep -E 'libgen1|classes.*dex|AndroidManifest'
+          "$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging "$APK" | grep -E "^package|sdkVersion|uses-feature|launchable"
 
       - uses: actions/upload-artifact@v4
         with:

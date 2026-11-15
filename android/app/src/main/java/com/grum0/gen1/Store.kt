@@ -22,12 +22,13 @@ val INSTRUMENTS = listOf(
     Instrument("hades", "Dreadbox Hades", F.DV_HADES, 2),
     Instrument("monologue", "Korg Monologue", F.DV_MONOLOGUE, 3),
     Instrument("jv1010", "Roland JV-1010", F.DV_JV1010, 6),
+    Instrument("jv1010b", "Roland JV-1010, 2nd part", F.DV_JV1010, 7),   // (it is multitimbral: a second part, a second channel)
     Instrument("volca", "Volca FM", F.DV_VOLCAFM, 5),
     Instrument("other", "Other (generic)", F.DV_GENERIC, 16),
 )
 
-/** The firmware's own pairing: drums Tanzbär, chords JV-1010, arp Volca FM, bass MB-33, lead Monologue, kick MBase, Marble JV-1010. */
-val DEFAULT_TARGET = listOf(0, 5, 6, 2, 4, 1, 5)
+/** The firmware's own pairing: drums Tanzbär, chords JV-1010, arp Volca FM, bass MB-33, lead Monologue, kick MBase, Marble JV-1010 (2nd part). */
+val DEFAULT_TARGET = listOf(0, 5, 7, 2, 4, 1, 6)
 
 val LANE_DEFAULT = listOf(36, 37, 38, 41, 43, 39, 40, 40, 44, 44, 45, 46, 47, 37, 36)
 

@@ -47,6 +47,7 @@ class MidiHub(ctx: Context, private val prefs: SharedPreferences) {
     fun nameOf(info: MidiDeviceInfo): String =
         info.properties.getString(MidiDeviceInfo.PROPERTY_NAME) ?: "MIDI device ${info.id}"
 
+    @Suppress("DEPRECATION")
     fun start() {
         if (started) return
         started = true
