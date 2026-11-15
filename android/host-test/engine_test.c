@@ -1,0 +1,409 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+/* The Android engine on a computer: a virtual clock, a sink that keeps every message with the time it was given.
+ * Checks the clock (internal and followed), the transport, the channels, the arpeggiator and sequencer, the
+ * settings, and that parts made apart fit each other.   cc -DGEN_STANDALONE ... engine_test.c   (run.sh) */
+#define GEN_STANDALONE
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "../../app/gen.c"
+#include "../app/src/main/cpp/gen1_engine.c"
+
+typedef struct { int64_t t, at; uint8_t m[3]; int n; } msg_t;
+static msg_t *log_;
+static int nlog, caplog;
+static int64_t vnow;                             /* the virtual time of the call being made */
+static int fails;
+
+#define CHECK(c, ...) do { if (!(c)) { printf("FAIL line %d: ", __LINE__); printf(__VA_ARGS__); printf("\n"); fails++; } } while (0)
+
+static void sink(void *ud, int64_t when, const uint8_t *m, int n)
+{
+    (void)ud;
+    if (nlog == caplog) {
+        caplog = caplog ? caplog * 2 : 4096;
+        log_ = realloc(log_, (size_t)caplog * sizeof *log_);
+    }
+    log_[nlog].t = when;
+    log_[nlog].at = vnow;
+    log_[nlog].n = n;
+    memcpy(log_[nlog].m, m, (size_t)n);
+    nlog++;
+}
+static void fresh(void)
+{
+    nlog = 0;
+    vnow = 1000 * MS;
+    eng_init(sink, 0);
+}
+/* the internal clock's thread: a call every 4 ms (and a late one now and then) */
+static void run_internal(int64_t ms)
+{
+    int64_t end = vnow + ms * MS;
+    int k = 0;
+    while (vnow < end) {
+        eng_pump(vnow);
+        vnow += (++k % 50 == 0 ? 17 : 4) * MS;   /* a thread that wakes up late sometimes, within the lookahead */
+    }
+}
+/* the MPC: a clock at bpm, with jitter, for ms */
+static uint32_t jr = 12345;
+static int64_t jit(int64_t span) { jr = jr * 1664525u + 1013904223u; return (int64_t)(jr >> 8) % (2 * span + 1) - span; }
+static void run_external(int64_t ms, int bpm, int64_t jitter)
+{
+    int64_t tick = 2500000000LL / bpm, end = vnow + ms * MS, t = vnow;
+    int64_t base = vnow;
+    int n = 0;
+    while (t < end) {
+        vnow = base + n * tick + jit(jitter);
+        eng_pump(vnow);
+        eng_midi_clock(0xF8, vnow);
+        n++;
+        t = base + n * tick;
+    }
+    vnow = t;
+}
+static int count(uint8_t st, int ch)
+{
+    int i, c = 0;
+    for (i = 0; i < nlog; i++)
+        if (log_[i].n == 3 && (log_[i].m[0] & 0xF0) == st && (ch < 0 || (log_[i].m[0] & 15) == ch))
+            c++;
+    return c;
+}
+static int count_rt(uint8_t b)
+{
+    int i, c = 0;
+    for (i = 0; i < nlog; i++)
+        c += log_[i].n == 1 && log_[i].m[0] == b;
+    return c;
+}
+static void check_order(const char *what)
+{
+    int i;
+    for (i = 1; i < nlog; i++)
+        if (log_[i].t < log_[i - 1].t) {
+            CHECK(0, "%s: message %d goes before the one before it (%lld < %lld)", what, i, (long long)log_[i].t, (long long)log_[i - 1].t);
+            return;
+        }
+}
+static void check_no_stuck(const char *what)
+{
+    static int held[16][128];
+    int i, ch, n;
+    memset(held, 0, sizeof held);
+    for (i = 0; i < nlog; i++) {
+        int k = log_[i].m[0] & 0xF0;
+        if (log_[i].n != 3)
+            continue;
+        ch = log_[i].m[0] & 15;
+        n = log_[i].m[1];
+        if (k == 0x90 && log_[i].m[2])
+            held[ch][n]++;
+        else if (k == 0x80 || k == 0x90)
+            held[ch][n]--;
+    }
+    for (ch = 0; ch < 16; ch++)
+        for (n = 0; n < 128; n++)
+            if (held[ch][n] != 0) {
+                CHECK(0, "%s: note %d on channel %d left %s", what, n, ch + 1, held[ch][n] > 0 ? "on" : "off twice");
+                return;
+            }
+}
+
+/* ---------------------------------------------------------------------------- */
+static void test_ranges(void)
+{
+    int id, lo, hi, v;
+    fresh();
+    for (id = 0; id < F_COUNT; id++) {
+        eng_range(id, &lo, &hi);
+        CHECK(lo <= hi, "range of %d is %d..%d", id, lo, hi);
+        eng_set(id, lo - 1000, vnow);
+        v = eng_get(id);
+        CHECK(v >= lo && v <= hi, "id %d below its range gives %d (%d..%d)", id, v, lo, hi);
+        eng_set(id, hi + 1000, vnow);
+        v = eng_get(id);
+        CHECK(v >= lo && v <= hi, "id %d above its range gives %d (%d..%d)", id, v, lo, hi);
+        eng_set(id, hi, vnow);
+        eng_set(id, lo, vnow);
+        CHECK(eng_get(id) == lo, "id %d: set %d, got %d", id, lo, eng_get(id));
+        CHECK(gen_valid(&E.g), "the generators' settings are invalid after setting id %d to %d", id, lo);
+    }
+    fresh();
+    CHECK(gen_valid(&E.g), "defaults invalid");
+    CHECK(eng_get(F_PART(GP_DRUMS, PF_DEV)) == DV_TANZBAR, "drums default device");
+    CHECK(eng_get(F_LANE0 + L_KICK) == 36 && eng_get(F_LANE0 + L_SNARE) == 37, "lane note defaults");
+    CHECK(eng_get(F_TRK(0, TF_STEPS)) == 16 && eng_get(F_TRK(0, TF_MUTE)) == 1, "track defaults");
+    printf("settings: %d ids ok\n", F_COUNT);
+}
+
+static void setup_rig(void)
+{
+    /* the drums on channel 4 (the Tanzbar), chords 6, arp 5, bass 1, lead 3, kick 8, marble 7: all on */
+    static const int CH[GEN_NPARTS] = {3, 5, 4, 0, 2, 7, 6};
+    int p;
+    for (p = 0; p < GEN_NPARTS; p++) {
+        eng_set(F_PART(p, PF_ON), 1, vnow);
+        eng_set(F_PART(p, PF_CHAN), CH[p], vnow);
+    }
+}
+
+static void test_internal(void)
+{
+    int i, nclk = 0, p;
+    int64_t first = 0, last = 0, worst = 0, sum = 0;
+    static const int CH[GEN_NPARTS] = {3, 5, 4, 0, 2, 7, 6};
+    int used[16] = {0};
+    fresh();
+    eng_set(F_CLOCK, CLK_INT_OUT, vnow);
+    eng_set(F_TEMPO, 120, vnow);
+    setup_rig();
+    run_internal(300);                           /* stopped: the clock runs, nothing else */
+    CHECK(count_rt(0xF8) > 10, "the clock should run while stopped (%d)", count_rt(0xF8));
+    CHECK(count(0x90, -1) == 0, "nothing plays while stopped");
+    nlog = 0;
+    eng_play(1, vnow);
+    run_internal(8000);                          /* four bars at 120 */
+    eng_play(0, vnow);
+    run_internal(100);
+    check_order("internal");
+    check_no_stuck("internal");
+    CHECK(count_rt(0xFA) == 1 && count_rt(0xFC) == 1, "one start (%d) and one stop (%d)", count_rt(0xFA), count_rt(0xFC));
+    for (i = 0; i < nlog; i++) {
+        if (log_[i].n == 1 && log_[i].m[0] == 0xFA) {
+            CHECK(i + 1 < nlog && log_[i + 1].n == 1 && log_[i + 1].m[0] == 0xF8, "a clock tick follows the start");
+            CHECK(log_[i].t < log_[i + 1].t || log_[i].t == log_[i + 1].t, "start before its tick");
+        }
+        if (log_[i].n == 1 && log_[i].m[0] == 0xF8) {
+            if (first && last) {
+                int64_t d = log_[i].t - last;
+                int64_t err = d > 20833333LL ? d - 20833333LL : 20833333LL - d;
+                if (err > worst)
+                    worst = err;
+                sum += d;
+            }
+            if (!first)
+                first = log_[i].t;
+            last = log_[i].t;
+            nclk++;
+        }
+        /* a message is never made late: it is given to the sink before its time (the lookahead) */
+        if (log_[i].t < log_[i].at - 1 * MS)
+            CHECK(0, "message %d is %lld us late", i, (long long)((log_[i].at - log_[i].t) / 1000));
+    }
+    CHECK(nclk > 8000 / 21 - 5, "clock ticks: %d", nclk);
+    CHECK(worst < 2, "clock spacing off by %lld ns", (long long)worst);
+    printf("internal: %d ticks, spacing off by at most %lld ns, mean %lld ns\n", nclk, (long long)worst, (long long)(sum / (nclk - 1)));
+    for (i = 0; i < nlog; i++)
+        if (log_[i].n == 3)
+            used[log_[i].m[0] & 15] = 1;
+    for (p = 0; p < GEN_NPARTS; p++)
+        CHECK(used[CH[p]], "part %s sent nothing on channel %d", gen_part_name(p), CH[p] + 1);
+    for (i = 0; i < 16; i++) {
+        int mine = 0;
+        for (p = 0; p < GEN_NPARTS; p++)
+            mine |= CH[p] == i;
+        CHECK(mine || !used[i], "something went out on channel %d, which no part has", i + 1);
+    }
+    {   /* the Tanzbar's channel carries its notes */
+        int kick = 0;
+        for (i = 0; i < nlog; i++)
+            kick += log_[i].n == 3 && log_[i].m[0] == 0x93 && log_[i].m[1] == 36 && log_[i].m[2];
+        CHECK(kick > 4, "the drums' kick (note 36, channel 4) played %d times", kick);
+    }
+}
+
+static void test_clockless(void)
+{
+    fresh();
+    eng_set(F_CLOCK, CLK_INT, vnow);             /* kept, not sent */
+    setup_rig();
+    eng_play(1, vnow);
+    run_internal(2000);
+    CHECK(count_rt(0xF8) == 0 && count_rt(0xFA) == 0, "Internal (quiet) sends no realtime messages");
+    CHECK(count(0x90, -1) > 20, "but the parts play (%d)", count(0x90, -1));
+}
+
+static void test_external(void)
+{
+    int i, bars_seen = 0;
+    fresh();
+    eng_set(F_CLOCK, CLK_EXT, vnow);
+    setup_rig();
+    run_external(2000, 100, 0);                  /* a clock but no start: nothing plays */
+    CHECK(count(0x90, -1) == 0 && nlog == 0, "no start, no notes (%d messages)", nlog);
+    eng_midi_clock(0xFA, vnow);                  /* the MPC's start */
+    run_external(8000, 100, 1500000);            /* 100 BPM, 1.5 ms of jitter */
+    {
+        int32_t st[8];
+        eng_status(st, vnow);
+        CHECK(st[7] == 1, "the clock is seen");
+        CHECK(st[6] > 980 && st[6] < 1020, "tempo read from the clock: %d", st[6]);
+        bars_seen = st[1];
+    }
+    eng_midi_clock(0xFC, vnow);
+    check_order("external");
+    check_no_stuck("external");
+    CHECK(count(0x90, -1) > 100, "notes with a followed clock (%d)", count(0x90, -1));
+    CHECK(count_rt(0xF8) == 0, "following, no clock goes out");
+    /* the subticks of one tick are spread: a drum hit lands between ticks too */
+    {
+        int off_grid = 0;
+        for (i = 0; i < nlog; i++)
+            if (log_[i].n == 3 && (log_[i].m[0] & 0xF0) == 0x90 && log_[i].t > log_[i].at)
+                off_grid++;
+        CHECK(off_grid > 0, "some notes are scheduled ahead of the tick that made them");
+    }
+    printf("external: %d messages, bar %d of the phrase at the end\n", nlog, bars_seen);
+    /* a play press while following starts the parts at once, on the clock's next tick */
+    fresh();
+    eng_set(F_CLOCK, CLK_EXT, vnow);
+    setup_rig();
+    eng_play(1, vnow);
+    run_external(1500, 120, 0);
+    CHECK(count(0x90, -1) > 5, "Play while following: notes (%d)", count(0x90, -1));
+    eng_play(0, vnow);
+    check_no_stuck("external play");
+}
+
+static int collect(int ch, uint8_t *buf, int cap, int64_t *tbuf, int64_t t0)
+{
+    int i, n = 0;
+    for (i = 0; i < nlog && n < cap; i++)
+        if (log_[i].n == 3 && (log_[i].m[0] & 15) == ch) {
+            buf[n] = (uint8_t)(log_[i].m[0] & 0xF0);
+            buf[n + 0] = log_[i].m[0];
+            tbuf[n++] = log_[i].t - t0;
+        }
+    return n;
+}
+static void test_parts_fit(void)
+{
+    /* Parts recorded on separate passes must fit: the bass alone is the bass of the full band, event for event. */
+    static uint8_t a[20000], b[20000];
+    static int64_t ta[20000], tb[20000];
+    int na, nb, i;
+    int64_t t0;
+    fresh();
+    eng_set(F_CLOCK, CLK_INT, vnow);
+    eng_set(F_SEED, 4242, vnow);
+    setup_rig();
+    eng_play(1, vnow);
+    t0 = vnow;
+    run_internal(8000);
+    eng_play(0, vnow);
+    na = collect(0, a, 20000, ta, t0);
+    fresh();
+    eng_set(F_CLOCK, CLK_INT, vnow);
+    eng_set(F_SEED, 4242, vnow);
+    setup_rig();
+    for (i = 0; i < GEN_NPARTS; i++)
+        if (i != GP_BASS)
+            eng_set(F_PART(i, PF_ON), 0, vnow);
+    eng_play(1, vnow);
+    t0 = vnow;
+    run_internal(8000);
+    eng_play(0, vnow);
+    nb = collect(0, b, 20000, tb, t0);
+    CHECK(na > 30 && na == nb, "bass alone %d events, with the band %d", nb, na);
+    for (i = 0; i < na && i < nb; i++)
+        if (a[i] != b[i] || ta[i] / 1000 != tb[i] / 1000) {
+            CHECK(0, "bass event %d differs apart and together", i);
+            break;
+        }
+    printf("parts fit: bass %d events, the same alone and in the band\n", na);
+}
+
+static void test_channels_follow(void)
+{
+    int i;
+    fresh();
+    eng_set(F_CLOCK, CLK_INT, vnow);
+    eng_set(F_PART(GP_BASS, PF_ON), 1, vnow);
+    eng_set(F_PART(GP_BASS, PF_CHAN), 0, vnow);
+    eng_play(1, vnow);
+    run_internal(1800);
+    eng_set(F_PART(GP_BASS, PF_CHAN), 9, vnow);  /* the bass moves to another instrument mid-bar */
+    run_internal(2500);
+    eng_play(0, vnow);
+    check_no_stuck("channel change");
+    CHECK(count(0x90, 0) > 0 && count(0x90, 9) > 0, "bass on both channels (%d, %d)", count(0x90, 0), count(0x90, 9));
+    for (i = 0; i < nlog; i++)
+        if (log_[i].n == 3 && (log_[i].m[0] & 0xF0) == 0x90 && log_[i].m[2] && (log_[i].m[0] & 15) != 0 && (log_[i].m[0] & 15) != 9)
+            CHECK(0, "a note on channel %d", (log_[i].m[0] & 15) + 1);
+    /* the Simmons lanes on their own channel */
+    fresh();
+    eng_set(F_PART(GP_DRUMS, PF_ON), 1, vnow);
+    eng_set(F_PART(GP_DRUMS, PF_CHAN), 3, vnow);
+    eng_set(F_DSET, DS_SIM, vnow);
+    eng_set(F_SIM_CHAN, 10, vnow);
+    eng_set(F_STYLE, GS_808, vnow);
+    eng_play(1, vnow);
+    run_internal(16000);
+    eng_play(0, vnow);
+    CHECK(count(0x90, 9) > 0 && count(0x90, 3) == 0, "Simmons lanes on channel 10 (%d), none on the drums' (%d)", count(0x90, 9), count(0x90, 3));
+}
+
+static void test_arp_seq(void)
+{
+    int i, on = 0, notes[8], nn = 0;
+    fresh();
+    eng_set(F_CLOCK, CLK_INT, vnow);
+    eng_set(F_KEYS_CHAN, 4, vnow);
+    eng_set(F_ARP_ON, 1, vnow);
+    eng_set(F_ARP_RATE, RATE_16, vnow);
+    eng_arp_press(60);
+    eng_arp_press(64);
+    eng_arp_press(67);
+    run_internal(1000);
+    for (i = 0; i < nlog; i++)
+        if (log_[i].n == 3 && log_[i].m[0] == 0x94 && log_[i].m[2]) {
+            if (nn < 8)
+                notes[nn++] = log_[i].m[1];
+            on++;
+        }
+    CHECK(on >= 7 && on <= 9, "arp at 1/16, 120 BPM: %d notes in a second", on);
+    CHECK(nn >= 4 && notes[0] == 60 && notes[1] == 64 && notes[2] == 67 && notes[3] == 60, "arp order up: %d %d %d %d", notes[0], notes[1], notes[2], notes[3]);
+    eng_arp_release(60);
+    eng_arp_release(64);
+    eng_arp_release(67);
+    {
+        int before = count(0x90, 4);
+        run_internal(500);
+        CHECK(count(0x90, 4) - before <= 1, "nothing arpeggiated after the keys are up (%d more)", count(0x90, 4) - before);
+    }
+    eng_set(F_ARP_ON, 0, vnow);
+    check_no_stuck("arp");
+    /* the sequencer: track 1 (4 hits in 16) unmuted, a note every 500 ms */
+    fresh();
+    eng_set(F_CLOCK, CLK_INT, vnow);
+    eng_set(F_TRK(0, TF_MUTE), 0, vnow);
+    eng_play(1, vnow);
+    run_internal(4000);
+    eng_play(0, vnow);
+    CHECK(count(0x90, 9) >= 7 && count(0x90, 9) <= 9, "sequencer track 1: %d kicks in two bars", count(0x90, 9));
+    check_no_stuck("sequencer");
+}
+
+static void test_panic(void)
+{
+    fresh();
+    eng_panic(vnow);
+    CHECK(count(0xB0, -1) == 16, "panic sends all notes off on 16 channels (%d)", count(0xB0, -1));
+}
+
+int main(void)
+{
+    test_ranges();
+    test_internal();
+    test_clockless();
+    test_external();
+    test_parts_fit();
+    test_channels_follow();
+    test_arp_seq();
+    test_panic();
+    printf(fails ? "FAILED (%d)\n" : "ok\n", fails);
+    free(log_);
+    return fails != 0;
+}
