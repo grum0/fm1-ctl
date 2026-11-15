@@ -134,6 +134,7 @@ static void test_ranges(void)
     CHECK(gen_valid(&E.g), "defaults invalid");
     CHECK(eng_get(F_PART(GP_DRUMS, PF_DEV)) == DV_TANZBAR, "drums default device");
     CHECK(eng_get(F_LANE0 + L_KICK) == 36 && eng_get(F_LANE0 + L_SNARE) == 37, "lane note defaults");
+    CHECK(eng_get(F_LANE0 + L_SIM1) == 0 && eng_get(F_LANE0 + L_SIM2) == 1, "the Simmons lanes: MPC CV pads A01, A02 = notes 0, 1");
     CHECK(eng_get(F_TRK(0, TF_STEPS)) == 16 && eng_get(F_TRK(0, TF_MUTE)) == 1, "track defaults");
     printf("settings: %d ids ok\n", F_COUNT);
 }

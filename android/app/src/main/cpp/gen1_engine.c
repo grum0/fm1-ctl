@@ -630,6 +630,13 @@ void eng_set(int id, int v, int64_t now)
     }
 }
 
+/* The Simmons lanes go to the MPC's CV track, whose pads A01 and A02 are notes 0 and 1 (not 36 and 37) */
+static void cv_pads(void)
+{
+    E.g.lane_note[L_SIM1] = 0;
+    E.g.lane_note[L_SIM2] = 1;
+}
+
 void eng_init(eng_sink_t sink, void *ud)
 {
     memset(&E, 0, sizeof E);
@@ -639,7 +646,7 @@ void eng_init(eng_sink_t sink, void *ud)
     memset(E.seq_note, 0xFF, sizeof E.seq_note);
     E.rnd = 2463534242u;
     ecfg_defaults();
-    gen_defaults(&E.g);
+    gen_defaults(&E.g), cv_pads();
     gen_init(&E.g, gen_out);
 }
 
@@ -648,7 +655,7 @@ void eng_defaults(int64_t now)
     eng_play(0, now);
     eng_panic(now);
     ecfg_defaults();
-    gen_defaults(&E.g);
+    gen_defaults(&E.g), cv_pads();
 }
 
 void eng_status(int32_t *out, int64_t now)

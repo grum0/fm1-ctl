@@ -30,7 +30,7 @@ val INSTRUMENTS = listOf(
 /** The firmware's own pairing: drums Tanzbär, chords JV-1010, arp Volca FM, bass MB-33, lead Monologue, kick MBase, Marble JV-1010 (2nd part). */
 val DEFAULT_TARGET = listOf(0, 5, 7, 2, 4, 1, 6)
 
-val LANE_DEFAULT = listOf(36, 37, 38, 41, 43, 39, 40, 40, 44, 44, 45, 46, 47, 37, 36)
+val LANE_DEFAULT = listOf(36, 37, 38, 41, 43, 39, 40, 40, 44, 44, 45, 46, 47, 0, 1)
 
 /** The Tanzbär Lite's controllers, voice by voice (the FM-1 firmware's banks E to L). */
 class TanzVoice(val name: String, val knobs: List<Pair<String, Int>>)
