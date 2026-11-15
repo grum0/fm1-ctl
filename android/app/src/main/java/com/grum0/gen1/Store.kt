@@ -149,12 +149,12 @@ class Store(ctx: Context) {
         applyRig()
     }
 
-    fun setKeysTarget(inst: Int) {
+    fun chooseKeysTarget(inst: Int) {
         keysTarget = inst
         applyRig()
     }
 
-    fun setSeqTarget(inst: Int) {
+    fun chooseSeqTarget(inst: Int) {
         seqTarget = inst
         applyRig()
     }

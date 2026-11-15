@@ -35,7 +35,7 @@ fun ControlScreen(s: Store) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp)) {
 
         Section("Keys") {
-            Pick("Play", instNames[s.keysTarget], instNames) { s.setKeysTarget(it) }
+            Pick("Play", instNames[s.keysTarget], instNames) { s.chooseKeysTarget(it) }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text("Octave", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
                 Stepper(
@@ -101,7 +101,7 @@ fun ControlScreen(s: Store) {
                 "Euclidean tracks, for when you want a loop beside the generators. They start muted.",
                 style = MaterialTheme.typography.bodySmall,
             )
-            Pick("Play", instNames[s.seqTarget], instNames) { s.setSeqTarget(it) }
+            Pick("Play", instNames[s.seqTarget], instNames) { s.chooseSeqTarget(it) }
             for (t in 0 until F.NTRACKS) {
                 Text("Track ${t + 1}", Modifier.padding(top = 8.dp), style = MaterialTheme.typography.titleSmall, color = Mint)
                 SwitchRow("Playing", s.vals[F.trk(t, F.TF_MUTE)] == 0) { s.set(F.trk(t, F.TF_MUTE), if (it) 0 else 1) }
