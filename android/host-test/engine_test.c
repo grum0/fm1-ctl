@@ -523,6 +523,77 @@ static void test_new_controls(void)
     printf("new controls: hat density, coupling, flam, ratchets, Cut-A-Dor modes, fills, voicings ok\n");
 }
 
+/* 0.2.1: the notes that used to stay on (review findings 1 to 3) */
+static void quiet(int64_t ms)                    /* the engine's thread running, no clock coming in */
+{
+    int64_t end = vnow + ms * MS;
+    while (vnow < end) {
+        eng_pump(vnow);
+        vnow += 4 * MS;
+    }
+}
+static void test_stuck_notes(void)
+{
+    /* 1. following the MPC, the clock stops with no Stop (cable out): every note ends within about 300 ms */
+    fresh();
+    eng_set(F_CLOCK, CLK_EXT, vnow);
+    setup_rig();
+    eng_midi_clock(0xFA, vnow);
+    run_external(3000, 100, 0);
+    quiet(400);
+    check_no_stuck("followed clock gone, no Stop");
+    {
+        int before = nlog;
+        quiet(1000);
+        CHECK(nlog == before, "nothing more once the notes are ended (%d messages)", nlog - before);
+        run_external(2000, 100, 0);              /* the clock comes back: the band goes on */
+        CHECK(count(0x90, -1) > 0 && nlog > before, "the band plays on when the clock comes back");
+        eng_midi_clock(0xFC, vnow);
+        check_no_stuck("clock back, then Stop");
+    }
+    /* 2. the clock mode changed while playing: the transport stops and nothing is left on */
+    fresh();
+    eng_set(F_CLOCK, CLK_INT_OUT, vnow);
+    setup_rig();
+    eng_play(1, vnow);
+    run_internal(2500);
+    eng_set(F_CLOCK, CLK_EXT, vnow);
+    quiet(500);
+    check_no_stuck("Send clock -> Follow MPC while playing");
+    CHECK(count_rt(0xFC) == 1, "a Stop goes out when leaving Send clock (%d)", count_rt(0xFC));
+    {
+        int32_t st[8];
+        eng_status(st, vnow);
+        CHECK(st[0] == 0, "the transport is stopped after the clock mode changes");
+    }
+    fresh();
+    eng_set(F_CLOCK, CLK_INT, vnow);
+    setup_rig();
+    eng_play(1, vnow);
+    run_internal(2500);
+    eng_set(F_CLOCK, CLK_EXT, vnow);
+    check_no_stuck("Internal -> Follow MPC while playing");
+    /* 3. following, the MPC's Stop ends the arp's note at once, with no clock after it */
+    fresh();
+    eng_set(F_CLOCK, CLK_EXT, vnow);
+    eng_set(F_KEYS_CHAN, 4, vnow);
+    eng_set(F_ARP_ON, 1, vnow);
+    eng_set(F_ARP_RATE, RATE_4, vnow);           /* quarter notes, held half a beat */
+    eng_arp_press(60);
+    eng_arp_press(64);
+    eng_midi_clock(0xFA, vnow);
+    run_external(1100, 120, 0);                  /* the last quarter has just started: its note is on */
+    {
+        int i, on = 0;
+        for (i = 0; i < nlog; i++)
+            if (log_[i].n == 3 && log_[i].m[0] == 0x94)
+                on += log_[i].m[2] ? 1 : 0;
+        CHECK(on >= 3, "arp notes while following (%d)", on);
+    }
+    eng_midi_clock(0xFC, vnow);
+    check_no_stuck("arp, the MPC's Stop");
+}
+
 static void test_panic(void)
 {
     fresh();
@@ -541,6 +612,7 @@ int main(void)
     test_arp_seq();
     test_bass_range();
     test_new_controls();
+    test_stuck_notes();
     test_panic();
     printf(fails ? "FAILED (%d)\n" : "ok\n", fails);
     free(log_);

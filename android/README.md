@@ -23,6 +23,16 @@ been tried). Version 0.2.0 adds:
 - The clock keeps going with the screen off (a notification with *Stop and quit*); a red line says when the USB
   cable is not in MIDI mode; a wider layout on a tablet held sideways (Play stays on the left); the Grumo mark.
 
+**0.2.1** (fixes):
+
+- The JV-1010 defaults to channels 13 and 7. A saved 6 on its first part (the old placeholder) becomes 13.
+- Channels and the instrument chosen for each part, the keys, the sequencer and the Control page are saved by
+  instrument, so adding an instrument later keeps them. The Control page's *Any instrument* choice and its sliders are
+  saved too, and the Tanzbär sliders are sent to it again whenever the MIDI output opens.
+- No more notes left on: following the MPC, when its clock stops with no Stop (cable out), every note ends after
+  300 ms; changing the clock mode stops the transport and ends the notes; the MPC's Stop ends the arpeggiator's note;
+  Play after *Stop and quit* starts the background service again.
+
 ## Getting the app
 
 On GitHub: **Actions → Android APK → Run workflow** (branch `android`), then open the run and download the
@@ -54,7 +64,7 @@ a MPC track per instrument, as with the FM-1).
 1. **Rig**: pick the interface under *Notes and clock go out through* (one USB interface is picked for you). Pick the
    same one under *The MPC's clock comes in through* if you will follow the MPC.
 2. **Rig → Instruments**: each instrument's channel. **Test** plays a short note on it. The defaults are the rig's:
-   Volca FM 2, Monologue 3, Tanzbär Lite 4, MBase 11 8, Hades 9, MB-33 12 (the JV-1010's 6 and 7 are placeholders).
+   Volca FM 2, Monologue 3, Tanzbär Lite 4, MBase 11 8, Hades 9, MB-33 12, JV-1010 13 (first part) and 7 (second).
 3. **Play → Clock**: *Follow MPC* (starts and stops with the MPC, or with Play here) or *Internal* (the phone keeps
    time; *Send clock* also sends it out).
 4. **Parts**: switch parts on, give each its instrument. **Play** to start.

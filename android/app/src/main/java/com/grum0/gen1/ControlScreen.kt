@@ -13,7 +13,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -71,15 +70,10 @@ fun ControlScreen(s: Store) {
         }
 
         Section("Any instrument") {
-            val ccVals = remember { mutableStateMapOf<Int, Int>() }
             var bend by remember { mutableFloatStateOf(8192f) }
-            Pick("Send to", instNames[s.ccTarget], instNames) { s.ccTarget = it }
+            Pick("Send to", instNames[s.ccTarget], instNames) { s.chooseCcTarget(it) }
             for ((label, cc) in COMMON_CC) {
-                val key = s.ccTarget * 128 + cc
-                ValueSlider("$label  (CC $cc)", ccVals[key] ?: if (cc == 7) 100 else 64, {
-                    ccVals[key] = it
-                    s.sendCc(s.ccTarget, cc, it)
-                })
+                ValueSlider("$label  (CC $cc)", s.ccValue(s.ccTarget, cc), { s.setCc(s.ccTarget, cc, it) })
             }
             Text("Pitch bend", Modifier.padding(top = 6.dp), style = MaterialTheme.typography.bodyMedium)
             Slider(

@@ -14,14 +14,15 @@ import androidx.compose.runtime.setValue
 /** A piece of hardware on the MIDI splitter: its profile in the generators and the channel it listens on. */
 data class Instrument(val key: String, val name: String, val dev: Int, val defChan: Int)
 
-// The channels as Grumo's instruments are set (2026-11-15). The JV-1010's two are still placeholders.
+// The channels as Grumo's instruments are set (2026-11-15; the JV-1010's two 2026-11-17).
+// New instruments go at the end. Channels and choices are saved by key, so the list can grow.
 val INSTRUMENTS = listOf(
     Instrument("tanzbar", "Tanzbär Lite", F.DV_TANZBAR, 4),
     Instrument("mbase", "Jomox MBase 11", F.DV_MBASE, 8),
     Instrument("mb33", "MAM MB-33", F.DV_MB33, 12),
     Instrument("hades", "Dreadbox Hades", F.DV_HADES, 9),
     Instrument("monologue", "Korg Monologue", F.DV_MONOLOGUE, 3),
-    Instrument("jv1010", "Roland JV-1010", F.DV_JV1010, 6),
+    Instrument("jv1010", "Roland JV-1010", F.DV_JV1010, 13),
     Instrument("jv1010b", "Roland JV-1010, 2nd part", F.DV_JV1010, 7),   // (it is multitimbral: a second part, a second channel)
     Instrument("volca", "Volca FM", F.DV_VOLCAFM, 2),
     Instrument("other", "Other (generic)", F.DV_GENERIC, 16),
@@ -29,7 +30,10 @@ val INSTRUMENTS = listOf(
 
 /** The first build's placeholder channels: saved channels equal to these were never set by hand, and give way to the real ones. */
 val OLD_DEFAULT_CHAN = listOf(4, 8, 1, 2, 3, 6, 7, 5, 16)
-const val RIG_VERSION = 2
+const val RIG_VERSION = 3
+
+/** The JV-1010's placeholder channel before 0.2.1: a saved 6 on its first part was never set by hand. */
+const val OLD_JV_CHAN = 6
 
 /** The firmware's own pairing: drums Tanzbär, chords JV-1010, arp Volca FM, bass MB-33, lead Monologue, kick MBase, Marble JV-1010 (2nd part). */
 val DEFAULT_TARGET = listOf(0, 5, 7, 2, 4, 1, 6)
@@ -53,6 +57,7 @@ val TANZ = listOf(
 
 /** Everything the screens read and change. The settings live in the native engine; `vals` mirrors them for Compose. */
 class Store(ctx: Context) {
+    private val app = ctx.applicationContext
     private val prefs = ctx.getSharedPreferences("gen1", Context.MODE_PRIVATE)
     private val main = Handler(Looper.getMainLooper())
     val hub = MidiHub(ctx, prefs)
@@ -81,6 +86,7 @@ class Store(ctx: Context) {
     var seqTarget by mutableIntStateOf(0)       // and the four-track sequencer this one
     var keyOct by mutableIntStateOf(0)
     var ccTarget by mutableIntStateOf(0)        // the controller sliders on the Control page
+    val ccVals = mutableStateMapOf<String, Int>()  // and where they were left: "instrument key:cc" -> value
     val tanz = mutableStateMapOf<Int, Int>()    // the Tanzbär's controllers: number -> value
 
     // what the engine is doing, polled
@@ -132,6 +138,7 @@ class Store(ctx: Context) {
         INSTRUMENTS.forEach { chan.add(it.defChan) }
         DEFAULT_TARGET.forEach { target.add(it) }
         repeat(F.NLANES) { lanes.add(0) }
+        hub.onOutOpen = { sendTanzAll() }
     }
 
     // ------------------------------------------------------------------ settings --
@@ -200,12 +207,18 @@ class Store(ctx: Context) {
         DEFAULT_TARGET.forEachIndexed { p, t -> target[p] = t }
         keysTarget = 0
         seqTarget = 0
+        ccTarget = 0
+        ccVals.clear()
         tanz.clear()
         applyRig()
     }
 
     // ------------------------------------------------------------------ transport --
-    fun togglePlay() = Native.nPlay(if (running) 0 else 1)
+    fun togglePlay() {
+        // the service keeps the clock going with the screen off; after "Stop and quit" it has to come back with Play
+        if (!running) ClockService.start(app)
+        Native.nPlay(if (running) 0 else 1)
+    }
     fun panic() = Native.nPanic()
 
     // ------------------------------------------------------------------ playing --
@@ -228,6 +241,22 @@ class Store(ctx: Context) {
     }
 
     fun tanzValue(cc: Int): Int = tanz[cc] ?: 64
+
+    /** The Tanzbär's controllers as last left, sent again when the MIDI output opens, so the unit matches the sliders. */
+    fun sendTanzAll() = tanz.forEach { (cc, v) -> sendCc(0, cc, v) }
+
+    fun ccValue(inst: Int, cc: Int): Int = ccVals["${INSTRUMENTS[inst].key}:$cc"] ?: if (cc == 7) 100 else 64
+
+    fun setCc(inst: Int, cc: Int, v: Int) {
+        ccVals["${INSTRUMENTS[inst].key}:$cc"] = v
+        sendCc(inst, cc, v)
+        touch()
+    }
+
+    fun chooseCcTarget(inst: Int) {
+        ccTarget = inst
+        touch()
+    }
 
     fun sendBend(inst: Int, v: Int) {                       // v: 0..16383, 8192 the middle
         val c = v.coerceIn(0, 16383)
@@ -266,10 +295,12 @@ class Store(ctx: Context) {
         dirty = false
         prefs.edit()
             .putString("fields", vals.joinToString(","))
-            .putString("chan", chan.joinToString(","))
-            .putString("target", target.joinToString(","))
-            .putInt("keysTarget", keysTarget)
-            .putInt("seqTarget", seqTarget)
+            .putString("chan_by_key", INSTRUMENTS.indices.joinToString(",") { "${INSTRUMENTS[it].key}=${chan[it]}" })
+            .putString("target_keys", target.joinToString(",") { INSTRUMENTS[it].key })
+            .putString("keys_key", INSTRUMENTS[keysTarget].key)
+            .putString("seq_key", INSTRUMENTS[seqTarget].key)
+            .putString("cc_key", INSTRUMENTS[ccTarget].key)
+            .putString("cc_vals", ccVals.entries.joinToString(",") { "${it.key}=${it.value}" })
             .putInt("keyOct", keyOct)
             .putInt("rig_version", RIG_VERSION)
             .putBoolean("keepAwake", keepAwake)
@@ -279,6 +310,16 @@ class Store(ctx: Context) {
 
     private fun ints(s: String): List<Int> = s.split(",").mapNotNull { it.trim().toIntOrNull() }
 
+    private fun pairs(s: String?): List<Pair<String, String>> =
+        s?.split(",")?.mapNotNull { e -> e.split("=").takeIf { it.size == 2 }?.let { it[0].trim() to it[1].trim() } } ?: emptyList()
+
+    private fun instIndex(key: String?): Int? = INSTRUMENTS.indexOfFirst { it.key == key }.takeIf { it >= 0 }
+
+    /** An instrument chosen somewhere: saved by key from 0.2.1, as a position in the list before it. */
+    private fun loadInst(keyName: String, oldName: String): Int =
+        instIndex(prefs.getString(keyName, null))
+            ?: prefs.getInt(oldName, 0).coerceIn(0, INSTRUMENTS.size - 1)
+
     fun load() {
         prefs.getString("fields", null)?.let { s ->
             val a = ints(s)
@@ -286,18 +327,36 @@ class Store(ctx: Context) {
             if (a.size in F.HAT_DENS..F.COUNT) a.forEachIndexed { id, v -> Native.nSet(id, v) }
         }
         val rigV = prefs.getInt("rig_version", 1)
-        prefs.getString("chan", null)?.let { s ->
+        val byKey = pairs(prefs.getString("chan_by_key", null))
+        if (byKey.isNotEmpty()) {
+            // by key: an instrument added since keeps its default, one taken away is skipped
+            for ((k, v) in byKey) {
+                val i = instIndex(k) ?: continue
+                v.toIntOrNull()?.let { chan[i] = it.coerceIn(1, 16) }
+            }
+        } else prefs.getString("chan", null)?.let { s ->
+            // before 0.2.1: by position, in the list as it was then (the first instruments are in the same order)
             val a = ints(s)
-            if (a.size == INSTRUMENTS.size && !(rigV < RIG_VERSION && a == OLD_DEFAULT_CHAN))
-                a.forEachIndexed { i, v -> chan[i] = v.coerceIn(1, 16) }
+            if (!(rigV < 2 && a == OLD_DEFAULT_CHAN))
+                a.take(INSTRUMENTS.size).forEachIndexed { i, v -> chan[i] = v.coerceIn(1, 16) }
         }
+        val jv = instIndex("jv1010")
+        if (rigV < 3 && jv != null && chan[jv] == OLD_JV_CHAN) chan[jv] = INSTRUMENTS[jv].defChan
         keepAwake = prefs.getBoolean("keepAwake", true)
-        prefs.getString("target", null)?.let { s ->
+        val tk = prefs.getString("target_keys", null)?.split(",")
+        if (tk != null && tk.size == F.NPARTS) {
+            tk.forEachIndexed { p, k -> instIndex(k.trim())?.let { target[p] = it } }
+        } else prefs.getString("target", null)?.let { s ->
             val a = ints(s)
             if (a.size == F.NPARTS) a.forEachIndexed { p, v -> target[p] = v.coerceIn(0, INSTRUMENTS.size - 1) }
         }
-        keysTarget = prefs.getInt("keysTarget", 0).coerceIn(0, INSTRUMENTS.size - 1)
-        seqTarget = prefs.getInt("seqTarget", 0).coerceIn(0, INSTRUMENTS.size - 1)
+        keysTarget = loadInst("keys_key", "keysTarget")
+        seqTarget = loadInst("seq_key", "seqTarget")
+        ccTarget = instIndex(prefs.getString("cc_key", null)) ?: 0
+        for ((k, v) in pairs(prefs.getString("cc_vals", null))) {
+            val n = v.toIntOrNull() ?: continue
+            if (instIndex(k.substringBefore(":")) != null) ccVals[k] = n.coerceIn(0, 127)
+        }
         keyOct = prefs.getInt("keyOct", 0).coerceIn(-2, 2)
         prefs.getString("tanz", null)?.split(",")?.forEach { e ->
             val kv = e.split("=")

@@ -44,6 +44,7 @@ class MidiHub(private val ctx: Context, private val prefs: SharedPreferences) {
     private var openingOut = false
     private var openingIn = false
     private var started = false
+    var onOutOpen: (() -> Unit)? = null           // called on the main thread when the output port has just opened
 
     private val receiver = object : MidiReceiver() {
         override fun onSend(msg: ByteArray, offset: Int, count: Int, timestamp: Long) {
@@ -143,6 +144,7 @@ class MidiHub(private val ctx: Context, private val prefs: SharedPreferences) {
                 outDev = dev
                 sendOk = true
                 sendStatus = "Sending to ${nameOf(info)}, port ${port + 1}"
+                onOutOpen?.invoke()
             } else {
                 dev.close()
                 sendStatus = "Port ${port + 1} of ${nameOf(info)} is busy or missing (error $r)"

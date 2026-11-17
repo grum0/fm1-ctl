@@ -13,8 +13,8 @@ android {
         applicationId = "com.grum0.gen1"
         minSdk = 29                       // the NDK's MIDI API (AMidi) starts at Android 10
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.2.1"
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
     }
 

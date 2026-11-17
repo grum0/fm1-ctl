@@ -7,6 +7,7 @@ static const uint8_t RATE_TICKS[NRATE] = {24, 12, 8, 6, 4, 3};
 #define SEQ_TICKS 6u                     /* a sixteenth */
 #define SEQ_GATE 3u
 #define MS 1000000LL
+#define EXT_LOST_NS (300 * MS)               /* the followed clock counts as gone after this long without a tick */
 
 typedef struct { uint8_t steps, hits, rot, note, mute; uint16_t pat; } trk_t;
 typedef struct {
@@ -23,7 +24,7 @@ static struct {
     int64_t now, t_cur, last_when;       /* the time of the call; of the message being made; of the last one sent */
     ecfg_t c;
     gen_cfg_t g;
-    uint8_t running, start_pending, clk_on;
+    uint8_t running, start_pending, clk_on, ext_lost;   /* ext_lost: the followed clock went quiet, its notes ended */
     int64_t next_sub;                    /* internal clock: when the next subtick sounds */
     uint32_t sub_n;                      /* ... and its number (a tick every fourth) */
     int64_t ext_last, ext_per;           /* external clock: when the last tick came, and the length of a tick */
@@ -413,6 +414,16 @@ static void seq_stop(void)
     seq_offs();
 }
 
+/* Every note the engine has sounding ends now: the parts', the arp's and the sequencer's (the transport stays as it is). */
+static void notes_off(void)
+{
+    int p;
+    arp_off();
+    seq_offs();
+    for (p = 0; p < GEN_NPARTS; p++)
+        gen_part_off(p);
+}
+
 static int64_t sub_ns(void) { return 625000000LL / E.c.tempo; }   /* 96 subticks a quarter note */
 
 int64_t eng_pump(int64_t now)
@@ -421,6 +432,12 @@ int64_t eng_pump(int64_t now)
     gen_service();                               /* the main loop's part: the bars the subticks play */
     if (E.c.clock == CLK_EXT) {
         E.clk_on = 0;
+        /* no tick for 300 ms (cable out, the MPC gone) with no Stop: note lengths are counted in ticks, so end them here */
+        if (E.ext_last && !E.ext_lost && now - E.ext_last > EXT_LOST_NS) {
+            E.t_cur = now;
+            notes_off();
+            E.ext_lost = 1;
+        }
         return now + 5 * MS;
     }
     if (!E.clk_on || E.next_sub < now - 100 * MS) {   /* just on, or held up so long that catching up would burst */
@@ -466,6 +483,7 @@ void eng_midi_clock(uint8_t b, int64_t at)
         else                                     /* otherwise the last ticks' length, smoothed over four */
             E.ext_per = (E.ext_per * 3 + per) / 4;
         E.ext_last = at;
+        E.ext_lost = 0;
         clock_tick();
         if (E.running)                           /* the other three subticks, spread over a tick's length */
             for (k = 1; k < 4; k++) {
@@ -478,6 +496,7 @@ void eng_midi_clock(uint8_t b, int64_t at)
         seq_start(0);
     } else if (b == 0xFC) {
         seq_stop();
+        arp_off();                               /* its note-off would wait for ticks the MPC may not send */
     }
 }
 
@@ -635,8 +654,16 @@ void eng_set(int id, int v, int64_t now)
     case F_SWING: E.g.swing = (uint8_t)v; break;
     case F_TEMPO: E.c.tempo = (uint16_t)v; break;
     case F_CLOCK:
-        if (E.c.clock != v) {
+        if (E.c.clock != v) {                    /* a new clock: stop the transport and end the notes, none wait for it */
+            E.now = now;
+            E.t_cur = now;
+            E.start_pending = 0;
+            if (E.running && E.c.clock == CLK_INT_OUT)
+                send1(0xFC);
+            seq_stop();
+            notes_off();
             E.clk_on = 0;
+            E.ext_lost = 0;
             E.ext_last = 0;
             E.ext_per = 0;
         }
@@ -707,6 +734,6 @@ void eng_status(int32_t *out, int64_t now)
     out[3] = gen_phrase_bars();
     out[4] = E.ticks % 24u < 6u;
     out[5] = mask;
-    out[7] = E.c.clock == CLK_EXT ? E.ext_last && now - E.ext_last < 300 * MS : 1;
+    out[7] = E.c.clock == CLK_EXT ? E.ext_last && now - E.ext_last < EXT_LOST_NS : 1;
     out[6] = E.c.clock == CLK_EXT && out[7] && E.ext_per ? (int32_t)(25000000000LL / E.ext_per) : E.c.tempo * 10;
 }
