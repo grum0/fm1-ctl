@@ -85,3 +85,31 @@ jobs:
           name: gen1-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+  # Each version gets a git tag (CI artifacts expire after 90 days): v<versionName> on the commit that built it,
+  # once the build has passed; never moved once made. Also v0.2.1, made before this job existed.
+  tag:
+    needs: build
+    if: github.ref == 'refs/heads/android'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tag the version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          tag_if_new() {
+            if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$1" > /dev/null 2>&1; then
+              echo "$1 already exists"
+            else
+              gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$1" -f sha="$2" > /dev/null
+              echo "tagged $1 at $2"
+            fi
+          }
+          version=$(sed -n 's/^ *versionName = "\(.*\)"/\1/p' android/app/build.gradle.kts)
+          test -n "$version"
+          tag_if_new v0.2.1 2896e781014bad70eee69c85bbef0d3e38f0a375
+          tag_if_new "v$version" "$GITHUB_SHA"
