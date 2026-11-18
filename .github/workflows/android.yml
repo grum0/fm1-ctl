@@ -97,6 +97,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Tag the version
+        # (needs Settings → Actions → General → Workflow permissions: "Read and write"; until then it only warns,
+        # and the build stays green)
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
