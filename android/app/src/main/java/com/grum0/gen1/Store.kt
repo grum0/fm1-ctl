@@ -80,6 +80,7 @@ class Store(ctx: Context) {
     val styleLo: List<Int>
     val styleHi: List<Int>
     val version: String = runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName }.getOrNull() ?: "?"
+    val buildId: String = "$version (${BuildConfig.COMMIT})"     // e.g. "0.2.2 (0695589)"
     var keepAwake by mutableStateOf(true)       // the screen stays on while the app is up
 
     val chan = mutableStateListOf<Int>()        // each instrument's MIDI channel, 1..16

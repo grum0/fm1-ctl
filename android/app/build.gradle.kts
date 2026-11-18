@@ -13,8 +13,11 @@ android {
         applicationId = "com.grum0.gen1"
         minSdk = 29                       // the NDK's MIDI API (AMidi) starts at Android 10
         targetSdk = 35
-        versionCode = 3
-        versionName = "0.2.1"
+        versionCode = 4
+        versionName = "0.2.2"
+        // the build ID shown on the launch screen and in About: the version and the commit it was built from
+        // (GitHub Actions sets GITHUB_SHA; a build on a computer says "local")
+        buildConfigField("String", "COMMIT", "\"${(System.getenv("GITHUB_SHA") ?: "").take(7).ifEmpty { "local" }}\"")
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
     }
 
@@ -46,7 +49,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
 }
 

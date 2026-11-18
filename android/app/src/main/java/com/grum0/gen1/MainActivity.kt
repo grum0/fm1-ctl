@@ -102,7 +102,7 @@ fun Gen1Root(s: Store) {
         else w?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
     if (splash) {
-        Splash { splash = false }
+        Splash(s.buildId) { splash = false }
         return
     }
     BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -171,7 +171,7 @@ private fun Page(s: Store, tab: Int) {
 
 /** On opening: the mark and the name, for a moment (a tap skips it). */
 @Composable
-private fun Splash(onDone: () -> Unit) {
+private fun Splash(buildId: String, onDone: () -> Unit) {
     Column(
         Modifier.fillMaxSize().background(Color(0xFF0B0B0D)).clickable(onClick = onDone),
         verticalArrangement = Arrangement.Center,
@@ -182,6 +182,8 @@ private fun Splash(onDone: () -> Unit) {
         Box(Modifier.size(width = 236.dp, height = 3.dp).background(Accent))
         Spacer(Modifier.height(14.dp))
         Text("GEN-1", color = Accent, fontSize = 28.sp, fontWeight = FontWeight.Bold, letterSpacing = 8.sp)
+        Spacer(Modifier.height(8.dp))
+        Text(buildId, color = Color(0xFF8A8A94), fontSize = 12.sp)
     }
 }
 

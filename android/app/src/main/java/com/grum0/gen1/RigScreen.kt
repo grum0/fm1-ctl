@@ -132,11 +132,20 @@ fun RigScreen(s: Store) {
                 colorFilter = ColorFilter.tint(Color.White),
                 modifier = Modifier.padding(vertical = 6.dp).size(width = 118.dp, height = 40.dp),
             )
-            Text("GEN-1 for Android ${s.version}", style = MaterialTheme.typography.bodyMedium)
+            Text("GEN-1 for Android", style = MaterialTheme.typography.bodyMedium)
+            Text("Build ${s.buildId}", style = MaterialTheme.typography.bodySmall)
             Text(
-                "Free software under the GNU GPL, version 3. The drum modes Boom Bap, Lo-Fi, Funk Break, Half Time, Hip-Hop " +
-                    "and Fast Break are the pattern generator of Cut-A-Dor by Kid Bunka. The Grids maps are from Mutable " +
-                    "Instruments Grids by Emilie Gillet. The clock, arpeggiator and sequencer come from CTL-1 by Charles Vestal.",
+                "Free software under the GNU General Public License, version 3 only (GPL-3.0-only).",
+                Modifier.padding(top = 6.dp),
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Text("Credits", Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodyMedium)
+            Text(
+                "• CTL-1 by Charles Vestal (MPL-2.0): the clock, arpeggiator and four-track sequencer.\n" +
+                    "• Cut-A-Dor by Kid Bunka (GPL-3.0-only): the drum pattern generator behind the Boom Bap, Lo-Fi, " +
+                    "Funk Break, Half Time, Hip-Hop and Fast Break modes.\n" +
+                    "• Mutable Instruments, Grids by Emilie Gillet (GPL-3.0-or-later): the Grids drum maps, by way of " +
+                    "Hortator's C port; Marbles was the inspiration for the Marble part.",
                 style = MaterialTheme.typography.bodySmall,
             )
         }

@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# GEN-1 for Android: runs the engine's host test, then builds the debug APK (the artifact "gen1-debug-apk").
+# GEN-1 for Android: runs the engine's host test and the golden-output check, writes the preview MIDI files (the
+# artifact "gen1-preview-midi"), reports the generators' size for a microcontroller, then builds the debug APK (the
+# artifact "gen1-debug-apk").
 name: Android APK
 
 on:
@@ -33,6 +35,23 @@ jobs:
 
       - name: Native functions and field ids agree between Kotlin and C
         run: sh android/tools/check.sh
+
+      - name: Preview MIDI files (one per style, one track per part, Grumo's channels)
+        run: |
+          set -eu
+          cd android/host-test
+          cc -std=c11 -I../../app -O2 -Wall -Wextra -Werror -o build/render render.c
+          mkdir -p ../../preview-midi
+          ./build/render preview ../../preview-midi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gen1-preview-midi
+          path: preview-midi/*.mid
+          if-no-files-found: error
+
+      - name: Size of the generators on a microcontroller (estimate for the FM-1)
+        run: sh android/tools/gen_size.sh | tee -a "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/setup-java@v4
         with:
