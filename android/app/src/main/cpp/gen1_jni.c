@@ -366,7 +366,7 @@ JNIEXPORT jint JNICALL J(nLaneSteps)(JNIEnv *env, jobject self, jint lane)
 }
 
 /* names: kind 0 style, 1 device, 2 part, 3 lane, 4 drum set, 5 a part's mode (idx = part << 8 | mode), 6 a style
- * family, 7 its three letters */
+ * family, 7 its three letters, 8 a style's artists or scene */
 JNIEXPORT jstring JNICALL J(nName)(JNIEnv *env, jobject self, jint kind, jint idx)
 {
     const char *s = "";
@@ -383,6 +383,7 @@ JNIEXPORT jstring JNICALL J(nName)(JNIEnv *env, jobject self, jint kind, jint id
         break;
     case 6: s = idx >= 0 && idx < GEN_NCATS ? gen_cat_name(idx) : ""; break;
     case 7: s = idx >= 0 && idx < GEN_NCATS ? gen_cat_code(idx) : ""; break;
+    case 8: s = idx >= 0 && idx < GEN_NSTYLES ? gen_style_ref(idx) : ""; break;
     default: break;
     }
     return (*env)->NewStringUTF(env, s);
@@ -403,10 +404,11 @@ JNIEXPORT jint JNICALL J(nCount)(JNIEnv *env, jobject self, jint kind)
     }
 }
 
-/* a style's family and the tempos it sits at: out[0] CAT_*, [1] lowest BPM, [2] highest */
+/* a style's family and the tempos it sits at: out[0] CAT_*, [1] lowest BPM, [2] highest, [3] 1 if it suits the
+ * Tanzbär Lite */
 JNIEXPORT void JNICALL J(nStyleInfo)(JNIEnv *env, jobject self, jint style, jintArray out)
 {
-    jint r[3] = {0, 0, 0};
+    jint r[4] = {0, 0, 0, 1};
     int lo = 0, hi = 0;
     (void)self;
     if (style >= 0 && style < GEN_NSTYLES) {
@@ -414,8 +416,9 @@ JNIEXPORT void JNICALL J(nStyleInfo)(JNIEnv *env, jobject self, jint style, jint
         r[0] = gen_style_cat(style);
         r[1] = lo;
         r[2] = hi;
+        r[3] = gen_style_tanz(style);
     }
-    (*env)->SetIntArrayRegion(env, out, 0, 3, r);
+    (*env)->SetIntArrayRegion(env, out, 0, 4, r);
 }
 
 JNIEXPORT jint JNICALL J(nModeCount)(JNIEnv *env, jobject self, jint part)

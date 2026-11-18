@@ -26,7 +26,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
-/** The style, chosen in two steps: its family (HIP, FNK, ...), then the style, each with the tempos it sits at. */
+/** The style, chosen in two steps: its family (HIP, FNK, ...), then the style, each with the tempos it sits at and
+ *  the artists or scene it comes from. With "Hide styles that don't suit the Tanzbär" on, those are left out (the
+ *  style playing always shows). */
 @Composable
 fun StylePicker(s: Store) {
     val cur = s.vals[F.STYLE].coerceIn(0, s.styleNames.size - 1)
@@ -48,15 +50,20 @@ fun StylePicker(s: Store) {
         title = { Text("Style") },
         text = {
             Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
-                ChipGrid(s.catCodes, { it == cat }, 3) { cat = it }
+                // a family with no style left to show is left out too
+                val fams = s.catCodes.indices.filter { c ->
+                    s.styleNames.indices.any { s.styleCat[it] == c && (it == cur || !s.hideNonTanz || s.styleTanz[it]) }
+                }
+                ChipGrid(fams.map { s.catCodes[it] }, { fams[it] == cat }, 3) { cat = fams[it] }
                 Text(
                     s.catNames[cat],
                     Modifier.padding(top = 10.dp, bottom = 4.dp),
                     style = MaterialTheme.typography.titleSmall,
                     color = Accent,
                 )
-                for (i in s.styleNames.indices) {
-                    if (s.styleCat[i] == cat) {
+                val shown = s.styleNames.indices.filter { s.styleCat[it] == cat && (it == cur || !s.hideNonTanz || s.styleTanz[it]) }
+                for (i in shown) {
+                    run {
                         val here = i == cur
                         Row(
                             Modifier
@@ -70,12 +77,16 @@ fun StylePicker(s: Store) {
                                 .padding(horizontal = 10.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text(
-                                s.styleNames[i],
-                                Modifier.weight(1f),
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = if (here) FontWeight.Bold else FontWeight.Normal,
-                            )
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    s.styleNames[i],
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = if (here) FontWeight.Bold else FontWeight.Normal,
+                                )
+                                if (s.styleRef[i].isNotEmpty()) {
+                                    Text(s.styleRef[i], style = MaterialTheme.typography.bodySmall, color = Color(0xFF9A9AA6))
+                                }
+                            }
                             Text("${s.styleLo[i]}–${s.styleHi[i]}", style = MaterialTheme.typography.bodyMedium, color = Mint)
                         }
                     }

@@ -106,6 +106,15 @@ fun RigScreen(s: Store) {
                 s.keepAwake = it
                 s.touch()
             }
+            SwitchRow("Hide styles that don't suit the Tanzbär", s.hideNonTanz) {
+                s.hideNonTanz = it
+                s.touch()
+            }
+            Text(
+                "Leaves out of the style picker the styles built on sampled breaks or a live kit, which the Tanzbär " +
+                    "Lite's kit can't play convincingly. The style playing stays as it is.",
+                style = MaterialTheme.typography.bodySmall,
+            )
             Text(
                 "The clock and the parts keep going with the screen off or the app in the background: see the GEN-1 " +
                     "notification. “Stop and quit” there ends it.",

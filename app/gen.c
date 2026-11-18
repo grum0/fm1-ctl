@@ -21,6 +21,7 @@
 #endif
 #include "grids_tables.h"
 #include "gen_cad.h"
+#include "style_grids.h"
 
 #define GEN_MAXON 10
 enum { EV_BEND, EV_CC, EV_NOTE };        /* in the order they go out within a subtick */
@@ -146,7 +147,7 @@ static const style_t STYLE[GEN_NSTYLES] = {
          [L_CLAP] = "0000400000004000", [L_CHH] = "9161916191619162", [L_OHH] = "0000000000000020"},
         5, 1, 3, -1, 3, 0, FILL_LIVE, {{7, 3, 8, 22}, {1, 11, 14, 7}}, V_RICH, "9000000000300000", 0, BM_LAZY, LM_HOOK,
         "7000300000700030", 70, 1, 2, CP_FREE, 0},
-    [GS_SOULQ] = {"Soulquarian",
+    [GS_SOULQ] = {"Soulquarians",
         {[L_KICK] = "9000000007200400", [L_SNARE] = "0000900a00c09000", [L_RIM] = "0002000000020000",
          [L_CHH] = "9272927292729272", [L_OHH] = "0000000000000003"},
         6, 2, 4, 0, 3, 0, FILL_LIVE, {{8, 7, 13, 3}, {1, 11, 14, 3}}, V_RICH, "9000003000000600", 0, BM_LAZY, LM_CALL,
@@ -162,7 +163,7 @@ static const style_t STYLE[GEN_NSTYLES] = {
          [L_SIM2] = "0000000300000050"},
         1, 0, 0, 0, 1, 10, FILL_BUSY, {{16, 0, 20, 11}, {4, 9, 12, 4}}, V_SEVENTH, "0090000900900000", 1, BM_ROOT, LM_CALL,
         "9090000090900000", 72, 1, 1, CP_FREE, 0},
-    [GS_QUINCY] = {"Quincy",
+    [GS_QUINCY] = {"Quincy Jones",
         {[L_KICK] = "9000003090000030", [L_SNARE] = "0000900000009000", [L_CLAP] = "0000700000007000",
          [L_CHH] = "9797979797979797", [L_OHH] = "0000000300000030", [L_CONGH] = "0030030000300302",
          [L_COWB] = "3000300030003000"},
@@ -174,17 +175,17 @@ static const style_t STYLE[GEN_NSTYLES] = {
          [L_CONGH] = "0000003000000030"},
         2, 0, 0, 0, 1, 5, FILL_DROP, {{3, 1, 15, 18}, {7, 3, 8, 13}}, V_SEVENTH, "0090009000900030", 1, BM_OCTAVE, LM_HOOK,
         "7000700030700000", 72, 1, 1, CP_FREE, 0},
-    [GS_MPLS] = {"Mpls 80s",
+    [GS_MPLS] = {"Minneapolis 80s",
         {[L_KICK] = "9000000090070000", [L_SNARE] = "0000900000009000", [L_CLAP] = "0000900000009000",
          [L_CHH] = "9797979797979797", [L_OHH] = "0000000000000030", [L_SIM1] = "0000000000000200"},
         0, 0, 0, 0, 0, 0, FILL_ELECTRO, {{12, 0, 1, 20}, {6, 10, 5, 4}}, V_QUARTAL, "9000009000090000", 2, BM_OCTAVE,
         LM_HOOK, "9000700090070000", 72, 1, 1, CP_FREE, 0},
-    [GS_NPG] = {"NPG 90s",
+    [GS_NPG] = {"Prince NPG 90s",
         {[L_KICK] = "9000030090300500", [L_SNARE] = "0000900a0000900c", [L_CHH] = "9494949494949494",
          [L_OHH] = "0000000500000005", [L_CONGH] = "0030003000300030", [L_COWB] = "0000300000003000"},
         4, 0, 1, 0, 2, 5, FILL_LIVE, {{13, 14, 20, 1}, {5, 13, 9, 1}}, V_RICH, "0090009700900900", 1, BM_LIVE, LM_CALL,
         "9070509070307050", 72, 1, 1, CP_FREE, 0},
-    [GS_NJS] = {"New Jack",
+    [GS_NJS] = {"New jack swing",
         {[L_KICK] = "9000000390300000", [L_SNARE] = "000090000000900a", [L_CLAP] = "0000800000008000",
          [L_RIM] = "0030000000300000", [L_CHH] = "9597959795979597", [L_OHH] = "0000000000000050"},
         7, 0, 0, 0, 1, 5, FILL_SNARE, {{14, 4, 3, 7}, {13, 2, 9, 3}}, V_SEVENTH, "9000000900900000", 2, BM_ROOT, LM_HOOK,
@@ -199,7 +200,7 @@ static const style_t STYLE[GEN_NSTYLES] = {
          [L_CHH] = "9595959595959595", [L_OHH] = "0000000500000050"},
         3, 0, 1, 0, 2, 0, FILL_LIVE, {{16, 20, 1, 12}, {4, 5, 9, 13}}, V_SEVENTH, "0090000090000900", 1, BM_BOOTSY, LM_CALL,
         "9000705090007050", 72, 1, 1, CP_FREE, 0},
-    [GS_JAZZFUNK] = {"Jazz-Funk",
+    [GS_JAZZFUNK] = {"Jazz-funk",
         {[L_KICK] = "9003000090030000", [L_SNARE] = "0000900a00a09002", [L_CHH] = "9797979797979797",
          [L_CONGL] = "0030000300300003", [L_CONGH] = "3000030000030300"},
         2, 0, 0, 0, 2, 0, FILL_LIVE, {{1, 12, 8, 20}, {5, 13, 4, 9}}, V_RICH, "9000090000900000", 2, BM_HERBIE, LM_SOLO,
@@ -210,7 +211,7 @@ static const style_t STYLE[GEN_NSTYLES] = {
          [L_SIM1] = "0000000000000300"},
         0, 0, 0, 0, 0, 15, FILL_ELECTRO, {{10, 9, 0, 2}, {12, 6, 10, 12}}, V_TRIAD, "9000009000900000", 2, BM_ROBOT,
         LM_HOOK, "9090009090009000", 72, 1, 1, CP_FREE, 0},
-    [GS_ELECTRO2] = {"Electro+",
+    [GS_ELECTRO2] = {"Modern electro",
         {[L_KICK] = "9000009000090000", [L_SNARE] = "0000900000009000", [L_CLAP] = "0000300000009000",
          [L_RIM] = "0030000300003000", [L_CHH] = "9090909790909097", [L_CLAVE] = "0000030000300000"},
         0, 0, 0, 0, 0, 10, FILL_ELECTRO, {{9, 24, 21, 10}, {12, 10, 12, 6}}, V_TRIAD, "0000009000000090", 2, BM_ACID,
@@ -220,31 +221,31 @@ static const style_t STYLE[GEN_NSTYLES] = {
          [L_RIM] = "0002000000020000", [L_CHH] = "9090909090909090", [L_OHH] = "0000000000000300"},
         4, -2, 5, 0, 5, 25, FILL_DNB, {{19, 8, 22, 3}, {14, 11, 1, 14}}, V_RICH, "9000000000090000", 0, BM_WOBBLE, LM_CALL,
         "7000305000300700", 74, 0, 3, CP_FREE, 0},
-    [GS_BIGBEAT] = {"Big Beat",
+    [GS_BIGBEAT] = {"Big beat",
         {[L_KICK] = "9020000000970020", [L_SNARE] = "000090020a009003", [L_CHH] = "9090909090909090",
          [L_OHH] = "0000000500000000"},
         1, 0, 0, 0, 1, 5, FILL_SNARE, {{11, 0, 2, 9}, {12, 9, 6, 4}}, V_TRIAD, "9009000090090000", 1, BM_ACID, LM_HOOK,
         "9090709000907000", 72, 1, 1, CP_FREE, 0},
-    [GS_BRAINDANCE] = {"Drill n Bass",
+    [GS_BRAINDANCE] = {"Drill n bass",
         {[L_KICK] = "9003000030900030", [L_SNARE] = "000090030030a00a", [L_RIM] = "0300003000030300",
          [L_CHH] = "9797979797979797"},
         0, 0, 0, 0, 0, 40, FILL_DNB, {{19, 9, 11, 18}, {14, 12, 11, 6}}, V_SEVENTH, "9000000000000000", 0, BM_ACID,
         LM_SOLO, "9070907050907090", 74, 0, 1, CP_FREE, 0},
     /* Drexciya, Dopplereffekt: fast, straight, cold; the arpeggio belongs here */
-    [GS_DETROIT] = {"Detroit",
+    [GS_DETROIT] = {"Detroit techno",
         {[L_KICK] = "9000009000090090", [L_SNARE] = "0000900000009000", [L_CLAP] = "0000000000009000",
          [L_CHH] = "9797979797979797", [L_OHH] = "0050005000500050", [L_RIM] = "0000030000000300"},
         0, 0, 0, 0, 0, 10, FILL_ELECTRO, {{21, 9, 0, 10}, {12, 10, 6, 12}}, V_TRIAD, "9000000000000000", 0, BM_ROBOT,
         LM_HOOK, "9090900090909000", 72, 1, 1, CP_FREE, 0},
     /* Egyptian Lover: the 808 alone, long kicks, rolling hats, cowbell */
-    [GS_808] = {"808 Electro",
+    [GS_808] = {"808 electro",
         {[L_KICK] = "9000009000900900", [L_SNARE] = "0000900000009000", [L_CLAP] = "0000900000009000",
          [L_CHH] = "9797979797979797", [L_OHH] = "0000000000000030", [L_COWB] = "9050905090509050",
          [L_TOML] = "0000000000000302", [L_SIM1] = "0000000300000000"},
         0, 0, 0, 0, 0, 30, FILL_ELECTRO, {{11, 9, 0, 2}, {12, 10, 12, 6}}, V_POWER, "0000009000000000", 2, BM_OCTAVE,
         LM_HOOK, "9090009090009090", 72, 1, 1, CP_FREE, 0},
     /* Tipper: mid tempo, heavy swing, edits and ratchets, a bass that moves under long notes */
-    [GS_GLITCH] = {"Glitch Hop",
+    [GS_GLITCH] = {"Glitch hop",
         {[L_KICK] = "9000000700200300", [L_SNARE] = "0000900000009002", [L_RIM] = "0020000002000030",
          [L_CHH] = "9060906090609060", [L_OHH] = "0000000000000030"},
         6, 0, 1, 0, 2, 35, FILL_DNB, {{25, 19, 0, 9}, {14, 12, 10, 14}}, V_SEVENTH, "0000009000000000", 1, BM_WOBBLE,
@@ -262,13 +263,13 @@ static const style_t STYLE[GEN_NSTYLES] = {
         0, 0, 0, 0, 0, 5, FILL_DROP, {{11, 0, 16, 25}, {12, 4, 10, 9}}, V_TRIAD, "0000006000000000", 1, BM_HERBIE,
         LM_CALL, "9000900030009000", 72, 1, 1, CP_FREE, 0},
     /* The Prodigy: breakbeats at speed, minor stabs */
-    [GS_RAVE] = {"Rave Breaks",
+    [GS_RAVE] = {"Rave breaks",
         {[L_KICK] = "9090000000990000", [L_SNARE] = "0000900a0a00900a", [L_CHH] = "9090909090909090",
          [L_OHH] = "0000000000300000", [L_CYM] = "3000000000000000"},
         1, 0, 0, 0, 1, 15, FILL_DNB, {{23, 10, 2, 11}, {6, 12, 6, 12}}, V_TRIAD, "9009009000900900", 1, BM_ROOT, LM_HOOK,
         "9090709090007090", 72, 1, 1, CP_FREE, 0},
     /* Aphex Twin's analogue side: a 303 line over machine drums, wide minor pads behind */
-    [GS_ACIDDREAM] = {"Acid Dream",
+    [GS_ACIDDREAM] = {"Acid house",
         {[L_KICK] = "9000000090090000", [L_SNARE] = "0000900000009000", [L_CLAP] = "0000300000003000",
          [L_CHH] = "9797979797979797", [L_OHH] = "0030000000300000", [L_RIM] = "0000003000000300"},
         0, 0, 0, 0, 1, 15, FILL_SNARE, {{22, 3, 5, 0}, {14, 11, 0, 7}}, V_RICH, "9000000000000000", 0, BM_ACID, LM_TURING,
@@ -285,7 +286,7 @@ static const style_t STYLE[GEN_NSTYLES] = {
         0, 0, 0, 0, 0, 0, FILL_DROP, {{11, 24, 9, 11}, {12, 12, 10, 4}}, V_POWER, "9000000000000000", 1, BM_ROOT, LM_CALL,
         "9000000000007000", 72, 1, 2, CP_LOCK, 0},
     /* clicks for hats and a rim for the snare, a long sliding sub, one whining synth line, and room */
-    [GS_NEP_CLICK] = {"Neptunes Click",
+    [GS_NEP_CLICK] = {"Neptunes Tongue-click",
         {[L_KICK] = "9000000000900300", [L_SNARE] = "0000300000003000", [L_RIM] = "0000900000009000",
          [L_CLAVE] = "9009009030090090", [L_CONGH] = "0000000300000030"},
         2, 0, 0, 0, 1, 0, FILL_NONE, {{0, 9, 25, 21}, {4, 10, 13, 4}}, V_TRIAD, "0000000000900300", 2, BM_GLIDE, LM_WHINE,
@@ -323,26 +324,96 @@ static const style_t STYLE[GEN_NSTYLES] = {
         1, 0, 1, 0, 2, 0, FILL_LIVE, {{16, 20, 23, 10}, {4, 6, 9, 5}}, V_POWER, "9000009090000900", 2, BM_LIVE, LM_CALL,
         "9070509070307050", 72, 1, 1, CP_FOLLOW, 0},
     /* one drop: nothing on the one, kick and rim together on three, the chords on every off beat, the bass leads */
-    [GS_DUB] = {"Dub One-drop",
+    [GS_DUB] = {"Dub one-drop",
         {[L_KICK] = "0000000090000000", [L_SNARE] = "000000000000000a", [L_RIM] = "0000000090000000",
          [L_CHH] = "5090509050905090", [L_OHH] = "0000000000000030", [L_CONGL] = "0000030000000300"},
         4, 0, 1, 0, 2, 0, FILL_TOMS, {{2, 6, 10, 18}, {6, 9, 0, 2}}, V_TRIAD, "0090009000900090", 1, BM_DUB, LM_CALL,
         "7000000030007000", 72, 1, 2, CP_FREE, 0},
+    /* 0.3.0, the hip-hop batch: drums from app/styles/hip.grid (style_grids.h), the rest from the designs */
+    /* Memphis: half-time, cowbell, 8th hats with a flick, a phrygian horror riff over a long gliding 808 */
+    [GS_MEMPHIS] = {"Memphis", GRID_MEMPHIS,
+        1, 0, 0, 0, 0, 0, FILL_SNARE, {{9, 24, 25, 21}, {12, 4, 10, 6}}, V_OCT, "9000000000000000", 0, BM_GLIDE, LM_HOOK,
+        "9000007000900000", 72, 0, 2, CP_LOCK, 0},
+    /* Trap: half-time, straight, the hats rolled (ratchets on), 808 locked to the kick, a triplet bell line */
+    [GS_TRAP] = {"Trap", GRID_TRAP,
+        0, 0, 0, 0, 0, 60, FILL_SNARE, {{21, 5, 4, 19}, {7, 0, 8, 13}}, V_WIDE, "9000000000000000", 0, BM_GLIDE, LM_CALL,
+        "9007000900700000", 76, 0, 2, CP_LOCK, 0},
+    /* Native Tongues: on the grid but swung, bright jazz chords, the bass carries the tune */
+    [GS_NATIVE] = {"Native Tongues", GRID_NATIVE,
+        4, 0, 1, 0, 1, 0, FILL_LIVE, {{1, 0, 8, 13}, {7, 1, 2, 0}}, V_TIGHT, "9000000700000000", 6, BM_HERBIE, LM_CALL,
+        "0000900070000000", 79, 1, 2, CP_FREE, 0},
+    /* Wu-Tang: near-silent hats, a clashing chord stab, an eerie late piano loop */
+    [GS_WUTANG] = {"Wu-Tang", GRID_WUTANG,
+        2, 0, 1, 0, 3, 0, FILL_DROP, {{19, 9, 25, 3}, {14, 1, 11, 7}}, V_TIGHT, "9000000000000000", 2, BM_LAZY, LM_HOOK,
+        "9000700070009000", 72, 0, 2, CP_FOLLOW, 0},
+    /* Madlib: swung and loose, dusty conga and rim, library-jazz chords, flute fragments with long rests */
+    [GS_MADLIB] = {"Madlib", GRID_MADLIB,
+        5, 2, 2, 1, 3, 0, FILL_LIVE, {{13, 12, 3, 8}, {1, 10, 13, 7}}, V_TIGHT, "9000000000900000", 0, BM_LAZY, LM_CALL,
+        "0000900000000700", 79, 1, 2, CP_FREE, 0},
+    /* Abstract NY: mechanical, displaced second snare, dissonant drones, chromatic off-beat stabs */
+    [GS_ABSTRACT] = {"Abstract NY", GRID_ABSTRACT,
+        0, 0, 0, 0, 0, 0, FILL_TOMS, {{24, 25, 9, 11}, {12, 10, 4, 6}}, V_WIDE, "9000000000000000", 0, BM_ROBOT, LM_TURING,
+        "0700070007000700", 72, 0, 1, CP_FOLLOW, 0},
+    /* Old School (Run-DMC): hard and straight, loud kick and clap, tom fills ending on the zap, power-chord stab */
+    [GS_OLDSCHOOL] = {"Old School", GRID_OLDSCHOOL,
+        0, 0, 0, 0, 0, 0, FILL_TOMS, {{11, 24, 10, 6}, {12, 6, 4, 9}}, V_OCT, "9000000000000000", 2, BM_ROOT, LM_CALL,
+        "9070900000000000", 72, 1, 2, CP_LOCK, 0},
+    /* New Orleans bounce: the relentless kick-clap chant, 16th hats, a short descending bell riff */
+    [GS_BOUNCE] = {"New Orleans bounce", GRID_BOUNCE,
+        1, 0, 0, 0, 0, 0, FILL_SNARE, {{21, 6, 10, 2}, {6, 9, 12, 5}}, V_OCT, "9000000000000000", 0, BM_ROOT, LM_HOOK,
+        "9070700070000000", 79, 0, 2, CP_LOCK, 0},
+    /* Chopped and screwed: slow and dragging, soul chords, a low legato lead; the phrase's last bar is chopped */
+    [GS_CHOPPED] = {"Chopped and screwed", GRID_CHOPPED,
+        2, 2, 4, 2, 2, 0, FILL_NONE, {{3, 5, 22, 0}, {7, 0, 1, 8}}, V_TIGHT, "9000000000000000", 0, BM_GLIDE, LM_CALL,
+        "9000000000000000", 60, 0, 2, CP_FOLLOW, 0},
 };
 
-/* the styles' families and the tempos they sit at (as set on the MPC: half-time styles are counted fast) */
-static const struct { uint8_t cat, lo, hi; } STYLE_META[GEN_NSTYLES] = {
-    [GS_DILLA] = {CAT_HIP, 80, 95}, [GS_SOULQ] = {CAT_HIP, 80, 95}, [GS_GFUNK] = {CAT_HIP, 88, 100},
-    [GS_BOMB] = {CAT_HIP, 94, 112}, [GS_QUINCY] = {CAT_RNB, 100, 125}, [GS_JUSTIFIED] = {CAT_RNB, 90, 120},
-    [GS_MPLS] = {CAT_RNB, 100, 130}, [GS_NPG] = {CAT_RNB, 85, 110}, [GS_NJS] = {CAT_RNB, 100, 115},
-    [GS_BOOGIE] = {CAT_RNB, 105, 125}, [GS_PFUNK] = {CAT_FNK, 90, 115}, [GS_JAZZFUNK] = {CAT_FNK, 90, 115},
-    [GS_ELECTRO] = {CAT_ELC, 110, 130}, [GS_ELECTRO2] = {CAT_ELC, 120, 140}, [GS_WONKY] = {CAT_BRK, 85, 130},
-    [GS_BIGBEAT] = {CAT_BRK, 100, 135}, [GS_BRAINDANCE] = {CAT_IDM, 150, 190}, [GS_DETROIT] = {CAT_HSE, 120, 135},
-    [GS_808] = {CAT_ELC, 110, 130}, [GS_GLITCH] = {CAT_BRK, 95, 115}, [GS_HALFTIME] = {CAT_BAS, 140, 170},
-    [GS_FLAT] = {CAT_BRK, 105, 125}, [GS_RAVE] = {CAT_BRK, 135, 165}, [GS_ACIDDREAM] = {CAT_HSE, 120, 140},
-    [GS_BOOMBAP] = {CAT_HIP, 85, 98}, [GS_NEP_MIN] = {CAT_HIP, 85, 105}, [GS_NEP_CLICK] = {CAT_HIP, 78, 95},
-    [GS_NEP_CLUB] = {CAT_HIP, 100, 110}, [GS_NEP_SYNTH] = {CAT_HIP, 100, 115}, [GS_NEP_DARK] = {CAT_HIP, 75, 100},
-    [GS_NEP_STOMP] = {CAT_HIP, 105, 115}, [GS_NERD] = {CAT_HIP, 95, 130}, [GS_DUB] = {CAT_WLD, 65, 85},
+/* the styles' families, the tempos they sit at (as set on the MPC: half-time styles are counted fast), whether they
+ * suit the Tanzbär Lite (the picker can hide the others), effects (SFX_*), and the artists or scene */
+#define SFX_CHOP 1u                      /* the phrase's last bar: beats 3 and 4 replay beats 1 and 2, every part */
+static const struct { uint8_t cat, lo, hi, tanz, fx; const char *ref; } STYLE_META[GEN_NSTYLES] = {
+    [GS_DILLA] = {CAT_HIP, 80, 95, 1, 0, "J Dilla, Slum Village"},
+    [GS_SOULQ] = {CAT_HIP, 80, 95, 0, 0, "D'Angelo, Questlove"},
+    [GS_GFUNK] = {CAT_HIP, 88, 100, 1, 0, "Dr. Dre, West Coast"},
+    [GS_BOMB] = {CAT_HIP, 94, 112, 0, 0, "Public Enemy"},
+    [GS_QUINCY] = {CAT_RNB, 100, 125, 1, 0, "Off the Wall era"},
+    [GS_JUSTIFIED] = {CAT_RNB, 90, 120, 1, 0, "Justin Timberlake, Neptunes"},
+    [GS_MPLS] = {CAT_RNB, 100, 130, 1, 0, "Prince, The Time"},
+    [GS_NPG] = {CAT_RNB, 85, 110, 0, 0, "Prince and the NPG"},
+    [GS_NJS] = {CAT_RNB, 100, 115, 1, 0, "Teddy Riley"},
+    [GS_BOOGIE] = {CAT_RNB, 105, 125, 1, 0, "80s post-disco"},
+    [GS_PFUNK] = {CAT_FNK, 90, 115, 0, 0, "Parliament, Bootsy"},
+    [GS_JAZZFUNK] = {CAT_FNK, 90, 115, 1, 0, "Herbie Hancock"},
+    [GS_ELECTRO] = {CAT_ELC, 110, 130, 1, 0, "Afrika Bambaataa, Egyptian Lover"},
+    [GS_ELECTRO2] = {CAT_ELC, 120, 140, 1, 0, "Drexciya, Dopplereffekt"},
+    [GS_WONKY] = {CAT_BRK, 85, 130, 1, 0, "Hudson Mohawke, Rustie"},
+    [GS_BIGBEAT] = {CAT_BRK, 100, 135, 0, 0, "Chemical Brothers, Fatboy Slim"},
+    [GS_BRAINDANCE] = {CAT_IDM, 150, 190, 0, 0, "Squarepusher, Venetian Snares"},
+    [GS_DETROIT] = {CAT_HSE, 120, 135, 1, 0, "Juan Atkins, Derrick May"},
+    [GS_808] = {CAT_ELC, 110, 130, 1, 0, "Mantronix"},
+    [GS_GLITCH] = {CAT_BRK, 95, 115, 0, 0, "Tipper"},
+    [GS_HALFTIME] = {CAT_BAS, 140, 170, 1, 0, "halftime drum and bass"},
+    [GS_FLAT] = {CAT_BRK, 105, 125, 1, 0, "Mr. Oizo"},
+    [GS_RAVE] = {CAT_BRK, 135, 165, 0, 0, "The Prodigy"},
+    [GS_ACIDDREAM] = {CAT_HSE, 120, 140, 1, 0, "Phuture, 303"},
+    [GS_BOOMBAP] = {CAT_HIP, 85, 98, 1, 0, "Cut-A-Dor drums"},
+    [GS_NEP_MIN] = {CAT_HIP, 85, 105, 1, 0, "Grindin'"},
+    [GS_NEP_CLICK] = {CAT_HIP, 78, 95, 1, 0, "Drop It Like It's Hot"},
+    [GS_NEP_CLUB] = {CAT_HIP, 100, 110, 1, 0, "Hot in Herre"},
+    [GS_NEP_SYNTH] = {CAT_HIP, 100, 115, 1, 0, "Milkshake, Frontin'"},
+    [GS_NEP_DARK] = {CAT_HIP, 75, 100, 1, 0, "Clipse, Hell Hath No Fury"},
+    [GS_NEP_STOMP] = {CAT_HIP, 105, 115, 1, 0, "Hollaback Girl"},
+    [GS_NERD] = {CAT_HIP, 95, 130, 0, 0, "N.E.R.D."},
+    [GS_DUB] = {CAT_WLD, 65, 85, 1, 0, "King Tubby, Lee Perry"},
+    [GS_MEMPHIS] = {CAT_HIP, 130, 150, 1, 0, "Three 6 Mafia"},
+    [GS_TRAP] = {CAT_HIP, 130, 160, 1, 0, "Atlanta"},
+    [GS_NATIVE] = {CAT_HIP, 88, 100, 0, 0, "A Tribe Called Quest, De La Soul"},
+    [GS_WUTANG] = {CAT_HIP, 85, 98, 0, 0, "RZA"},
+    [GS_MADLIB] = {CAT_HIP, 80, 100, 0, 0, "Stones Throw"},
+    [GS_ABSTRACT] = {CAT_HIP, 85, 100, 0, 0, "El-P, Company Flow"},
+    [GS_OLDSCHOOL] = {CAT_HIP, 95, 115, 1, 0, "Run-DMC, Def Jam"},
+    [GS_BOUNCE] = {CAT_HIP, 95, 105, 1, 0, "Triggerman beat"},
+    [GS_CHOPPED] = {CAT_HIP, 60, 75, 1, SFX_CHOP, "DJ Screw, Houston"},
 };
 static const char *const CAT_NAME[GEN_NCATS] = {"Hip-hop", "Funk", "R&B and pop", "Electro", "Breaks and beats",
                                                 "House and techno", "UK bass", "IDM", "Caribbean and world"};
@@ -1564,6 +1635,32 @@ static void swap_in(int b, int late)
 }
 /* The main loop's part: keeps the bar playing made from the settings as they are, and the next bar ready
  * (stopped: the first). All the building is here; the lock is held only to look and to swap. */
+/* Chopped and screwed's chop: in the last bar of each phrase the second half replays the first, every part. A pure
+ * function of the bar, so parts recorded one after another still line up. Notes reaching past the half bar are cut
+ * there, so a mono part's note never overlaps its own copy. */
+static void chop(int p)
+{
+    gev_t *e = &wb->ev[GEV_OFF[p]];
+    int n = wb->n[p], cap = GEV_OFF[p + 1] - GEV_OFF[p], i, k = 0, half = (int)GEN_BAR / 2;
+    if (!(STYLE_META[g.c->style % GEN_NSTYLES].fx & SFX_CHOP) || (int)(bb % (uint32_t)phrase_len()) != phrase_len() - 1)
+        return;
+    for (i = 0; i < n; i++)                              /* keep the first half */
+        if (e[i].pos < half) {
+            e[k] = e[i];
+            if (e[k].pos + e[k].dur > half)
+                e[k].dur = (uint16_t)(half - e[k].pos);
+            k++;
+        }
+    n = k;
+    for (i = 0; i < k && n < cap; i++) {                 /* and play it again */
+        e[n] = e[i];
+        e[n++].pos = (uint16_t)(e[i].pos + half);
+    }
+    wb->n[p] = (uint16_t)n;
+    if (p == GP_DRUMS)
+        for (i = 0; i < GEN_NLANES; i++)
+            wb->lanes[i] = (uint16_t)((wb->lanes[i] & 0xFFu) | (wb->lanes[i] & 0xFFu) << 8);
+}
 void gen_service(void)
 {
     uint32_t sig, target, f;
@@ -1596,6 +1693,7 @@ void gen_service(void)
         case GP_KICK: build_kick(); break;
         default: build_marble(); break;
         }
+        chop(p);
         sort_ev(p);
     }
     wb->bar = target;
@@ -1760,6 +1858,8 @@ void gen_style_bpm(int s, int *lo, int *hi)
     *lo = STYLE_META[s % GEN_NSTYLES].lo;
     *hi = STYLE_META[s % GEN_NSTYLES].hi;
 }
+int gen_style_tanz(int s) { return STYLE_META[s % GEN_NSTYLES].tanz; }
+const char *gen_style_ref(int s) { return STYLE_META[s % GEN_NSTYLES].ref ? STYLE_META[s % GEN_NSTYLES].ref : ""; }
 const char *gen_cat_name(int c) { return CAT_NAME[c % GEN_NCATS]; }
 const char *gen_cat_code(int c) { return CAT_CODE[c % GEN_NCATS]; }
 const char *gen_dev_name(int d) { return DEV[d % GEN_NDEV].name; }

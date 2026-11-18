@@ -17,6 +17,7 @@ enum { GS_DILLA, GS_SOULQ, GS_GFUNK, GS_BOMB, GS_QUINCY, GS_JUSTIFIED, GS_MPLS, 
        GS_HALFTIME, GS_FLAT, GS_RAVE, GS_ACIDDREAM,
        /* (new styles go at the end: a saved style number keeps its meaning) */
        GS_BOOMBAP, GS_NEP_MIN, GS_NEP_CLICK, GS_NEP_CLUB, GS_NEP_SYNTH, GS_NEP_DARK, GS_NEP_STOMP, GS_NERD, GS_DUB,
+       GS_MEMPHIS, GS_TRAP, GS_NATIVE, GS_WUTANG, GS_MADLIB, GS_ABSTRACT, GS_OLDSCHOOL, GS_BOUNCE, GS_CHOPPED,
        GEN_NSTYLES };
 /* the styles' families, for a picker in two steps and a three-letter prefix */
 enum { CAT_HIP, CAT_FNK, CAT_RNB, CAT_ELC, CAT_BRK, CAT_HSE, CAT_BAS, CAT_IDM, CAT_WLD, GEN_NCATS };
@@ -88,6 +89,8 @@ uint16_t gen_lane_steps(int lane);       /* the drum part's hits this bar (for t
 const char *gen_style_name(int s);
 int gen_style_cat(int s);                /* CAT_* */
 void gen_style_bpm(int s, int *lo, int *hi);   /* the tempos it sits at, as set on the MPC (half-time styles counted fast) */
+int gen_style_tanz(int s);               /* 1: suits the Tanzbär Lite (not built on sampled breaks or a live kit) */
+const char *gen_style_ref(int s);        /* the artists or scene it comes from, "" if none */
 const char *gen_cat_name(int c);         /* "Hip-hop" */
 const char *gen_cat_code(int c);         /* "HIP" */
 const char *gen_dev_name(int d);

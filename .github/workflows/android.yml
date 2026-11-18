@@ -115,4 +115,9 @@ jobs:
           version=$(sed -n 's/^ *versionName = "\(.*\)"/\1/p' android/app/build.gradle.kts)
           test -n "$version"
           tag_if_new v0.2.1 2896e781014bad70eee69c85bbef0d3e38f0a375
+          tag_if_new v0.2.2 e7a58302164a733bd8933bba4216c877f6766742
           tag_if_new "v$version" "$GITHUB_SHA"
+          for t in v0.2.1 v0.2.2 "v$version"; do
+            sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$t" --jq .object.sha)
+            echo "$t -> $sha" | tee -a "$GITHUB_STEP_SUMMARY"
+          done

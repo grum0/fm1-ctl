@@ -692,6 +692,49 @@ static void test_panic(void)
     CHECK(count(0xB0, -1) == 16, "panic sends all notes off on 16 channels (%d)", count(0xB0, -1));
 }
 
+/* 0.3.0: Chopped and screwed's last bar replays its first half; the 42 styles' metadata is complete */
+static void test_styles_030(void)
+{
+    int i, a = 0, b = 0, bad = 0;
+    int64_t t0, bar;
+    static int64_t ta[64], tb[64];
+    static uint8_t na[64], nb[64];
+    for (i = 0; i < GEN_NSTYLES; i++) {
+        int lo, hi;
+        gen_style_bpm(i, &lo, &hi);
+        CHECK(lo >= 50 && hi > lo && gen_style_ref(i)[0] && gen_style_name(i)[0], "style %d metadata incomplete", i);
+    }
+    CHECK(!gen_style_tanz(GS_WUTANG) && gen_style_tanz(GS_MEMPHIS) && !gen_style_tanz(GS_BIGBEAT),
+          "Tanzbar flags");
+    fresh();
+    eng_set(F_TEMPO, 120, vnow);
+    eng_set(F_STYLE, GS_CHOPPED, vnow);
+    eng_set(F_PHRASE, 0, vnow);                  /* a one-bar phrase: every bar is its last */
+    eng_set(F_FEEL, 0, vnow);
+    eng_set(F_CLOCK, CLK_INT_OUT, vnow);
+    eng_set(F_PART(GP_DRUMS, PF_ON), 1, vnow);
+    eng_play(1, vnow);
+    run_internal(6000);
+    eng_play(0, vnow);
+    bar = 2000 * MS;                             /* 4/4 at 120 */
+    for (i = 0, t0 = -1; i < nlog; i++)
+        if (log_[i].n == 3 && (log_[i].m[0] & 0xF0) == 0x90 && log_[i].m[2]) {
+            if (t0 < 0)
+                t0 = log_[i].t + bar;            /* the second bar on */
+            if (log_[i].t < t0 - 5 * MS)         /* (hits on the beat may be pushed a little early) */
+                continue;
+            if (log_[i].t < t0 + bar / 2 - 5 * MS && a < 64)
+                ta[a] = log_[i].t - t0, na[a++] = log_[i].m[1];
+            else if (log_[i].t < t0 + bar - 5 * MS && b < 64)
+                tb[b] = log_[i].t - t0 - bar / 2, nb[b++] = log_[i].m[1];
+        }
+    if (getenv("CHOPDBG")) for (i = 0; i < 64 && (i < a || i < b); i++)
+        printf("%2d  %3d %8lld   %3d %8lld\n", i, i < a ? na[i] : 0, i < a ? (long long)ta[i] / 1000 : 0, i < b ? nb[i] : 0, i < b ? (long long)tb[i] / 1000 : 0);
+    for (i = 0; i < a && i < b; i++)
+        bad += na[i] != nb[i] || ta[i] - tb[i] > MS || tb[i] - ta[i] > MS;
+    CHECK(a > 2 && a == b && !bad, "chop: first half %d notes, second %d, %d differ", a, b, bad);
+}
+
 int main(void)
 {
     test_ranges();
@@ -705,6 +748,7 @@ int main(void)
     test_new_controls();
     test_stuck_notes();
     test_review_fixes();
+    test_styles_030();
     test_panic();
     printf(fails ? "FAILED (%d)\n" : "ok\n", fails);
     free(log_);

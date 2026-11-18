@@ -1,0 +1,64 @@
+# GEN-1 style grids: one bar of 16 steps per lane, as in the designs in the project doc fm1-build-status.md
+# ("Style designs (for coding)"). make_grids.py turns every *.grid file here into ../style_grids.h.
+#   X accent   x hit   o ghost (soft)   r a hit the style's ratchets may double   . rest
+# Lanes: kick snare rim clap chat ohat tom conga cowbell claves cymbal zap noise
+# (tom: the Tanzbär's one tom, lane L_TOML; conga: its one conga, L_CONGH; zap and noise: the Simmons pads A01, A02)
+
+style MEMPHIS
+kick     X... ..x. .... x.x.
+snare    .... .... X... ....
+clap     .... .... X... ....
+chat     x.x. x.x. x.x. xxxx
+cowbell  ..x. .x.. ..x. .xx.
+
+style TRAP
+kick     X... ...x ..x. ....
+snare    .... .... X... ....
+clap     .... .... X... ....
+chat     x.x. x.xr x.x. xrr.
+ohat     .... .... .... ...x
+
+style NATIVE
+kick     X... ...x ..x. .x..
+snare    .... X... .... X..o
+rim      ..o. .... ..o. ....
+chat     X.x. X.x. X.x. X...
+ohat     .... .... .... ..x.
+
+style WUTANG
+kick     X... ...x X... ..x.
+snare    .... X... .... X...
+chat     o.o. o.o. o... o.o.
+
+style MADLIB
+kick     X... ..x. .x.. ....
+snare    .... X... .... X...
+rim      .... .... ..o. ....
+chat     x.x. x... x.x. x.o.
+conga    .... ..x. .... x.x.
+
+style ABSTRACT
+kick     X..x ..x. .x.. x..x
+snare    .... X... .... ..X.
+clap     .... X... .... ....
+chat     xoxo Xoxo xoxx Xoxo
+tom      ..x. .... .... .x..
+
+style OLDSCHOOL
+kick     X... .... X.x. ....
+snare    .... X... .... X...
+clap     .... X... .... X...
+chat     x.x. x.x. x.x. x.x.
+cowbell  .... .... .... ..x.
+
+style BOUNCE
+kick     X..x ..x. X..x ..x.
+snare    .... ...o .... .o.o
+clap     .... X... .... X...
+chat     xxXx xxXx xxXx xxXx
+
+style CHOPPED
+kick     X... ..x. ..x. ....
+snare    .... X... .... X...
+chat     x.x. x.x. x.x. x...
+ohat     .... .... .... ..x.

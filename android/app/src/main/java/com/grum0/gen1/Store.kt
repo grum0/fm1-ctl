@@ -79,6 +79,9 @@ class Store(ctx: Context) {
     val styleCat: List<Int>                     // each style's family, and the tempos it sits at
     val styleLo: List<Int>
     val styleHi: List<Int>
+    val styleTanz: List<Boolean>                // suits the Tanzbär Lite (not built on sampled breaks or a live kit)
+    val styleRef: List<String>                  // the artists or scene it comes from
+    var hideNonTanz by mutableStateOf(false)    // the style picker leaves out the styles that don't suit the Tanzbär
     val version: String = runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName }.getOrNull() ?: "?"
     val buildId: String = "$version (${BuildConfig.COMMIT})"     // e.g. "0.2.2 (0695589)"
     var keepAwake by mutableStateOf(true)       // the screen stays on while the app is up
@@ -125,19 +128,23 @@ class Store(ctx: Context) {
         modeNames = List(F.NPARTS) { p -> List(Native.nModeCount(p)) { m -> Native.nName(5, (p shl 8) or m) } }
         catNames = List(F.NCATS) { Native.nName(6, it) }
         catCodes = List(F.NCATS) { Native.nName(7, it) }
-        val info = IntArray(3)
+        val info = IntArray(4)
         val cats = ArrayList<Int>()
         val los = ArrayList<Int>()
         val his = ArrayList<Int>()
+        val tz = ArrayList<Boolean>()
         for (i in styleNames.indices) {
             Native.nStyleInfo(i, info)
             cats.add(info[0].coerceIn(0, F.NCATS - 1))
             los.add(info[1])
             his.add(info[2])
+            tz.add(info[3] != 0)
         }
         styleCat = cats
         styleLo = los
         styleHi = his
+        styleTanz = tz
+        styleRef = List(styleNames.size) { Native.nName(8, it) }
         INSTRUMENTS.forEach { chan.add(it.defChan) }
         DEFAULT_TARGET.forEach { target.add(it) }
         repeat(F.NLANES) { lanes.add(0) }
@@ -324,6 +331,7 @@ class Store(ctx: Context) {
             .putInt("keyOct", keyOct)
             .putInt("rig_version", RIG_VERSION)
             .putBoolean("keepAwake", keepAwake)
+            .putBoolean("hideNonTanz", hideNonTanz)
             .putString("tanz", tanz.entries.joinToString(",") { "${it.key}=${it.value}" })
             .apply()
     }
@@ -363,6 +371,7 @@ class Store(ctx: Context) {
         val jv = instIndex("jv1010")
         if (rigV < 3 && jv != null && chan[jv] == OLD_JV_CHAN) chan[jv] = INSTRUMENTS[jv].defChan
         keepAwake = prefs.getBoolean("keepAwake", true)
+        hideNonTanz = prefs.getBoolean("hideNonTanz", false)
         val tk = prefs.getString("target_keys", null)?.split(",")
         if (tk != null && tk.size == F.NPARTS) {
             tk.forEachIndexed { p, k -> instIndex(k.trim())?.let { target[p] = it } }

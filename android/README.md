@@ -49,6 +49,17 @@ been tried). Version 0.2.0 adds:
 - For each build: preview MIDI files per style (artifact `gen1-preview-midi`), golden-output checks, the
   generators' size for the FM-1.
 
+**0.3.0** (the hip-hop batch):
+
+- **Nine new hip-hop styles** (42 in all): Memphis, Trap, Native Tongues, Wu-Tang, Madlib, Abstract NY, Old School,
+  New Orleans bounce, Chopped and screwed. In Chopped and screwed the last bar of each phrase is chopped: its second
+  half replays the first, every part.
+- **Style names** from the catalogue (Soulquarians, Quincy Jones, Minneapolis 80s, Prince NPG 90s, New jack swing,
+  Modern electro, Detroit techno, Acid house, Drill n bass, Neptunes Tongue-click, …); the picker shows each style's
+  artists or scene under its name. The patterns and saved settings are unchanged.
+- **Rig → Settings → Hide styles that don't suit the Tanzbär**: leaves out of the picker the styles built on sampled
+  breaks or a live kit (off by default; the style playing always stays).
+
 ## Getting the app
 
 On GitHub: **Actions → Android APK → Run workflow** (branch `android`), then open the run and download the
@@ -111,9 +122,12 @@ forgets after a replug or a lock: the app shows a red line when the cable is in 
   audition on the MPC before installing an APK. `render dump STYLE MODE` prints every message, for diffs.
 - `sh android/tools/gen_size.sh`: Flash and RAM of `app/gen.c` compiled for a 32-bit microcontroller (Cortex-M3;
   the FM-1's JieLi chip needs the firmware builder's toolchain, so this is an estimate; RAM carries over closely).
-- Versions are tagged in git (`v0.2.1`, `v0.2.2`, …): CI artifacts expire after 90 days. The build ID (version and
+- Versions are tagged in git (`v0.2.1`, `v0.2.2`, `v0.3.0`, …): CI artifacts expire after 90 days. The build ID (version and
   commit) is on the launch screen and in Rig → About.
 - `android/tools/gen_fields.sh` rewrites `Fields.kt` after `gen1_engine.h` changes.
+- Style drums are written as grids (`app/styles/*.grid`: `X` accent, `x` hit, `o` ghost, `r` a hit ratchets may
+  double, `.` rest); `python3 app/styles/make_grids.py` turns them into `app/style_grids.h` (committed;
+  `android/tools/check.sh` fails if it is stale).
 
 ## Licence and credits
 

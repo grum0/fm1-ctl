@@ -63,7 +63,7 @@ object F {
 
     const val NPARTS = 7
     const val NLANES = 15
-    const val NSTYLES = 33
+    const val NSTYLES = 42
     const val NDEV = 8
     const val NDSET = 5
     const val NTRACKS = 4
