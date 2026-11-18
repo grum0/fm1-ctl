@@ -371,6 +371,7 @@ static const style_t STYLE[GEN_NSTYLES] = {
 /* the styles' families, the tempos they sit at (as set on the MPC: half-time styles are counted fast), whether they
  * suit the Tanzbär Lite (the picker can hide the others), effects (SFX_*), and the artists or scene */
 #define SFX_CHOP 1u                      /* the phrase's last bar: beats 3 and 4 replay beats 1 and 2, every part */
+#define SFX_BELL 2u                      /* the cowbell plays a line (batch [D]) */
 static const struct { uint8_t cat, lo, hi, tanz, fx; const char *ref; } STYLE_META[GEN_NSTYLES] = {
     [GS_DILLA] = {CAT_HIP, 80, 95, 1, 0, "J Dilla, Slum Village"},
     [GS_SOULQ] = {CAT_HIP, 80, 95, 0, 0, "D'Angelo, Questlove"},
@@ -1661,6 +1662,40 @@ static void chop(int p)
         for (i = 0; i < GEN_NLANES; i++)
             wb->lanes[i] = (uint16_t)((wb->lanes[i] & 0xFFu) | (wb->lanes[i] & 0xFFu) << 8);
 }
+/* The melodic cowbell: each cowbell hit gets a chord tone (root, fifth or third, by the seed and the bar), and the
+ * drum's tune CC goes out half a sixteenth before it (the Tanzbär needs about 40 ms: that is 62 ms at 120 BPM, 40
+ * at 187). The bar's first hit is the key's root, tuned at the end of the bar before, so each bar is still a pure
+ * function of the bar. A pitch the drum can't play becomes its fifth, then its fourth, then the key's third. */
+#define BELL_LEAD (GEN_STEP / 2)
+static int bell_val(int pc)
+{
+    const int off[4] = {0, 7, 5, g.c->minor ? 3 : 4};
+    int i;
+    for (i = 0; i < 4; i++)
+        if (g.c->bell_tab[(pc + off[i]) % 12] < 128u)
+            return g.c->bell_tab[(pc + off[i]) % 12];
+    return -1;
+}
+static void bell_line(void)
+{
+    const gev_t *e = &wb->ev[GEV_OFF[GP_DRUMS]];
+    int n = wb->n[GP_DRUMS], i, v, note = g.c->lane_note[L_COWB], ch = lane_ch(L_COWB);
+    for (i = 0; i < n; i++) {
+        chord_t c;
+        uint32_t k;
+        int iv;
+        if (e[i].kind != EV_NOTE || e[i].a != note || e[i].pos < BELL_LEAD)
+            continue;
+        c = chord_step(e[i].pos / (int)GEN_STEP);
+        k = gh(g.c->seed + bb * 16u + e[i].pos / GEN_STEP, 0xBE11u) % 5u;
+        iv = k < 2u ? 0 : k < 4u ? QIV[c.q][2] : QIV[c.q][1];
+        v = bell_val((c.root + iv) % 12);
+        if (v >= 0)
+            gput_ev(GP_DRUMS, e[i].pos - BELL_LEAD, EV_CC, g.c->bell_cc, v, 1, ch);
+    }
+    if ((v = bell_val(g.c->root)) >= 0)                  /* the next bar's first hit */
+        gput_ev(GP_DRUMS, (int)GEN_BAR - BELL_LEAD, EV_CC, g.c->bell_cc, v, 1, ch);
+}
 void gen_service(void)
 {
     uint32_t sig, target, f;
@@ -1694,6 +1729,8 @@ void gen_service(void)
         default: build_marble(); break;
         }
         chop(p);
+        if (p == GP_DRUMS && g.c->bell && g.c->bell_cc)
+            bell_line();
         sort_ev(p);
     }
     wb->bar = target;
@@ -1840,7 +1877,8 @@ int gen_valid(const gen_cfg_t *c)
         c->prog > 1u || c->swing > 26u || c->dset >= GEN_NDSET || c->gx > 127u || c->gy > 127u || c->chaos > 127u || c->sim2 > 2u ||
         c->sim_chan > 16u || c->bend < 1u || c->bend > 12u || c->mb_xpose < -24 || c->mb_xpose > 24 || c->mb_tune > 127u ||
         c->mb_lo < 12u || c->mb_lo > 96u || c->hat_dens > 3u || c->flam > 127u || c->fill_every > 6u ||
-        c->hat_straight > 100u || c->space > 100u || c->spread > 24u || c->couple > 3u || c->voice > 3u || c->ratchet > 127u)
+        c->hat_straight > 100u || c->space > 100u || c->spread > 24u || c->couple > 3u || c->voice > 3u || c->ratchet > 127u ||
+        c->bell > 1u || c->bell_cc > 127u)
         return 0;
     for (i = 0; i < GEN_NLANES; i++)
         if (c->lane_note[i] > 127u)
@@ -1872,6 +1910,7 @@ void gen_style_bpm(int s, int *lo, int *hi)
     *hi = STYLE_META[s % GEN_NSTYLES].hi;
 }
 int gen_style_tanz(int s) { return STYLE_META[s % GEN_NSTYLES].tanz; }
+int gen_style_bell(int s) { return (STYLE_META[s % GEN_NSTYLES].fx & SFX_BELL) != 0; }
 const char *gen_style_ref(int s) { return STYLE_META[s % GEN_NSTYLES].ref ? STYLE_META[s % GEN_NSTYLES].ref : ""; }
 const char *gen_cat_name(int c) { return CAT_NAME[c % GEN_NCATS]; }
 const char *gen_cat_code(int c) { return CAT_CODE[c % GEN_NCATS]; }

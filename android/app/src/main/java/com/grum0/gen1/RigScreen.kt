@@ -127,6 +127,32 @@ fun RigScreen(s: Store) {
                     "Lite's kit can't play convincingly. The style playing stays as it is.",
                 style = MaterialTheme.typography.bodySmall,
             )
+            SwitchRow("Tanzbär sound follows the style and key", s.tanzStyle) {
+                s.tanzStyle = it
+                s.touch()
+                s.applyTanzSound()
+            }
+            Text(
+                "Picking a style, changing the key and Start set the Tanzbär's tone and decays for the style and tune " +
+                    "its kick (and, where the style asks, toms, congas and claves) to the key. The Control page's " +
+                    "Tanzbär sliders follow, and stay free to change until the next style or key.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Text("Cowbell pitch", style = MaterialTheme.typography.bodyMedium)
+            ChipGrid(listOf("Style", "Fixed", "Melodic"), { it == s.bellMode }, 3) {
+                s.bellMode = it
+                s.touch()
+                s.applyTanzSound()
+            }
+            Text(
+                "Fixed: one pitch, in the key. Melodic: the cowbell plays a line on the chords, retuned just before " +
+                    "each hit, with a short decay. Style: melodic in the cowbell styles still to come, fixed in the rest.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            SwitchRow("Picking a style moves the tempo into its range", s.styleTempo) {
+                s.styleTempo = it
+                s.touch()
+            }
             Text(
                 "The clock and the parts keep going with the screen off or the app in the background: see the GEN-1 " +
                     "notification. “Stop and quit” there ends it.",

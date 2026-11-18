@@ -43,6 +43,10 @@ val DEFAULT_TARGET = listOf(0, 5, 7, 2, 4, 1, 6)
 val LANE_DEFAULT = listOf(36, 37, 38, 41, 43, 39, 40, 40, 44, 44, 45, 46, 47, 0, 1)
 
 /** The Tanzbär Lite's controllers, voice by voice (the FM-1 firmware's banks E to L). */
+const val BELL_STYLE = 0   // Cowbell pitch: as the style has it (a line in the melodic-cowbell styles, else fixed)
+const val BELL_FIXED = 1   //   one pitch, in the key
+const val BELL_LINE = 2    //   a line on the chords, retuned before each hit
+
 class TanzVoice(val name: String, val knobs: List<Pair<String, Int>>)
 
 val TANZ = listOf(
@@ -82,6 +86,9 @@ class Store(ctx: Context) {
     val styleTanz: List<Boolean>                // suits the Tanzbär Lite (not built on sampled breaks or a live kit)
     val styleRef: List<String>                  // the artists or scene it comes from
     var hideNonTanz by mutableStateOf(false)    // the style picker leaves out the styles that don't suit the Tanzbär
+    var tanzStyle by mutableStateOf(true)       // the Tanzbär's sound follows the style and the key (0.3.2)
+    var bellMode by mutableStateOf(BELL_STYLE)  // the cowbell's pitch: the style's, fixed in the key, or a line
+    var styleTempo by mutableStateOf(false)     // picking a style moves the tempo into its range
     val version: String = runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName }.getOrNull() ?: "?"
     val buildId: String = "$version (${BuildConfig.COMMIT})"     // e.g. "0.2.2 (0695589)"
     var keepAwake by mutableStateOf(true)       // the screen stays on while the app is up
@@ -148,7 +155,13 @@ class Store(ctx: Context) {
         INSTRUMENTS.forEach { chan.add(it.defChan) }
         DEFAULT_TARGET.forEach { target.add(it) }
         repeat(F.NLANES) { lanes.add(0) }
-        hub.onOutOpen = { sendTanzAll() }
+        hub.onOutOpen = {
+            main.post {                                     // (on the main thread: it moves the screen's state)
+                sendTanzAll()
+                applyTanzSound()
+            }
+        }
+        Native.nBellTable(TanzData.BELL_CC, ByteArray(12) { TanzData.BELL[it].toByte() })
     }
 
     // ------------------------------------------------------------------ settings --
@@ -161,8 +174,70 @@ class Store(ctx: Context) {
 
     fun set(id: Int, v: Int) {
         Native.nSet(id, v)
+        if (id == F.STYLE) styleTempoMove()
         refreshAll()
         touch()
+        if (id == F.STYLE || id == F.ROOT || id == F.MINOR || id == F.part(F.GP_DRUMS, F.PF_ON)) applyTanzSound()
+    }
+
+    // ------------------------------------------------------------------ the Tanzbär's sound per style and key --
+    private fun tanzIndex() = INSTRUMENTS.indexOfFirst { it.dev == F.DV_TANZBAR }
+
+    /** The drums play on the Tanzbär (the part is on and its instrument is the Tanzbär). */
+    private fun drumsOnTanz() =
+        vals[F.part(F.GP_DRUMS, F.PF_ON)] == 1 && INSTRUMENTS[target[F.GP_DRUMS]].dev == F.DV_TANZBAR
+
+    /** The pitch nearest the key that the drum can play: the root, else its fifth, fourth, then the key's third. */
+    private fun keyTune(tab: IntArray): Int {
+        val r = vals[F.ROOT]
+        for (off in intArrayOf(0, 7, 5, if (vals[F.MINOR] == 1) 3 else 4)) {
+            val v = tab[(r + off) % 12]
+            if (v >= 0) return v
+        }
+        return -1
+    }
+
+    private fun bellMelodic() = bellMode == BELL_LINE || (bellMode == BELL_STYLE && Native.nStyleBell(vals[F.STYLE]) == 1)
+
+    /**
+     * Sends the style's sound to the Tanzbär and tunes the kick (and the voices the style names) to the key; called
+     * on a style or key change, on Start, when the output opens and after a panic. From the screen's side, never
+     * from the clock. The values also move the Control page's Tanzbär sliders, which stay free to change after.
+     */
+    fun applyTanzSound() {
+        val melodic = tanzStyle && drumsOnTanz() && bellMelodic()
+        if (vals[F.BELL] != (if (melodic) 1 else 0)) {
+            Native.nSet(F.BELL, if (melodic) 1 else 0)
+            refreshAll()
+        }
+        val st = vals[F.STYLE]
+        val ti = tanzIndex()
+        if (!tanzStyle || !drumsOnTanz() || ti < 0 || st !in TanzData.STYLE.indices) return
+        fun put(cc: Int, v: Int) {
+            if (v < 0) return
+            tanz[cc] = v
+            sendCc(ti, cc, v)
+        }
+        val row = TanzData.STYLE[st]
+        TanzData.CCS.forEachIndexed { i, cc -> put(cc, row[i]) }
+        put(TanzData.KICK_CC, keyTune(TanzData.KICK))
+        val f = TanzData.FOLLOW[st]
+        if (f and 1 != 0) put(TanzData.TOM_CC, keyTune(TanzData.TOM))
+        if (f and 2 != 0) put(TanzData.CONGA_CC, keyTune(TanzData.CONGA))
+        if (f and 4 != 0) put(TanzData.CLAVE_CC, keyTune(TanzData.CLAVE))
+        if (melodic) put(85, minOf(row[TanzData.CCS.indexOf(85)], TanzData.BELL_MELODIC_DECAY))
+        else put(TanzData.BELL_CC, keyTune(TanzData.BELL))
+        touch()
+    }
+
+    /** "Picking a style moves the tempo": to the nearest end of the style's range, if outside it (not following). */
+    private fun styleTempoMove() {
+        if (!styleTempo || vals[F.CLOCK] == F.CLK_EXT) return
+        val st = Native.nGet(F.STYLE)
+        if (st !in styleLo.indices) return
+        val t = vals[F.TEMPO]
+        val nt = t.coerceIn(styleLo[st], styleHi[st])
+        if (nt != t) Native.nSet(F.TEMPO, nt)
     }
 
     fun touch() {
@@ -229,7 +304,11 @@ class Store(ctx: Context) {
         if (!running) ClockService.start(app)
         Native.nPlay(if (running) 0 else 1)
     }
-    fun panic() = Native.nPanic()
+    fun panic() {
+        Native.nPanic()
+        sendTanzAll()                                       // (the panic leaves the Tanzbär's controllers alone, but
+        applyTanzSound()                                    // sends them again so nothing is left half set)
+    }
 
     // ------------------------------------------------------------------ playing --
     // What each held key sent (-1: to the arpeggiator, else the channel 0..15), so its release goes to the same
@@ -301,7 +380,9 @@ class Store(ctx: Context) {
     // ------------------------------------------------------------------ status --
     fun poll() {
         Native.nStatus(st)
+        val was = running
         running = st[0] == 1
+        if (running && !was) applyTanzSound()               // on Start (ours or the MPC's)
         bar = st[1]
         step = st[2]
         phraseBars = st[3]
@@ -332,6 +413,9 @@ class Store(ctx: Context) {
             .putInt("rig_version", RIG_VERSION)
             .putBoolean("keepAwake", keepAwake)
             .putBoolean("hideNonTanz", hideNonTanz)
+            .putBoolean("tanzStyle", tanzStyle)
+            .putInt("bellMode", bellMode)
+            .putBoolean("styleTempo", styleTempo)
             .putString("tanz", tanz.entries.joinToString(",") { "${it.key}=${it.value}" })
             .apply()
     }
@@ -372,6 +456,9 @@ class Store(ctx: Context) {
         if (rigV < 3 && jv != null && chan[jv] == OLD_JV_CHAN) chan[jv] = INSTRUMENTS[jv].defChan
         keepAwake = prefs.getBoolean("keepAwake", true)
         hideNonTanz = prefs.getBoolean("hideNonTanz", false)
+        tanzStyle = prefs.getBoolean("tanzStyle", true)
+        bellMode = prefs.getInt("bellMode", BELL_STYLE).coerceIn(BELL_STYLE, BELL_LINE)
+        styleTempo = prefs.getBoolean("styleTempo", false)
         val tk = prefs.getString("target_keys", null)?.split(",")
         if (tk != null && tk.size == F.NPARTS) {
             tk.forEachIndexed { p, k -> instIndex(k.trim())?.let { target[p] = it } }

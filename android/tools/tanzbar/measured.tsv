@@ -1,0 +1,64 @@
+# Tanzbär Lite, measured from Grumo's sweep recording of 2026-11-18 (claude/gen1-tanzbar-sweep-results.md).
+# tune  CC  note  value     : the CC value that plays that note (within ±30 cents)
+# decay CC  ms at CC 0 32 64 96 127 : time from the peak to -40 dB, the voice's other CCs at 64
+tune	3	D#1	0
+tune	3	E1	11
+tune	3	F1	21
+tune	3	F#1	30
+tune	3	G1	38
+tune	3	G#1	47
+tune	3	A1	56
+tune	3	A#1	69
+tune	3	B1	90
+tune	19	B1	12
+tune	19	C2	33
+tune	19	C#2	45
+tune	19	D2	53
+tune	19	D#2	60
+tune	19	E2	66
+tune	19	F2	71
+tune	19	F#2	77
+tune	19	G2	84
+tune	19	G#2	93
+tune	19	A2	112
+tune	79	A2	25
+tune	79	A#2	40
+tune	79	B2	49
+tune	79	C3	56
+tune	79	C#3	61
+tune	79	D3	67
+tune	79	D#3	73
+tune	79	E3	79
+tune	79	F3	86
+tune	79	F#3	96
+tune	79	G3	121
+tune	84	F#4	4
+tune	84	G4	9
+tune	84	G#4	15
+tune	84	A4	21
+tune	84	A#4	28
+tune	84	B4	35
+tune	84	C5	42
+tune	84	C#5	49
+tune	84	D5	57
+tune	84	D#5	67
+tune	84	E5	81
+tune	86	A6	12
+tune	86	A#6	37
+tune	86	B6	51
+tune	86	C7	59
+tune	86	C#7	66
+tune	86	D7	73
+tune	86	D#7	80
+tune	86	E7	93
+tune	86	F7	127
+decay	64	94	145	375	1750	3000
+decay	67	66	77	101	138	177
+decay	75	108	122	150	262	392
+decay	20	90	151	274	561	1265
+decay	78	49	68	117	205	339
+decay	85	28	61	116	251	591
+decay	87	9	17	31	62	137
+decay	88	106	158	279	667	2106
+decay	90	20	46	96	272	2080
+decay	91	20	46	96	272	2080

@@ -315,6 +315,23 @@ JNIEXPORT void JNICALL J(nMidiIn)(JNIEnv *env, jobject self, jbyteArray data, ji
     pthread_mutex_unlock(&mu);
 }
 
+/* the cowbell line's tune CC and its 12 values (the Tanzbär profile's table, from C; 255: not playable) */
+JNIEXPORT void JNICALL J(nBellTable)(JNIEnv *env, jobject self, jint cc, jbyteArray tab)
+{
+    jbyte t[12];
+    uint8_t u[12];
+    int i;
+    (void)self;
+    if ((*env)->GetArrayLength(env, tab) < 12)
+        return;
+    (*env)->GetByteArrayRegion(env, tab, 0, 12, t);
+    for (i = 0; i < 12; i++)
+        u[i] = (uint8_t)t[i];
+    pthread_mutex_lock(&mu);
+    eng_bell_table(cc, u);
+    pthread_mutex_unlock(&mu);
+}
+
 /* the monitor: on while the screen shows it (records are only made then) */
 JNIEXPORT void JNICALL J(nMonOpen)(JNIEnv *env, jobject self, jint on)
 {
@@ -531,6 +548,13 @@ JNIEXPORT jint JNICALL J(nCount)(JNIEnv *env, jobject self, jint kind)
 
 /* a style's family and the tempos it sits at: out[0] CAT_*, [1] lowest BPM, [2] highest, [3] 1 if it suits the
  * Tanzbär Lite */
+/* 1 if the style's cowbell plays a line (Cowbell pitch: Style) */
+JNIEXPORT jint JNICALL J(nStyleBell)(JNIEnv *env, jobject self, jint style)
+{
+    (void)env, (void)self;
+    return style >= 0 && style < GEN_NSTYLES ? gen_style_bell(style) : 0;
+}
+
 JNIEXPORT void JNICALL J(nStyleInfo)(JNIEnv *env, jobject self, jint style, jintArray out)
 {
     jint r[4] = {0, 0, 0, 1};

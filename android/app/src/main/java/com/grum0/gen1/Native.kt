@@ -18,6 +18,8 @@ object Native {
     external fun nRange(id: Int, out: IntArray)
     external fun nPlay(on: Int)
     external fun nPanic()
+    external fun nBellTable(cc: Int, tab: ByteArray)
+    external fun nStyleBell(style: Int): Int
     external fun nMonOpen(on: Int)
     external fun nMonRead(since: Int, t: LongArray, b: ByteArray, res: IntArray)
     external fun nDefaults()

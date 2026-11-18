@@ -107,6 +107,7 @@ void eng_range(int id, int *lo, int *hi)
         case F_HAT_STRAIGHT: case F_SPACE: h = 100; break;
         case F_SPREAD: l = 1; h = 24; break;
         case F_OUT_DELAY: h = 40; break;
+        case F_BELL: h = 1; break;
         default: break;                  /* flam, ratchets: 0..127 */
         }
     } else if (id >= F_TRK0) {
@@ -174,6 +175,7 @@ int eng_get(int id)
         case F_COUPLE: return E.g.couple;
         case F_VOICE: return E.g.voice;
         case F_OUT_DELAY: return E.c.out_delay;
+        case F_BELL: return E.g.bell;
         default: return E.g.ratchet;
         }
     }
@@ -527,6 +529,15 @@ void eng_midi_spp(int sixteenths, int64_t at)
     gen_locate((uint32_t)sixteenths);
 }
 
+/* the cowbell line's tune CC and its value per pitch class (the Tanzbär profile's table; 255: not playable) */
+void eng_bell_table(int cc, const uint8_t tab[12])
+{
+    int i;
+    E.g.bell_cc = (uint8_t)(cc & 127);
+    for (i = 0; i < 12; i++)
+        E.g.bell_tab[i] = tab[i];
+}
+
 void eng_play(int on, int64_t now)
 {
     E.now = now;
@@ -573,6 +584,7 @@ void eng_chord_key(int pc, int64_t now)
 void eng_panic(int64_t now)
 {
     int p, ch;
+    uint32_t tanz_chans = 0;
     E.now = now;
     E.t_cur = now;
     arp_off();
@@ -581,10 +593,14 @@ void eng_panic(int64_t now)
         gen_part_off(p);
     E.npool = 0;
     memset(E.held, 0, sizeof E.held);
+    for (p = 0; p < GEN_NPARTS; p++)
+        if (E.g.part[p].dev == DV_TANZBAR)
+            tanz_chans |= 1u << E.g.part[p].chan;
     for (ch = 0; ch < 16; ch++) {                /* and whatever else is sounding, on every channel */
         send3(0xB0u | (uint32_t)ch, 123, 0);     /* all notes off */
         send3(0xB0u | (uint32_t)ch, 120, 0);     /* all sound off */
-        send3(0xB0u | (uint32_t)ch, 121, 0);     /* reset all controllers */
+        if (!(tanz_chans & 1u << ch))           /* reset all controllers (not the Tanzbär's: its sound stays; the */
+            send3(0xB0u | (uint32_t)ch, 121, 0); /* app sends the style's values again after a panic) */
         send3(0xE0u | (uint32_t)ch, 0, 64);      /* pitch bend to the middle */
     }
 }
@@ -617,6 +633,7 @@ void eng_set(int id, int v, int64_t now)
         case F_COUPLE: E.g.couple = (uint8_t)v; break;
         case F_VOICE: E.g.voice = (uint8_t)v; break;
         case F_OUT_DELAY: E.c.out_delay = (uint8_t)v; break;
+        case F_BELL: E.g.bell = (uint8_t)v; break;
         default: E.g.ratchet = (uint8_t)v; break;
         }
         return;

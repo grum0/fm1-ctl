@@ -73,6 +73,18 @@ been tried). Version 0.2.0 adds:
   Following the MPC, it shows the MPC clock's tempo and how much its ticks wander (jitter). It only records while
   it is on screen.
 
+**0.3.2** (the Tanzbär's sound per style):
+
+- **Rig → Tanzbär sound follows the style and key** (on by default): picking a style, changing the key and Start
+  send the Tanzbär Lite its tone and decay settings for the style, and tune its kick to the key (toms, congas and
+  claves too in the styles that ask). The values come from Grumo's sweep recording of the unit
+  (`android/tools/tanzbar/`: `measured.tsv`, `styles.tsv`, made into `TanzData.kt` by `make_tanz.py`). The Control
+  page's Tanzbär sliders follow and stay free to change. Only when the drums play on the Tanzbär.
+- **Cowbell pitch**: Style, Fixed (one pitch in the key) or Melodic (a line on the chords, the cowbell retuned half
+  a sixteenth before each hit, with a short decay).
+- **Picking a style moves the tempo into its range** (off by default; not while following the MPC).
+- **Panic** no longer sends Reset All Controllers to the Tanzbär, and sends its sound again afterwards.
+
 ## Getting the app
 
 On GitHub: **Actions → Android APK → Run workflow** (branch `android`), then open the run and download the
@@ -138,6 +150,8 @@ forgets after a replug or a lock: the app shows a red line when the cable is in 
 - Versions are tagged in git (`v0.2.1`, `v0.2.2`, `v0.3.0`, `v0.3.1`, …; the CI `tag` job makes them, with the `TAG_TOKEN` repository secret): CI artifacts expire after 90 days. The build ID (version and
   commit) is on the launch screen and in Rig → About.
 - `android/tools/gen_fields.sh` rewrites `Fields.kt` after `gen1_engine.h` changes.
+- `python3 android/tools/tanzbar/make_tanz.py` rewrites `TanzData.kt` (the Tanzbär profile) after its `.tsv` files
+  change; `android/tools/check.sh` fails if it is stale.
 - Style drums are written as grids (`app/styles/*.grid`: `X` accent, `x` hit, `o` ghost, `r` a hit ratchets may
   double, `.` rest); `python3 app/styles/make_grids.py` turns them into `app/style_grids.h` (committed;
   `android/tools/check.sh` fails if it is stale).

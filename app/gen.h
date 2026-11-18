@@ -64,6 +64,9 @@ typedef struct {
     uint8_t couple;                      /* the bass and the kick: 0 the style's, 1 free, 2 the bass follows the kick, 3 locked to it */
     uint8_t voice;                       /* the chords' voicing: 0 the style's, 1 tight (rootless, close), 2 wide, 3 octaves */
     uint8_t ratchet;                     /* 0: the style's (by Flair); 1..127: 32nd-note hat ratchets and snare rushes */
+    uint8_t bell;                        /* 1: the cowbell lane plays a line (a tune CC goes out before each hit) */
+    uint8_t bell_cc;                     /* that CC (the Tanzbär's cowbell tune: 84); 0: none */
+    uint8_t bell_tab[12];                /* its value for each pitch class, from C; above 127: the drum can't play it */
 } gen_cfg_t;
 
 typedef void (*gen_out_t)(uint32_t status, uint32_t d1, uint32_t d2);
@@ -90,7 +93,8 @@ uint16_t gen_lane_steps(int lane);       /* the drum part's hits this bar (for t
 const char *gen_style_name(int s);
 int gen_style_cat(int s);                /* CAT_* */
 void gen_style_bpm(int s, int *lo, int *hi);   /* the tempos it sits at, as set on the MPC (half-time styles counted fast) */
-int gen_style_tanz(int s);               /* 1: suits the Tanzbär Lite (not built on sampled breaks or a live kit) */
+int gen_style_tanz(int s);
+int gen_style_bell(int s);               /* 1: the cowbell plays a line in this style (Cowbell pitch: Style) */               /* 1: suits the Tanzbär Lite (not built on sampled breaks or a live kit) */
 const char *gen_style_ref(int s);        /* the artists or scene it comes from, "" if none */
 const char *gen_cat_name(int c);         /* "Hip-hop" */
 const char *gen_cat_code(int c);         /* "HIP" */

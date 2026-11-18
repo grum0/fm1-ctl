@@ -689,7 +689,9 @@ static void test_panic(void)
 {
     fresh();
     eng_panic(vnow);
-    CHECK(count(0xB0, -1) == 48 && count(0xE0, -1) == 16, "panic: CC 123, 120, 121 and bend on 16 channels (%d, %d)", count(0xB0, -1), count(0xE0, -1));
+    /* (0.3.2: no Reset All Controllers on the Tanzbär's channel, where the drums are by default) */
+    CHECK(count(0xB0, -1) == 47 && count(0xE0, -1) == 16, "panic: CC 123, 120 on 16 channels, 121 on 15, bend on 16 (%d, %d)",
+          count(0xB0, -1), count(0xE0, -1));
 }
 
 /* 0.3.0: Chopped and screwed's last bar replays its first half; the 42 styles' metadata is complete */
@@ -836,8 +838,50 @@ static void test_qol_031(void)
     for (i = 0, n = 0; i < nlog; i++)
         n += log_[i].n == 3 && (((log_[i].m[0] & 0xF0) == 0xB0 && (log_[i].m[1] == 123 || log_[i].m[1] == 120 || log_[i].m[1] == 121)) ||
                                 ((log_[i].m[0] & 0xF0) == 0xE0 && log_[i].m[1] == 0 && log_[i].m[2] == 64));
-    CHECK(n == 64, "panic: %d of 64 reset messages", n);
+    CHECK(n == 63, "panic: %d of 63 reset messages (no CC 121 to the Tanzbar)", n);
     printf("0.3.1: song position (6 positions), continue, start, output delay, panic ok\n");
+}
+
+/* 0.3.2: the melodic cowbell: a tune CC 30-100 ms before every cowbell hit, from the table, nothing when off */
+static void test_bell_032(void)
+{
+    static const uint8_t TAB[12] = {42, 49, 57, 67, 81, 255, 4, 9, 15, 21, 28, 35};   /* the Tanzbär's, from C */
+    int i, j, k, n, bad, ccs, on;
+    for (on = 0; on < 2; on++) {
+        fresh();
+        eng_set(F_TEMPO, 120, vnow);
+        eng_set(F_STYLE, GS_MEMPHIS, vnow);
+        eng_set(F_CLOCK, CLK_INT_OUT, vnow);
+        eng_set(F_PART(GP_DRUMS, PF_ON), 1, vnow);
+        eng_bell_table(84, TAB);
+        eng_set(F_BELL, on, vnow);
+        eng_play(1, vnow);
+        run_internal(8000);
+        eng_play(0, vnow);
+        for (i = 0, n = 0, bad = 0, ccs = 0; i < nlog; i++) {
+            if (log_[i].n == 3 && (log_[i].m[0] & 0xF0) == 0xB0 && log_[i].m[1] == 84) {
+                ccs++;
+                for (k = 0; k < 12 && TAB[k] != log_[i].m[2]; k++)
+                    ;
+                bad += k == 12 || TAB[k] > 127;
+            }
+            if (on && log_[i].n == 3 && (log_[i].m[0] & 0xF0) == 0x90 && log_[i].m[2] && log_[i].m[1] == 45 &&
+                log_[i].t > log_[0].t + 2000 * MS) {
+                int64_t best = -1;
+                for (j = 0; j < nlog; j++)
+                    if (log_[j].n == 3 && (log_[j].m[0] & 0xF0) == 0xB0 && log_[j].m[1] == 84 && log_[j].t <= log_[i].t &&
+                        (log_[j].m[0] & 15) == (log_[i].m[0] & 15) && log_[j].t > best)
+                        best = log_[j].t;
+                n++;
+                bad += best < 0 || log_[i].t - best < 30 * MS || log_[i].t - best > 100 * MS;
+            }
+        }
+        if (on)
+            CHECK(n > 8 && ccs >= n && !bad, "bell: %d cowbell hits, %d tune CCs, %d wrong", n, ccs, bad);
+        else
+            CHECK(ccs == 0, "bell off: %d tune CCs", ccs);
+    }
+    printf("0.3.2: melodic cowbell ok\n");
 }
 
 int main(void)
@@ -855,6 +899,7 @@ int main(void)
     test_review_fixes();
     test_styles_030();
     test_qol_031();
+    test_bell_032();
     test_panic();
     printf(fails ? "FAILED (%d)\n" : "ok\n", fails);
     free(log_);
