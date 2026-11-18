@@ -754,13 +754,15 @@ static void drums_fill(int f, int from, rng_t *r)
         break;
     case FILL_TOMS:
         for (s = from; s < 16; s++)
-            if ((s & 1) == 0 || s >= 14)
-                drum_hit(s < (from + 16) / 2 ? L_TOMH : L_TOML, tpos(s, 0, 1, r), 90 + (int)rnd(r, 20));
+            if ((s & 1) == 0 || s >= 14) {
+                int pos = tpos(s, 0, 1, r);
+                drum_hit(s < (from + 16) / 2 ? L_TOMH : L_TOML, pos, 90 + (int)rnd(r, 20));
+            }
         break;
     case FILL_ELECTRO:
         for (s = from; s < 16; s++) {
-            int l = s < 14 ? L_SNARE : L_TOML;
-            drum_hit(l, tpos(s, 0, 0, r), 85 + (int)rnd(r, 25));
+            int l = s < 14 ? L_SNARE : L_TOML, pos = tpos(s, 0, 0, r);
+            drum_hit(l, pos, 85 + (int)rnd(r, 25));
             if (s >= 14 || chance(r, fl / 3))    /* a roll in 32nds */
                 drum_hit(l, tpos(s, 0, 0, r) + 12, 75);
         }
@@ -768,8 +770,10 @@ static void drums_fill(int f, int from, rng_t *r)
         break;
     case FILL_LIVE:
         for (s = from; s < 16; s++)
-            if (chance(r, 55))
-                drum_hit(L_SNARE, tpos(s, sty()->ls, 2, r), s == 15 ? 100 : 35 + (int)rnd(r, 30));
+            if (chance(r, 55)) {
+                int pos = tpos(s, sty()->ls, 2, r);
+                drum_hit(L_SNARE, pos, s == 15 ? 100 : 35 + (int)rnd(r, 30));
+            }
         drum_hit(L_OHH, tpos(14, 0, 1, r), 95);
         drum_hit(L_KICK, tpos(15, 0, 1, r), 85);
         break;
@@ -781,14 +785,16 @@ static void drums_fill(int f, int from, rng_t *r)
     case FILL_DNB:
         for (s = from; s < 16; s++) {
             int n = s >= 14 ? 3 : chance(r, 40) ? 2 : 1;
-            for (i = 0; i < n; i++)
-                drum_hit(chance(r, 25) ? L_KICK : L_SNARE, tpos(s, 0, 0, r) + i * (int)GEN_STEP / n,
-                         70 + (int)rnd(r, 45));
+            for (i = 0; i < n; i++) {
+                int l = chance(r, 25) ? L_KICK : L_SNARE, pos = tpos(s, 0, 0, r) + i * (int)GEN_STEP / n;
+                drum_hit(l, pos, 70 + (int)rnd(r, 45));
+            }
         }
         break;
     case FILL_BUSY:
         for (s = from; s < 16; s++) {
-            drum_hit((s & 1) ? L_SNARE : L_KICK, tpos(s, 0, 0, r), 90 + (int)rnd(r, 25));
+            int pos = tpos(s, 0, 0, r);
+            drum_hit((s & 1) ? L_SNARE : L_KICK, pos, 90 + (int)rnd(r, 25));
             if (chance(r, 40))
                 drum_hit(L_SIM2, tpos(s, 0, 0, r), 100);
         }
@@ -923,8 +929,10 @@ static void build_drums(void)
                     drum_hit(l, 0, 110);
                 else if (g.c->sim2 == 2)
                     for (s = 0; s < from; s++)
-                        if ((s == 3 || s == 6 || s == 11 || s == 14) && chance(&r, 30 + pt->dens / 2))
-                            drum_hit(l, tpos(s, st->lh, st->jit, &r), 70 + (int)rnd(&r, 30));
+                        if ((s == 3 || s == 6 || s == 11 || s == 14) && chance(&r, 30 + pt->dens / 2)) {
+                            int pos = tpos(s, st->lh, st->jit, &r);
+                            drum_hit(l, pos, 70 + (int)rnd(&r, 30));
+                        }
                 continue;
             }
             for (s = 0; s < from; s++) {
@@ -1395,7 +1403,8 @@ static void build_lead(void)
         m[n].step = (uint8_t)s;
         m[n].pos = (int16_t)tpos(s, mode == LM_WHINE ? 1 : 0, st->jit / 2, &r);
         m[n].note = (uint8_t)gclamp(nt, 0, 127);
-        m[n].fl = (uint8_t)((chance(&r, glide) && nexthit - s <= 4 ? MF_SLIDE : 0) | ((s & 3) == 0 && chance(&r, 30) ? MF_ACC : 0));
+        k = chance(&r, glide) && nexthit - s <= 4 ? MF_SLIDE : 0;   /* (one draw after the other: the same on every compiler) */
+        m[n].fl = (uint8_t)(k | ((s & 3) == 0 && chance(&r, 30) ? MF_ACC : 0));
         k = (nexthit - s) * (int)GEN_STEP;
         m[n].len = (int16_t)(mode == LM_WHINE || nexthit - s >= 3 ? k * 9 / 10 : k * 6 / 10);
         if (m[n].len > (mode == LM_WHINE ? 14 : 8) * (int)GEN_STEP)
