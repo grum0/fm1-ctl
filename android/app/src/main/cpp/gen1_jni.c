@@ -129,13 +129,42 @@ static void settle(void)                 /* (mu held, the port open) */
     memset(rep, 0, sizeof rep);
 }
 
+/* ---------------------------------------------------------------- MIDI monitor --- *
+ * The real-time side (the output sink and MIDI in, both under mu, so one writer at a time) writes fixed-size
+ * records into a ring while the monitor is open, and nothing else: no allocation, no logging, no lock of its own.
+ * The screen reads it without the lock (nMonRead); a record overwritten while being read is dropped. */
+#define MON_N 1024u
+typedef struct { int64_t t; uint8_t dir, len, b[3]; } mon_t;   /* dir 0 out, 1 in */
+static mon_t mon[MON_N];
+static uint32_t mon_w;                   /* records written, ever (atomic) */
+static int mon_on;                       /* (atomic) */
+
+static void mon_put(int dir, int64_t t, const uint8_t *m, int len)
+{
+    uint32_t w;
+    mon_t *r;
+    if (!__atomic_load_n(&mon_on, __ATOMIC_RELAXED))
+        return;
+    w = __atomic_load_n(&mon_w, __ATOMIC_RELAXED);
+    r = &mon[w % MON_N];
+    r->t = t;
+    r->dir = (uint8_t)dir;
+    r->len = (uint8_t)(len > 3 ? 3 : len);
+    r->b[0] = m[0];
+    r->b[1] = len > 1 ? m[1] : 0;
+    r->b[2] = len > 2 ? m[2] : 0;
+    __atomic_store_n(&mon_w, w + 1u, __ATOMIC_RELEASE);
+}
+
 static void sink(void *ud, int64_t when, const uint8_t *m, int len)   /* (mu held) */
 {
     (void)ud;
     if (!out_port)
         return;                          /* (not tracked: it never went out) */
-    if (AMidiInputPort_sendWithTimestamp(out_port, m, (size_t)len, when <= now_ns() ? 0 : when) >= 0)
+    if (AMidiInputPort_sendWithTimestamp(out_port, m, (size_t)len, when <= now_ns() ? 0 : when) >= 0) {
         track(when, m, len);
+        mon_put(0, when, m, len);
+    }
 }
 
 static void *loop(void *arg)
@@ -225,6 +254,50 @@ JNIEXPORT void JNICALL J(nCloseOut)(JNIEnv *env, jobject self)
 }
 
 /* MIDI in: the realtime bytes that matter (clock, start, continue, stop), stamped as the USB read them */
+/* MIDI in, a byte at a time (a message may be split over two packets): the clock bytes and Song Position Pointer
+ * go to the engine, every whole message to the monitor. Running status is kept; real-time bytes may come between
+ * a message's bytes; system exclusive is skipped. (mu held) */
+static uint8_t in_st, in_need, in_have, in_msg[3], in_sysex;
+static void in_byte(uint8_t b, int64_t t)
+{
+    if (b >= 0xF8) {                             /* real time: on its own, anywhere */
+        if (b == 0xF8 || b == 0xFA || b == 0xFB || b == 0xFC)
+            eng_midi_clock(b, t);
+        mon_put(1, t, &b, 1);
+        return;
+    }
+    if (b & 0x80u) {
+        in_sysex = b == 0xF0;
+        in_have = 0;
+        in_st = b;
+        in_msg[0] = b;
+        if (b >= 0xF0) {
+            in_need = b == 0xF2 ? 2 : (b == 0xF1 || b == 0xF3) ? 1 : 0;
+            if (!in_need) {
+                if (!in_sysex && b != 0xF7)
+                    mon_put(1, t, &b, 1);
+                in_st = 0;                       /* (system messages cancel running status) */
+            }
+        } else {
+            in_need = (b & 0xF0u) == 0xC0u || (b & 0xF0u) == 0xD0u ? 1 : 2;
+        }
+        return;
+    }
+    if (in_sysex || !in_st)
+        return;
+    if (in_have == 0)
+        in_msg[0] = in_st;
+    in_msg[1 + in_have++] = b;
+    if (in_have < in_need)
+        return;
+    if (in_st == 0xF2)
+        eng_midi_spp(in_msg[1] | in_msg[2] << 7, t);
+    mon_put(1, t, in_msg, 1 + in_need);
+    in_have = 0;
+    if (in_st >= 0xF0)
+        in_st = 0;
+}
+
 JNIEXPORT void JNICALL J(nMidiIn)(JNIEnv *env, jobject self, jbyteArray data, jint off, jint count, jlong ts)
 {
     jbyte buf[256];
@@ -237,12 +310,64 @@ JNIEXPORT void JNICALL J(nMidiIn)(JNIEnv *env, jobject self, jbyteArray data, ji
     if (t <= 0 || t > now || t < now - 1000000000LL)
         t = now;
     pthread_mutex_lock(&mu);
-    for (i = 0; i < n; i++) {
-        uint8_t b = (uint8_t)buf[i];
-        if (b == 0xF8 || b == 0xFA || b == 0xFB || b == 0xFC)
-            eng_midi_clock(b, t);
-    }
+    for (i = 0; i < n; i++)
+        in_byte((uint8_t)buf[i], t);
     pthread_mutex_unlock(&mu);
+}
+
+/* the monitor: on while the screen shows it (records are only made then) */
+JNIEXPORT void JNICALL J(nMonOpen)(JNIEnv *env, jobject self, jint on)
+{
+    (void)env, (void)self;
+    __atomic_store_n(&mon_on, on ? 1 : 0, __ATOMIC_RELAXED);
+}
+
+/* The records from `since` (a count of records, as returned before; 0 at first) to now, at most what the arrays
+ * hold: t[] their times (ns, the same clock as the engine's: out the time they sound, in the time they arrived),
+ * b[] five bytes each (direction 0 out / 1 in, length, the message). res[0] the count to pass next time, res[1]
+ * how many were filled in, res[2] how many were lost (overwritten before they were read). Takes no lock. */
+JNIEXPORT void JNICALL J(nMonRead)(JNIEnv *env, jobject self, jint since, jlongArray t, jbyteArray b, jintArray res)
+{
+    static jlong ts[256];
+    static jbyte bs[256 * 5];
+    jint r[3];
+    uint32_t w, from = (uint32_t)since, i, n, cap, lost = 0;
+    (void)self;
+    cap = (uint32_t)(*env)->GetArrayLength(env, t);
+    if (cap > 256)
+        cap = 256;
+    w = __atomic_load_n(&mon_w, __ATOMIC_ACQUIRE);
+    if (w - from > MON_N) {                      /* (the ring went round since the last read) */
+        lost = w - from - MON_N;
+        from = w - MON_N;
+    }
+    n = w - from < cap ? w - from : cap;
+    for (i = 0; i < n; i++) {
+        const mon_t *m = &mon[(from + i) % MON_N];
+        ts[i] = m->t;
+        bs[i * 5] = (jbyte)m->dir;
+        bs[i * 5 + 1] = (jbyte)m->len;
+        bs[i * 5 + 2] = (jbyte)m->b[0];
+        bs[i * 5 + 3] = (jbyte)m->b[1];
+        bs[i * 5 + 4] = (jbyte)m->b[2];
+    }
+    w = __atomic_load_n(&mon_w, __ATOMIC_ACQUIRE);
+    if (w - from > MON_N) {                      /* some were overwritten while being copied: drop them */
+        uint32_t bad = w - from - MON_N;
+        if (bad > n)
+            bad = n;
+        memmove(ts, ts + bad, (n - bad) * sizeof ts[0]);
+        memmove(bs, bs + bad * 5, (n - bad) * 5);
+        n -= bad;
+        lost += bad;
+        from += bad;
+    }
+    (*env)->SetLongArrayRegion(env, t, 0, (jsize)n, ts);
+    (*env)->SetByteArrayRegion(env, b, 0, (jsize)(n * 5), bs);
+    r[0] = (jint)(from + n);
+    r[1] = (jint)n;
+    r[2] = (jint)lost;
+    (*env)->SetIntArrayRegion(env, res, 0, 3, r);
 }
 
 JNIEXPORT jint JNICALL J(nGet)(JNIEnv *env, jobject self, jint id)

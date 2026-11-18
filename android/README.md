@@ -60,6 +60,19 @@ been tried). Version 0.2.0 adds:
 - **Rig → Settings → Hide styles that don't suit the Tanzbär**: leaves out of the picker the styles built on sampled
   breaks or a live kit (off by default; the style playing always stays).
 
+**0.3.1** (playing with the MPC):
+
+- **Panic** (Play's top bar) now also sends All Sound Off, Reset All Controllers and pitch bend centred on every
+  channel, besides All Notes Off. The transport keeps going.
+- **Song Position and Continue** when following the MPC: move the MPC's playhead while stopped and press Play
+  (Continue): the parts play on from there, bar count, fills and the sequencer included. Start still begins at the
+  top.
+- **Rig → Following the MPC → Output delay** (0–40 ms, default 5): how long after each MPC clock tick the app's
+  notes go out. Raise it if the app sounds early against the MPC's own tracks, lower it if it drags.
+- **Rig → MIDI monitor**: every message going out and coming in, with its time; Pause, Clear, Hide clock ticks.
+  Following the MPC, it shows the MPC clock's tempo and how much its ticks wander (jitter). It only records while
+  it is on screen.
+
 ## Getting the app
 
 On GitHub: **Actions → Android APK → Run workflow** (branch `android`), then open the run and download the
@@ -122,7 +135,7 @@ forgets after a replug or a lock: the app shows a red line when the cable is in 
   audition on the MPC before installing an APK. `render dump STYLE MODE` prints every message, for diffs.
 - `sh android/tools/gen_size.sh`: Flash and RAM of `app/gen.c` compiled for a 32-bit microcontroller (Cortex-M3;
   the FM-1's JieLi chip needs the firmware builder's toolchain, so this is an estimate; RAM carries over closely).
-- Versions are tagged in git (`v0.2.1`, `v0.2.2`, `v0.3.0`, …): CI artifacts expire after 90 days. The build ID (version and
+- Versions are tagged in git (`v0.2.1`, `v0.2.2`, `v0.3.0`, `v0.3.1`, …; the CI `tag` job makes them, with the `TAG_TOKEN` repository secret): CI artifacts expire after 90 days. The build ID (version and
   commit) is on the launch screen and in Rig → About.
 - `android/tools/gen_fields.sh` rewrites `Fields.kt` after `gen1_engine.h` changes.
 - Style drums are written as grids (`app/styles/*.grid`: `X` accent, `x` hit, `o` ghost, `r` a hit ratchets may

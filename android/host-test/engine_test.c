@@ -689,7 +689,7 @@ static void test_panic(void)
 {
     fresh();
     eng_panic(vnow);
-    CHECK(count(0xB0, -1) == 16, "panic sends all notes off on 16 channels (%d)", count(0xB0, -1));
+    CHECK(count(0xB0, -1) == 48 && count(0xE0, -1) == 16, "panic: CC 123, 120, 121 and bend on 16 channels (%d, %d)", count(0xB0, -1), count(0xE0, -1));
 }
 
 /* 0.3.0: Chopped and screwed's last bar replays its first half; the 42 styles' metadata is complete */
@@ -735,6 +735,111 @@ static void test_styles_030(void)
     CHECK(a > 2 && a == b && !bad, "chop: first half %d notes, second %d, %d differ", a, b, bad);
 }
 
+/* 0.3.1: Song Position Pointer and Continue when following, the output delay trim, the fuller panic */
+static int64_t spp_tick;
+static void spp_ticks(int n)
+{
+    while (n-- > 0) {
+        vnow += spp_tick;
+        eng_pump(vnow);
+        eng_midi_clock(0xF8, vnow);
+    }
+}
+static int spp_take(int64_t mark, uint8_t *nv, int64_t *tt, int cap)   /* drum note-ons after mark */
+{
+    int i, k = 0;
+    for (i = 0; i < nlog && k < cap; i++)
+        if (log_[i].n == 3 && (log_[i].m[0] & 0xF0) == 0x90 && log_[i].m[2] && log_[i].at > mark) {
+            nv[k * 2] = log_[i].m[1];
+            nv[k * 2 + 1] = log_[i].m[2];
+            tt[k++] = log_[i].t - mark;
+        }
+    return k;
+}
+static void spp_setup(void)
+{
+    fresh();
+    eng_set(F_TEMPO, 100, vnow);
+    eng_set(F_CLOCK, CLK_EXT, vnow);
+    eng_set(F_PART(GP_DRUMS, PF_ON), 1, vnow);
+    eng_set(F_PART(GP_BASS, PF_ON), 1, vnow);
+}
+static void test_qol_031(void)
+{
+    static const int POS[] = {0, 5, 16, 37, 70, 131};
+    static uint8_t ra[512], rb[512];
+    static int64_t ta[256], tb[256];
+    int i, j, na, nb, bad, n;
+    int64_t mark;
+    spp_tick = 2500000000LL / 100;
+    for (j = 0; j < (int)(sizeof POS / sizeof POS[0]); j++) {
+        int p = POS[j];
+        spp_setup();                             /* the reference: played from the top to the position */
+        eng_midi_clock(0xFA, vnow);
+        spp_ticks(p * 6);
+        mark = vnow;
+        spp_ticks(96);
+        na = spp_take(mark, ra, ta, 256);
+        spp_setup();                             /* Start, a while, Stop, SPP, Continue */
+        eng_midi_clock(0xFA, vnow);
+        spp_ticks(40);
+        eng_midi_clock(0xFC, vnow);
+        check_no_stuck("spp stop");
+        eng_midi_spp(p, vnow);
+        eng_midi_clock(0xFB, vnow);
+        CHECK(gen_bar() == (int)((unsigned)p / 16u % (unsigned)gen_phrase_bars()) && gen_step() == p % 16,
+              "spp %d: at bar %d step %d", p, gen_bar(), gen_step());
+        mark = vnow;
+        spp_ticks(96);
+        nb = spp_take(mark, rb, tb, 256);
+        for (i = 0, bad = 0; i < na && i < nb; i++)
+            bad += ra[i * 2] != rb[i * 2] || ra[i * 2 + 1] != rb[i * 2 + 1] || ta[i] != tb[i];
+        CHECK(na > 4 && na == nb && !bad, "spp %d: from the top %d notes, after Continue %d, %d differ", p, na, nb, bad);
+        eng_midi_clock(0xFC, vnow);
+        check_no_stuck("spp end");
+    }
+    /* Continue with no SPP goes on where Stop left it */
+    spp_setup();
+    eng_midi_clock(0xFA, vnow);
+    spp_ticks(6 * 20);
+    eng_midi_clock(0xFC, vnow);
+    eng_midi_clock(0xFB, vnow);
+    CHECK(gen_bar() == 1 % gen_phrase_bars() && gen_step() == 4, "continue: at bar %d step %d", gen_bar(), gen_step());
+    eng_midi_clock(0xFC, vnow);
+    /* Start after an SPP starts from the top */
+    eng_midi_spp(70, vnow);
+    eng_midi_clock(0xFA, vnow);
+    CHECK(gen_bar() == 0 && gen_step() == 0, "start after spp: at bar %d step %d", gen_bar(), gen_step());
+    eng_midi_clock(0xFC, vnow);
+    /* the output delay trim moves everything a tick makes */
+    for (j = 0; j < 2; j++) {
+        int d = j ? 17 : 0;
+        spp_setup();
+        eng_set(F_OUT_DELAY, d, vnow);
+        eng_midi_clock(0xFA, vnow);
+        nlog = 0;
+        spp_ticks(48);
+        for (i = 0, bad = 0, n = 0; i < nlog; i++)
+            if (log_[i].n == 3 && (log_[i].m[0] & 0xF0) == 0x90) {
+                n++;
+                bad += log_[i].t < log_[i].at + d * MS;
+            }
+        CHECK(n > 4 && !bad, "delay %d ms: %d of %d notes early", d, bad, n);
+        eng_midi_clock(0xFC, vnow);
+    }
+    CHECK(eng_get(F_OUT_DELAY) == 17, "delay setting kept");
+    eng_set(F_OUT_DELAY, 99, vnow);
+    CHECK(eng_get(F_OUT_DELAY) == 40, "delay clamped to 40 ms");
+    /* panic: CC 123, 120, 121 and bend centred on every channel */
+    nlog = 0;
+    eng_panic(vnow);
+    for (i = 0, n = 0; i < nlog; i++)
+        n += log_[i].n == 3 && (((log_[i].m[0] & 0xF0) == 0xB0 && (log_[i].m[1] == 123 || log_[i].m[1] == 120 || log_[i].m[1] == 121)) ||
+                                ((log_[i].m[0] & 0xF0) == 0xE0 && log_[i].m[1] == 0 && log_[i].m[2] == 64));
+    CHECK(n == 64, "panic: %d of 64 reset messages", n);
+    printf("0.3.1: song position (6 positions), continue, start, output delay, panic ok\n");
+}
+
 int main(void)
 {
     test_ranges();
@@ -749,6 +854,7 @@ int main(void)
     test_stuck_notes();
     test_review_fixes();
     test_styles_030();
+    test_qol_031();
     test_panic();
     printf(fails ? "FAILED (%d)\n" : "ok\n", fails);
     free(log_);

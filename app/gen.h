@@ -73,6 +73,7 @@ int gen_valid(const gen_cfg_t *c);
 void gen_init(gen_cfg_t *c, gen_out_t out);
 void gen_start(void);                    /* from the top */
 void gen_continue(void);
+void gen_locate(uint32_t sixteenths);   /* Song Position Pointer: where the next Continue starts */
 void gen_stop(void);                     /* every note off, bends and controllers back */
 void gen_subtick(void);                  /* 96 a quarter note while running (the tick: plays, builds nothing) */
 void gen_service(void);                  /* the main loop: builds the bars the tick plays */

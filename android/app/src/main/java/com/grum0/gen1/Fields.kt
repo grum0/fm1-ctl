@@ -45,7 +45,8 @@ object F {
     const val COUPLE = 127
     const val VOICE = 128
     const val RATCHET = 129
-    const val COUNT = 130
+    const val OUT_DELAY = 130
+    const val COUNT = 131
 
     const val PF_ON = 0
     const val PF_CHAN = 1

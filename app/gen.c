@@ -1752,6 +1752,19 @@ void gen_start(void)
     g.run = 1;
 }
 void gen_continue(void) { g.run = 1; }
+/* Song Position Pointer: the next Continue starts this many sixteenths from the top. The bar there is made fresh
+ * (a pure function of the bar, so it is the bar the song had there) and joined partway through. */
+void gen_locate(uint32_t sixteenths)
+{
+    int p;
+    if (g.c)
+        for (p = 0; p < GEN_NPARTS; p++)
+            gen_part_off(p);
+    g.bar = sixteenths / (GEN_BAR / GEN_STEP);
+    g.pos = (sixteenths % (GEN_BAR / GEN_STEP)) * GEN_STEP;
+    gb[0].ok = 0;                                        /* both: the one made ahead may hold this very bar, and */
+    gb[1].ok = 0;                                        /* gen_service would then see nothing to do */
+}
 void gen_stop(void)
 {
     int p;

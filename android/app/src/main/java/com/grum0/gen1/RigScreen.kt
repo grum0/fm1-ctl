@@ -94,6 +94,18 @@ fun RigScreen(s: Store) {
             }
         }
 
+        Section("Following the MPC, and the MIDI monitor") {
+            StepRow(s, "Output delay after each MPC clock tick (ms)", F.OUT_DELAY)
+            Text(
+                "Following the MPC, everything a clock tick plays goes out this long after the tick arrives (5 ms " +
+                    "as before). Raise it if the app's parts sound early against the MPC's own tracks, lower it if " +
+                    "they drag. The MPC's Song Position and Continue are followed: Continue plays on from where the " +
+                    "MPC was moved to.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            MidiMonitor(s)
+        }
+
         Section("Tuning") {
             StepRow(s, "Lead pitch bend range (semitones)", F.BEND)
             StepRow(s, "MBase kick: lowest note", F.MB_LO, { noteName(it) })

@@ -8,14 +8,15 @@ static const uint8_t RATE_TICKS[NRATE] = {24, 12, 8, 6, 4, 3};
 #define SEQ_GATE 3u
 #define MS 1000000LL
 #define EXT_LOST_NS (300 * MS)               /* the followed clock counts as gone after this long without a tick */
-#define EXT_OUT_DELAY_NS (5 * MS)            /* following: what a tick makes is stamped this long after it arrived (finding 8) */
+#define EXT_OUT_DELAY_DEF 5                  /* ms: following, what a tick makes is stamped this long after it arrived */
+#define EXT_OUT_DELAY_NS ((int64_t)E.c.out_delay * MS)   /* (finding 8; F_OUT_DELAY sets it, by ear against the MPC) */
 
 typedef struct { uint8_t steps, hits, rot, note, mute; uint16_t pat; } trk_t;
 typedef struct {
     uint16_t tempo;                      /* 40..240 */
     uint8_t clock, keys_chan, vel, human;
     uint8_t arp_on, arp_mode, arp_rate, arp_oct, arp_latch;
-    uint8_t seq_ch;
+    uint8_t seq_ch, out_delay;
     trk_t trk[NTRACKS];
 } ecfg_t;
 
@@ -84,6 +85,7 @@ static void ecfg_defaults(void)
     E.c.arp_rate = RATE_16;
     E.c.arp_oct = 1;
     E.c.seq_ch = 9;
+    E.c.out_delay = EXT_OUT_DELAY_DEF;
     for (k = 0; k < NTRACKS; k++) {
         trk_t *t = &E.c.trk[k];
         t->steps = TRK_DEFAULT[k][0];
@@ -104,6 +106,7 @@ void eng_range(int id, int *lo, int *hi)
         case F_FILL_EVERY: h = 6; break;
         case F_HAT_STRAIGHT: case F_SPACE: h = 100; break;
         case F_SPREAD: l = 1; h = 24; break;
+        case F_OUT_DELAY: h = 40; break;
         default: break;                  /* flam, ratchets: 0..127 */
         }
     } else if (id >= F_TRK0) {
@@ -170,6 +173,7 @@ int eng_get(int id)
         case F_SPREAD: return E.g.spread;
         case F_COUPLE: return E.g.couple;
         case F_VOICE: return E.g.voice;
+        case F_OUT_DELAY: return E.c.out_delay;
         default: return E.g.ratchet;
         }
     }
@@ -501,10 +505,26 @@ void eng_midi_clock(uint8_t b, int64_t at)
         seq_start(1);
     } else if (b == 0xFB) {
         seq_start(0);
+        gen_service();                           /* the bar it continues in, ready before the next tick */
     } else if (b == 0xFC) {
         seq_stop();
         arp_off();                               /* its note-off would wait for ticks the MPC may not send */
     }
+}
+
+/* Song Position Pointer (F2): the MPC was moved to `sixteenths` from the top while stopped; its Continue (FB) plays
+ * from there. The bar count, the phrase rules and the sequencer follow. (While running it is taken as a jump.) */
+void eng_midi_spp(int sixteenths, int64_t at)
+{
+    if (E.c.clock != CLK_EXT || sixteenths < 0)
+        return;
+    E.now = at;
+    E.t_cur = at + EXT_OUT_DELAY_NS;
+    arp_off();
+    seq_offs();
+    E.seq_tick = (uint32_t)sixteenths * SEQ_TICKS;
+    E.seq_step = (uint32_t)sixteenths;
+    gen_locate((uint32_t)sixteenths);
 }
 
 void eng_play(int on, int64_t now)
@@ -561,8 +581,12 @@ void eng_panic(int64_t now)
         gen_part_off(p);
     E.npool = 0;
     memset(E.held, 0, sizeof E.held);
-    for (ch = 0; ch < 16; ch++)                  /* and whatever else is sounding: all notes off */
-        send3(0xB0u | (uint32_t)ch, 123, 0);
+    for (ch = 0; ch < 16; ch++) {                /* and whatever else is sounding, on every channel */
+        send3(0xB0u | (uint32_t)ch, 123, 0);     /* all notes off */
+        send3(0xB0u | (uint32_t)ch, 120, 0);     /* all sound off */
+        send3(0xB0u | (uint32_t)ch, 121, 0);     /* reset all controllers */
+        send3(0xE0u | (uint32_t)ch, 0, 64);      /* pitch bend to the middle */
+    }
 }
 
 void eng_set(int id, int v, int64_t now)
@@ -592,6 +616,7 @@ void eng_set(int id, int v, int64_t now)
         case F_SPREAD: E.g.spread = (uint8_t)v; break;
         case F_COUPLE: E.g.couple = (uint8_t)v; break;
         case F_VOICE: E.g.voice = (uint8_t)v; break;
+        case F_OUT_DELAY: E.c.out_delay = (uint8_t)v; break;
         default: E.g.ratchet = (uint8_t)v; break;
         }
         return;

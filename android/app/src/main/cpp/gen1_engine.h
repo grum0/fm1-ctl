@@ -32,6 +32,7 @@ enum {
     F_TRK0 = F_PART0 + GEN_NPARTS * 8,   /* + track * 5 + TF_* */
     F_X0 = F_TRK0 + NTRACKS * 5,         /* added since: at the end, so settings saved before keep their numbers */
     F_HAT_DENS = F_X0, F_FLAM, F_FILL_EVERY, F_HAT_STRAIGHT, F_SPACE, F_SPREAD, F_COUPLE, F_VOICE, F_RATCHET,
+    F_OUT_DELAY,                         /* 0.3.1: following, ms from a tick's arrival to what it plays (default 5) */
     F_COUNT
 };
 enum { PF_ON, PF_CHAN, PF_DEV, PF_VAR, PF_DENS, PF_FLAIR, PF_MODE, PF_OCT };
@@ -50,8 +51,10 @@ void eng_defaults(int64_t now);                  /* everything back to its defau
 
 int64_t eng_pump(int64_t now);                   /* the internal clock and the generators' main loop; returns the time to call again by */
 void eng_midi_clock(uint8_t byte, int64_t at);   /* F8 FA FB FC from MIDI in, as received at `at` */
+void eng_midi_spp(int sixteenths, int64_t at);   /* F2 (Song Position Pointer) from MIDI in */
 void eng_play(int on, int64_t now);              /* the transport */
-void eng_panic(int64_t now);                     /* every note off, on every channel */
+void eng_panic(int64_t now);                     /* every note off; all notes off, all sound off, reset controllers
+                                                  * and pitch bend centred on every channel (transport unchanged) */
 void eng_send_now(uint8_t st, uint8_t d1, uint8_t d2, int64_t now);   /* a message from the screen: keys, knobs, wheels */
 void eng_arp_press(int note);
 void eng_arp_release(int note);
