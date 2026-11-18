@@ -97,11 +97,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Tag the version
-        # (needs Settings → Actions → General → Workflow permissions: "Read and write"; until then it only warns,
-        # and the build stays green)
+        # GitHub refuses the workflow's own token a tag on these commits (they change workflow files that the
+        # default branch lacks, which needs the "workflows" permission no GITHUB_TOKEN has). So it uses the repository
+        # secret TAG_TOKEN, a fine-grained token with Contents and Workflows read/write on this repository; without
+        # it, it tries the workflow token, only warns, and the build stays green.
         continue-on-error: true
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.TAG_TOKEN || github.token }}
         run: |
           set -eu
           tag_if_new() {
