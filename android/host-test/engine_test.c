@@ -594,6 +594,97 @@ static void test_stuck_notes(void)
     check_no_stuck("arp, the MPC's Stop");
 }
 
+/* Round 1 (0.2.2): review findings 7, 8, 10, 13, 14 */
+static void test_review_fixes(void)
+{
+    int i, j, k, bad, n, d0, d1;
+    int64_t tick, t0;
+    /* 7: following, two ticks in one USB packet (the same time) keep the tick length; app at 60, MPC at 180 */
+    fresh();
+    eng_set(F_TEMPO, 60, vnow);
+    eng_set(F_CLOCK, CLK_EXT, vnow);
+    tick = 2500000000LL / 180;
+    for (i = 0; i < 48; i++) {
+        vnow += tick;
+        eng_pump(vnow);
+        eng_midi_clock(0xF8, vnow);
+        if (i % 8 == 7)                          /* now and then a tick at once after the last */
+            eng_midi_clock(0xF8, vnow);
+        if (i > 8 && i % 8 == 7)
+            CHECK(E.ext_per > tick * 8 / 10 && E.ext_per < tick * 12 / 10, "finding 7: tick length %lld ns after two ticks at once (MPC %lld)",
+                  (long long)E.ext_per, (long long)tick);
+    }
+    /* 8: following, everything a tick makes (its own notes too) is stamped the fixed delay or more after it arrived */
+    fresh();
+    eng_set(F_CLOCK, CLK_EXT, vnow);
+    eng_set(F_PART(GP_DRUMS, PF_ON), 1, vnow);
+    eng_set(F_PART(GP_BASS, PF_ON), 1, vnow);
+    eng_midi_clock(0xFA, vnow);
+    nlog = 0;
+    run_external(4000, 100, 300000);
+    for (i = 0, bad = 0, n = 0; i < nlog; i++)
+        if (log_[i].n == 3 && ((log_[i].m[0] & 0xF0) == 0x90 || (log_[i].m[0] & 0xF0) == 0x80)) {
+            n++;
+            bad += log_[i].t < log_[i].at + EXT_OUT_DELAY_NS;
+        }
+    CHECK(n > 20 && bad == 0, "finding 8: %d of %d notes stamped less than the fixed delay after their tick", bad, n);
+    /* 10: after a stall of 250 ms the clock's ticks and the generators' subticks are still in step */
+    fresh();
+    eng_set(F_CLOCK, CLK_INT_OUT, vnow);
+    eng_set(F_PART(GP_DRUMS, PF_ON), 1, vnow);
+    eng_play(1, vnow);
+    run_internal(1500);
+    d0 = (int)((E.sub_n - (uint32_t)g.pos) & 3u);
+    vnow += 250 * MS;                            /* the thread held up */
+    run_internal(1500);
+    d1 = (int)((E.sub_n - (uint32_t)g.pos) & 3u);
+    CHECK(d0 == d1, "finding 10: after a stall the clock's tick phase moved from %d to %d against the generators", d0, d1);
+    eng_play(0, vnow);
+    check_no_stuck("stall");
+    /* 13: Cut-A-Dor, Space 70 and hats in 16ths: no closed hat in the half bars Space clears (bars 5-8 of 8) */
+    for (k = 0; k < CAD_NSTYLES; k++) {
+        fresh();
+        eng_set(F_CLOCK, CLK_INT, vnow);
+        eng_set(F_PART(GP_DRUMS, PF_ON), 1, vnow);
+        eng_set(F_PART(GP_DRUMS, PF_CHAN), 3, vnow);
+        eng_set(F_PART(GP_DRUMS, PF_MODE), DM_CAD0 + k, vnow);
+        eng_set(F_FILL_EVERY, 1, vnow);
+        eng_set(F_SPACE, 70, vnow);
+        eng_set(F_HAT_DENS, 3, vnow);
+        eng_play(1, vnow);
+        run_internal(16100);
+        eng_play(0, vnow);
+        t0 = -1;
+        for (i = 0; i < nlog && t0 < 0; i++)
+            if (log_[i].n == 3 && log_[i].m[0] == 0x93 && log_[i].m[1] == 36 && log_[i].m[2])
+                t0 = log_[i].t;              /* the first kick: bar 1, beat 1 */
+        for (i = 0, bad = 0; i < nlog; i++)
+            if (log_[i].n == 3 && log_[i].m[0] == 0x93 && log_[i].m[1] == 43 && log_[i].m[2] && t0 >= 0) {
+                int64_t sx = (log_[i].t - t0) * 2 / (125 * MS);   /* in 32nds at 120 BPM */
+                int bar = (int)(sx / 32), half = (int)(sx % 32);
+                bad += bar % 8 >= 4 && half >= 17 && half <= 29;   /* (31: the next bar's first hat, a little early) */
+            }
+        CHECK(t0 >= 0 && bad == 0, "finding 13: %s, %d closed hats in the gaps Space leaves", CAD_NAME[k], bad);
+    }
+    /* 14: bass locked to the kick in Grids and Turing: every bass note has a kick with it */
+    for (k = 0; k < 2; k++)
+        for (j = 0; j < 4; j++) {
+            run_band(j * 7, 11 + j, F_PART(GP_DRUMS, PF_MODE), k ? DM_TURING : DM_GRIDS, F_COUPLE, 3);
+            for (i = 0, bad = 0, n = 0; i < nlog; i++)
+                if (log_[i].n == 3 && log_[i].m[0] == 0x90 && log_[i].m[2]) {
+                    int q, hit = 0;
+                    n++;
+                    for (q = 0; q < nlog && !hit; q++)
+                        hit = log_[q].n == 3 && log_[q].m[0] == 0x93 && log_[q].m[1] == 36 && log_[q].m[2] &&
+                              llabs(log_[q].t - log_[i].t) < 40 * MS;
+                    bad += !hit;
+                }
+            CHECK(n > 0 && bad == 0, "finding 14: %s, %s: %d of %d bass notes have no kick under them", k ? "Turing" : "Grids",
+                  gen_style_name(j * 7), bad, n);
+        }
+    printf("review fixes 7, 8, 10, 13, 14: ok\n");
+}
+
 static void test_panic(void)
 {
     fresh();
@@ -613,6 +704,7 @@ int main(void)
     test_bass_range();
     test_new_controls();
     test_stuck_notes();
+    test_review_fixes();
     test_panic();
     printf(fails ? "FAILED (%d)\n" : "ok\n", fails);
     free(log_);

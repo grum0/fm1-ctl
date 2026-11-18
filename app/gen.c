@@ -735,12 +735,55 @@ static int style_hit(int l, int step, int dens)
         return 30 + (int)rnd(&r, 20);
     return (w >= 8 ? 108 : 82) + (int)rnd(&r, 14) + ((step & 3) == 0 ? 4 : 0);
 }
-/* the kick this bar, step by step (0, or its velocity), for the parts that go with it: Cut-A-Dor's when the drums
- * are, else the style's lane at this density */
+static uint32_t grids_level(uint32_t step, uint32_t ch, uint32_t x, uint32_t y);
+/* Turing mode's shift register for lane k (0 kick … 4 rim) this bar: sixteen bits, a few flipped each bar of the
+ * phrase (Mutate: more of them). The drum part and kick_src make the same one. */
+static const uint8_t TURING_PCT[5] = {26, 14, 62, 8, 12};       /* percent of steps on */
+static uint16_t turing_reg(int k, int dens)
+{
+    int pb = (int)(bb % (uint32_t)phrase_len()), s, b;
+    uint16_t reg = 0;
+    rng_t q;
+    q.s = pseed(GP_DRUMS, 0x400u + (uint32_t)k);
+    for (s = 0; s < 16; s++)
+        if ((int)rnd(&q, 100) < TURING_PCT[k] * (40 + dens) / 104)
+            reg |= (uint16_t)(1u << s);
+    if (k == 0)
+        reg |= 1u;
+    if (k == 1)
+        reg |= 1u << 4 | 1u << 12;
+    for (b = 0; b <= pb; b++) {
+        int flips = b ? 1 + g.c->mutate / 3 : 0;
+        q.s = gh(pseed(GP_DRUMS, 0x500u + (uint32_t)k), (uint32_t)b + epoch() * 64u);
+        while (flips--)
+            reg ^= (uint16_t)(1u << rnd(&q, 16));
+    }
+    return reg;
+}
+/* Grids mode's kick on a sixteenth this bar (0, or its velocity): the drum part's first draw and map level */
+static int grids_kick(int step, int dens)
+{
+    uint32_t x = (uint32_t)gclamp(g.c->gx, 0, 127) * 2u, y = (uint32_t)gclamp(g.c->gy, 0, 127) * 2u, lev, pert;
+    rng_t r;
+    r.s = gh(pseed(GP_DRUMS, 1), bb % (uint32_t)phrase_len() + epoch() * 64u);
+    pert = rnd(&r, (uint32_t)g.c->chaos / 2u + 1u);
+    lev = grids_level((uint32_t)step * 2u, 0u, x, y);
+    lev = lev + pert > 255u ? 255u : lev + pert;
+    return lev > (uint32_t)(255 - dens * 2) ? (lev > 192u ? 112 : 84) : 0;
+}
+/* the kick this bar, step by step (0, or its velocity), for the parts that go with it (the bass's coupling, the
+ * melodic kick): the kick the drum part's mode plays (Cut-A-Dor, Grids, Turing), else the style's lane, at this
+ * density; whether the drum part is on or not */
 static int kick_src(int step, int dens)
 {
-    int cs = drum_cad();
-    return cs >= 0 ? cad_pat(cs)->vel[C_KICK][(int)(bb & 1u) * 16 + step] : style_hit(L_KICK, step, dens);
+    int cs = drum_cad(), m = g.c->part[GP_DRUMS].mode;
+    if (cs >= 0)
+        return cad_pat(cs)->vel[C_KICK][(int)(bb & 1u) * 16 + step];
+    if (m == DM_GRIDS)
+        return grids_kick(step, dens);
+    if (m == DM_TURING)
+        return (turing_reg(0, dens) >> step & 1u) ? ((step & 3) == 0 ? 105 : 80) : 0;
+    return style_hit(L_KICK, step, dens);
 }
 
 static void drums_fill(int f, int from, rng_t *r)
@@ -863,7 +906,8 @@ static void build_drums(void)
         }
         if (g.c->hat_dens)                               /* Hat density: the steps the pattern left empty */
             for (s = 0; s < 16; s++)
-                if (hat_keep(s) && !(hats >> s & 1u) && !cad_gap(g.c->space, C_HAT, half + s))
+                if (hat_keep(s) && !(hats >> s & 1u) && !cad_gap(g.c->space, C_HAT, half + s) &&
+                    !(g.c->space > 60 && bb % 8u >= 4u && s >= 8))   /* (the same gaps as the pattern's hats) */
                     drum_hit(L_CHH, gclamp(s * (int)GEN_STEP + ((s & 1) ? hat_sw(sw0) : 0), 0, (int)GEN_BAR - 1),
                              (s & 3) == 0 ? 78 : (s & 3) == 2 ? 51 : 35);
     } else if (pt->mode == DM_GRIDS) {
@@ -890,25 +934,9 @@ static void build_drums(void)
     } else if (pt->mode == DM_TURING) {
         /* shift registers: sixteen bits a lane, a few flipped each bar of the phrase (Mutate: more of them) */
         static const uint8_t TL[5] = {L_KICK, L_SNARE, L_CHH, L_OHH, L_RIM};
-        static const uint8_t TP[5] = {26, 14, 62, 8, 12};        /* percent of steps on */
-        int k, b;
+        int k;
         for (k = 0; k < 5; k++) {
-            uint16_t reg = 0;
-            rng_t q;
-            q.s = pseed(GP_DRUMS, 0x400u + (uint32_t)k);
-            for (s = 0; s < 16; s++)
-                if ((int)rnd(&q, 100) < TP[k] * (40 + pt->dens) / 104)
-                    reg |= (uint16_t)(1u << s);
-            if (k == 0)
-                reg |= 1u;
-            if (k == 1)
-                reg |= 1u << 4 | 1u << 12;
-            for (b = 0; b <= pb; b++) {
-                int flips = b ? 1 + g.c->mutate / 3 : 0;
-                q.s = gh(pseed(GP_DRUMS, 0x500u + (uint32_t)k), (uint32_t)b + epoch() * 64u);
-                while (flips--)
-                    reg ^= (uint16_t)(1u << rnd(&q, 16));
-            }
+            uint16_t reg = turing_reg(k, pt->dens);
             for (s = 0; s < 16; s++)
                 if (reg >> s & 1u) {
                     int pos = dpos(TL[k], s, lane_late(TL[k]), st->jit, &r), v = ((s & 3) == 0 ? 105 : 80) + (int)rnd(&r, 12);

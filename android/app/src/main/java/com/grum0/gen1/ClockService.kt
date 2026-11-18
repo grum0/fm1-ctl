@@ -62,7 +62,9 @@ class ClockService : Service() {
             .build()
         try {
             startForeground(1, note, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
-        } catch (e: Exception) {             // (not allowed just now, e.g. started while in the background)
+        } catch (e: Exception) {
+            // (not allowed just now.) Safe to stop: the service is started with startService, not
+            // startForegroundService, so Android does not insist on it going to the foreground.
             stopSelf()
             return START_NOT_STICKY
         }
@@ -95,7 +97,10 @@ class ClockService : Service() {
         private const val ACTION_QUIT = "com.grum0.gen1.QUIT"
 
         fun start(ctx: Context) {
-            runCatching { ctx.startForegroundService(Intent(ctx, ClockService::class.java)) }
+            // Started from the app on screen (onStart, Play), where a plain start is allowed; the service then goes to
+            // the foreground itself. (startForegroundService would make Android stop the app if startForeground
+            // then failed: review finding 11.) From the background the start is refused and nothing happens.
+            runCatching { ctx.startService(Intent(ctx, ClockService::class.java)) }
         }
     }
 }

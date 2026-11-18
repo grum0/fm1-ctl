@@ -61,7 +61,9 @@ static void rep_run(int64_t now)         /* (mu held) */
     for (i = 0; i < NREP; i++) {
         if (!rep[i].due || rep[i].due > now)
             continue;
-        if (on_t[rep[i].ch][rep[i].note] <= offs_t[rep[i].ch][rep[i].note]) {
+        /* only once the last note-off has sounded: if the note was struck again and its own note-off is still to
+         * come, a resend now would cut it short (that note-off has its own entry) */
+        if (on_t[rep[i].ch][rep[i].note] <= offs_t[rep[i].ch][rep[i].note] && offs_t[rep[i].ch][rep[i].note] <= now) {
             uint8_t m[3];
             m[0] = (uint8_t)(0x80 | rep[i].ch);
             m[1] = rep[i].note;

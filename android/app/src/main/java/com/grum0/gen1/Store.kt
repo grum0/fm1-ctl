@@ -30,6 +30,8 @@ val INSTRUMENTS = listOf(
 
 /** The first build's placeholder channels: saved channels equal to these were never set by hand, and give way to the real ones. */
 val OLD_DEFAULT_CHAN = listOf(4, 8, 1, 2, 3, 6, 7, 5, 16)
+private const val NOT_HELD = -2
+private const val TO_ARP = -1
 const val RIG_VERSION = 3
 
 /** The JV-1010's placeholder channel before 0.2.1: a saved 6 on its first part was never set by hand. */
@@ -222,14 +224,31 @@ class Store(ctx: Context) {
     fun panic() = Native.nPanic()
 
     // ------------------------------------------------------------------ playing --
+    // What each held key sent (-1: to the arpeggiator, else the channel 0..15), so its release goes to the same
+    // place even if the arp, the keyboard's instrument or its channel changed while it was held.
+    private val keySent = IntArray(128) { NOT_HELD }
+
     fun keyDown(note: Int) {
-        if (vals[F.ARP_ON] == 1) Native.nArp(note, 1)
-        else Native.nSend(0x90 or (chan[keysTarget] - 1), note, vals[F.VEL])
+        val n = note and 127
+        keyUp(n)
+        if (vals[F.ARP_ON] == 1) {
+            keySent[n] = TO_ARP
+            Native.nArp(n, 1)
+        } else {
+            val ch = chan[keysTarget] - 1
+            keySent[n] = ch
+            Native.nSend(0x90 or ch, n, vals[F.VEL])
+        }
     }
 
     fun keyUp(note: Int) {
-        if (vals[F.ARP_ON] == 1) Native.nArp(note, 0)
-        else Native.nSend(0x80 or (chan[keysTarget] - 1), note, 0)
+        val n = note and 127
+        when (val was = keySent[n]) {
+            NOT_HELD -> return
+            TO_ARP -> Native.nArp(n, 0)
+            else -> Native.nSend(0x80 or was, n, 0)
+        }
+        keySent[n] = NOT_HELD
     }
 
     fun sendCc(inst: Int, cc: Int, v: Int) = Native.nSend(0xB0 or (chan[inst] - 1), cc, v.coerceIn(0, 127))

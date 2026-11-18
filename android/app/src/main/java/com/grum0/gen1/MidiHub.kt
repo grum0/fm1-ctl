@@ -139,6 +139,12 @@ class MidiHub(private val ctx: Context, private val prefs: SharedPreferences) {
                 sendStatus = "Could not open ${nameOf(info)}"
                 return@openDevice
             }
+            // a late answer for a device no longer chosen, or gone meanwhile: drop it and open what is chosen now
+            if (nameOf(info) != sendName || port != sendPort || devices.none { it.id == info.id } || outDev != null) {
+                runCatching { dev.close() }
+                handler.post { autoConnect() }
+                return@openDevice
+            }
             val r = Native.nOpenOut(dev, port)
             if (r == 0) {
                 outDev = dev
@@ -160,6 +166,11 @@ class MidiHub(private val ctx: Context, private val prefs: SharedPreferences) {
             openingIn = false
             if (dev == null) {
                 recvStatus = "Could not open ${nameOf(info)}"
+                return@openDevice
+            }
+            if (nameOf(info) != recvName || port != recvPort || devices.none { it.id == info.id } || inPort != null) {
+                runCatching { dev.close() }
+                handler.post { autoConnect() }
                 return@openDevice
             }
             val p = dev.openOutputPort(port)

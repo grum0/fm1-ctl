@@ -8,6 +8,7 @@ static const uint8_t RATE_TICKS[NRATE] = {24, 12, 8, 6, 4, 3};
 #define SEQ_GATE 3u
 #define MS 1000000LL
 #define EXT_LOST_NS (300 * MS)               /* the followed clock counts as gone after this long without a tick */
+#define EXT_OUT_DELAY_NS (5 * MS)            /* following: what a tick makes is stamped this long after it arrived (finding 8) */
 
 typedef struct { uint8_t steps, hits, rot, note, mute; uint16_t pat; } trk_t;
 typedef struct {
@@ -441,9 +442,12 @@ int64_t eng_pump(int64_t now)
         return now + 5 * MS;
     }
     if (!E.clk_on || E.next_sub < now - 100 * MS) {   /* just on, or held up so long that catching up would burst */
+        if (!E.clk_on)
+            E.sub_n = 0;
+        /* (after a stall the count goes on where it was, so the clock's ticks and the generators' subticks stay in
+         * step: a tick is every fourth subtick for both) */
         E.clk_on = 1;
         E.next_sub = now + MS;
-        E.sub_n = 0;
     }
     while (E.next_sub <= now + ENG_LOOKAHEAD_NS) {
         E.t_cur = E.next_sub;
@@ -478,16 +482,19 @@ void eng_midi_clock(uint8_t b, int64_t at)
     if (b == 0xF8) {
         int64_t per = at - E.ext_last, nominal = 2500000000LL / E.c.tempo;
         int k;
-        if (!E.ext_last || per < 3 * MS || per > 150 * MS)   /* the first tick, or after a gap: the tempo's guess */
+        if (!E.ext_last || !E.ext_per || per > 150 * MS)   /* the first tick, or after a gap: the tempo's guess */
             E.ext_per = nominal;
-        else                                     /* otherwise the last ticks' length, smoothed over four */
-            E.ext_per = (E.ext_per * 3 + per) / 4;
+        else if (per >= 3 * MS)                  /* otherwise the last ticks' length, smoothed over four; two ticks */
+            E.ext_per = (E.ext_per * 3 + per) / 4;   /* closer than 3 ms (one USB packet) keep the last length */
         E.ext_last = at;
         E.ext_lost = 0;
+        /* everything this tick makes is stamped a fixed delay after it arrived, the tick's own messages too, so
+         * on-tick and in-between notes keep their spacing whatever the receiving delay was */
+        E.t_cur = at + EXT_OUT_DELAY_NS;
         clock_tick();
         if (E.running)                           /* the other three subticks, spread over a tick's length */
             for (k = 1; k < 4; k++) {
-                E.t_cur = at + E.ext_per * k / 4;
+                E.t_cur = at + EXT_OUT_DELAY_NS + E.ext_per * k / 4;
                 gen_subtick();
             }
     } else if (b == 0xFA) {
