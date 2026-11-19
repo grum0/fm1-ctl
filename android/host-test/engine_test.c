@@ -967,6 +967,47 @@ static void test_bell_lines_033(void)
     printf("0.3.3: bell lines ok\n");
 }
 
+/* 0.3.4: the pocket option: off leaves the drums as they were; on moves them by the pocket's offsets */
+static void test_pocket_034(void)
+{
+    static uint8_t na[512], nb[512];
+    static int64_t ta[512], tb[512];
+    int on, i, n[2] = {0, 0}, moved = 0, same = 1, late = 0;
+    for (on = 0; on < 2; on++) {
+        fresh();
+        eng_set(F_TEMPO, 120, vnow);
+        eng_set(F_STYLE, GS_DILLA, vnow);
+        eng_set(F_CLOCK, CLK_INT_OUT, vnow);
+        eng_set(F_PART(GP_DRUMS, PF_ON), 1, vnow);
+        eng_set(F_POCKET, on, vnow);
+        eng_play(1, vnow);
+        run_internal(4000);
+        eng_play(0, vnow);
+        for (i = 0; i < nlog && n[on] < 512; i++)
+            if (log_[i].n == 3 && (log_[i].m[0] & 0xF0) == 0x90 && log_[i].m[2]) {
+                (on ? nb : na)[n[on]] = log_[i].m[1];
+                (on ? tb : ta)[n[on]++] = log_[i].t;
+            }
+    }
+    {                                                    /* (moved hits may swap places: compare note by note) */
+        int64_t sa[128] = {0}, sb[128] = {0};
+        int ca[128] = {0}, cb[128] = {0};
+        for (i = 0; i < n[0]; i++)
+            ca[na[i]]++, sa[na[i]] += ta[i];
+        for (i = 0; i < n[1]; i++)
+            cb[nb[i]]++, sb[nb[i]] += tb[i];
+        for (i = 0; i < 128; i++) {
+            same &= ca[i] == cb[i];
+            moved += sa[i] != sb[i];
+        }
+        late = sb[37] > sa[37];                          /* the backbeat snares sit later */
+    }
+    CHECK(n[0] == n[1] && same && moved >= 3 && late, "pocket: %d / %d notes, same notes %d, %d lanes moved, snares late %d",
+          n[0], n[1], same, moved, late);
+    eng_set(F_POCKET, 0, vnow);
+    printf("0.3.4: pocket ok\n");
+}
+
 int main(void)
 {
     test_ranges();
@@ -984,6 +1025,7 @@ int main(void)
     test_qol_031();
     test_bell_032();
     test_bell_lines_033();
+    test_pocket_034();
     test_panic();
     printf(fails ? "FAILED (%d)\n" : "ok\n", fails);
     free(log_);

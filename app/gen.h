@@ -19,6 +19,7 @@ enum { GS_DILLA, GS_SOULQ, GS_GFUNK, GS_BOMB, GS_QUINCY, GS_JUSTIFIED, GS_MPLS, 
        GS_BOOMBAP, GS_NEP_MIN, GS_NEP_CLICK, GS_NEP_CLUB, GS_NEP_SYNTH, GS_NEP_DARK, GS_NEP_STOMP, GS_NERD, GS_DUB,
        GS_MEMPHIS, GS_TRAP, GS_NATIVE, GS_WUTANG, GS_MADLIB, GS_ABSTRACT, GS_OLDSCHOOL, GS_BOUNCE, GS_CHOPPED,
        GS_BELLFUNK, GS_MIAMIBELL, GS_DETBELL, GS_AFROBELL,
+       GS_TALKBOX, GS_MODBOOGIE, GS_GOGO, GS_BLAX,
        GEN_NSTYLES };
 /* the styles' families, for a picker in two steps and a three-letter prefix */
 enum { CAT_HIP, CAT_FNK, CAT_RNB, CAT_ELC, CAT_BRK, CAT_HSE, CAT_BAS, CAT_IDM, CAT_WLD, GEN_NCATS };
@@ -68,6 +69,7 @@ typedef struct {
     uint8_t bell;                        /* 1: the cowbell lane plays a line (a tune CC goes out before each hit) */
     uint8_t bell_cc;                     /* that CC (the Tanzbär's cowbell tune: 84); 0: none */
     uint8_t bell_tab[12];                /* its value for each pitch class, from C; above 127: the drum can't play it */
+    uint8_t pocket;                      /* 1: Cut-A-Dor's pocket on the styles' drums (Style mode), by Feel */
 } gen_cfg_t;
 
 typedef void (*gen_out_t)(uint32_t status, uint32_t d1, uint32_t d2);

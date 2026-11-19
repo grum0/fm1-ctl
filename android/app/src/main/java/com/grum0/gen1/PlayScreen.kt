@@ -68,6 +68,9 @@ fun PlayScreen(s: Store) {
             SliderRow(s, "Swing", F.SWING, { if (it == 0) "Style" else "${49 + it}%" })
             SliderRow(s, "Feel", F.FEEL, { if (it == 8) "8 (as written)" else "$it" })
             SliderRow(s, "Straighten the hats", F.HAT_STRAIGHT, { if (it == 0) "off: they swing with the kit" else if (it == 100) "straight" else "$it%" })
+            SwitchRow("Cut-A-Dor's pocket on the styles' drums (by Feel)", s.vals[F.POCKET] == 1) {
+                s.set(F.POCKET, if (it) 1 else 0)
+            }
             SliderRow(s, "Mutate", F.MUTATE)
             Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                 Text("Phrase", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)

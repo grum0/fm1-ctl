@@ -34,6 +34,7 @@ enum {
     F_HAT_DENS = F_X0, F_FLAM, F_FILL_EVERY, F_HAT_STRAIGHT, F_SPACE, F_SPREAD, F_COUPLE, F_VOICE, F_RATCHET,
     F_OUT_DELAY,                         /* 0.3.1: following, ms from a tick's arrival to what it plays (default 5) */
     F_BELL,                              /* 0.3.2: the cowbell plays a line (the app sets it from Cowbell pitch) */
+    F_POCKET,                            /* 0.3.4: Cut-A-Dor's pocket on the styles' drums (Style mode), by Feel */
     F_COUNT
 };
 enum { PF_ON, PF_CHAN, PF_DEV, PF_VAR, PF_DENS, PF_FLAIR, PF_MODE, PF_OCT };

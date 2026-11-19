@@ -108,6 +108,7 @@ void eng_range(int id, int *lo, int *hi)
         case F_SPREAD: l = 1; h = 24; break;
         case F_OUT_DELAY: h = 40; break;
         case F_BELL: h = 1; break;
+        case F_POCKET: h = 1; break;
         default: break;                  /* flam, ratchets: 0..127 */
         }
     } else if (id >= F_TRK0) {
@@ -176,6 +177,7 @@ int eng_get(int id)
         case F_VOICE: return E.g.voice;
         case F_OUT_DELAY: return E.c.out_delay;
         case F_BELL: return E.g.bell;
+        case F_POCKET: return E.g.pocket;
         default: return E.g.ratchet;
         }
     }
@@ -634,6 +636,7 @@ void eng_set(int id, int v, int64_t now)
         case F_VOICE: E.g.voice = (uint8_t)v; break;
         case F_OUT_DELAY: E.c.out_delay = (uint8_t)v; break;
         case F_BELL: E.g.bell = (uint8_t)v; break;
+        case F_POCKET: E.g.pocket = (uint8_t)v; break;
         default: E.g.ratchet = (uint8_t)v; break;
         }
         return;

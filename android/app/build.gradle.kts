@@ -13,8 +13,8 @@ android {
         applicationId = "com.grum0.gen1"
         minSdk = 29                       // the NDK's MIDI API (AMidi) starts at Android 10
         targetSdk = 35
-        versionCode = 8
-        versionName = "0.3.3"
+        versionCode = 9
+        versionName = "0.3.4"
         // the build ID shown on the launch screen and in About: the version and the commit it was built from
         // (GitHub Actions sets GITHUB_SHA; a build on a computer says "local")
         buildConfigField("String", "COMMIT", "\"${(System.getenv("GITHUB_SHA") ?: "").take(7).ifEmpty { "local" }}\"")

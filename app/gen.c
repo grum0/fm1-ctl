@@ -383,6 +383,26 @@ static const style_t STYLE[GEN_NSTYLES] = {
     [GS_AFROBELL] = {"Afro-funk bell", GRID_AFROBELL,
         3, 0, 1, 1, 2, 0, FILL_LIVE, {{13, 16, 20, 1}, {4, 5, 9, 13}}, V_TIGHT, "0000000000000090", 0, BM_BOOTSY, LM_CALL,
         "9070900000000000", 72, 1, 2, CP_FREE, 0},
+    /* 0.3.4, the FNK batch: drums from app/styles/fnk.grid */
+    /* Talkbox funk (Zapp): clap-led drum machine, chicken-scratch off-16th chords, octave-popping bass, a gliding
+     * whine lead for the talkbox (the vowel sweep itself is not built) */
+    [GS_TALKBOX] = {"Talkbox funk", GRID_TALKBOX,
+        2, 0, 1, 0, 1, 0, FILL_SNARE, {{1, 0, 12, 16}, {4, 5, 9, 13}}, V_TIGHT, "0700070007000700", 1, BM_OCTAVE, LM_WHINE,
+        "9000000070000000", 72, 0, 2, CP_FREE, 0},
+    /* Modern boogie (Dâm-Funk): the dark, slow, dreamy side of Boogie: two bars a chord, wide minor 9 pads, a
+     * sliding bass, noodling solo lines */
+    [GS_MODBOOGIE] = {"Modern boogie", GRID_MODBOOGIE,
+        3, 0, 1, 0, 1, 0, FILL_SNARE, {{3, 7, 8, 22}, {1, 10, 13, 7}}, V_WIDE, "9000000000000000", 0, BM_GLIDE, LM_SOLO,
+        "9070907000000000", 79, 0, 2, CP_FREE, 0},
+    /* Go-go (Chuck Brown): the conga and cowbell pocket, heavy swing, horn stabs, call and response */
+    [GS_GOGO] = {"Go-go", GRID_GOGO,
+        6, 0, 1, 1, 2, 0, FILL_LIVE, {{1, 2, 6, 20}, {5, 13, 9, 1}}, V_WIDE, "0090009000900090", 1, BM_LIVE, LM_CALL,
+        "9070000000000000", 79, 1, 2, CP_FREE, 0},
+    /* Blaxploitation (Isaac Hayes, Curtis Mayfield): sizzling 16th hats, wah-like muted 16th chords, octave bass,
+     * a cinematic dorian line */
+    [GS_BLAX] = {"Blaxploitation", GRID_BLAX,
+        2, 0, 1, 0, 2, 0, FILL_LIVE, {{1, 8, 20, 13}, {4, 5, 9, 13}}, V_TIGHT, "9797979797979797", 1, BM_OCTAVE, LM_HOOK,
+        "9000700090007000", 79, 0, 2, CP_FREE, 0},
 };
 
 /* the styles' families, the tempos they sit at (as set on the MPC: half-time styles are counted fast), whether they
@@ -438,6 +458,10 @@ static const struct { uint8_t cat, lo, hi, tanz, fx; const char *ref; } STYLE_ME
     [GS_MIAMIBELL] = {CAT_ELC, 120, 135, 1, SFX_BELL | SFX_ZAP2, "bell-hook bass music"},
     [GS_DETBELL] = {CAT_HSE, 125, 135, 1, SFX_BELL, "looping bell melody"},
     [GS_AFROBELL] = {CAT_FNK, 100, 118, 1, SFX_BELL, "Afrobeat bell over a funk groove"},
+    [GS_TALKBOX] = {CAT_FNK, 95, 112, 1, 0, "Zapp, Roger Troutman"},
+    [GS_MODBOOGIE] = {CAT_FNK, 95, 115, 1, 0, "Dam-Funk"},
+    [GS_GOGO] = {CAT_FNK, 95, 120, 1, 0, "Chuck Brown, Washington DC"},
+    [GS_BLAX] = {CAT_FNK, 90, 115, 0, 0, "Isaac Hayes, Curtis Mayfield"},
 };
 static const char *const CAT_NAME[GEN_NCATS] = {"Hip-hop", "Funk", "R&B and pop", "Electro", "Breaks and beats",
                                                 "House and techno", "UK bass", "IDM", "Caribbean and world"};
@@ -750,6 +774,24 @@ static int hat_sw(int sw) { return sw * (100 - gclamp(g.c->hat_straight, 0, 100)
 static int dpos(int l, int step, int late, int jit, rng_t *r)
 {
     return tpos_sw(step, is_hat(l) ? hat_sw(swing_sub()) : swing_sub(), late, jit, r);
+}
+/* Pocket (0.3.4): Cut-A-Dor's per-position pocket (its Boom Bap's) for the styles' own drums, in 96ths of a quarter,
+ * scaled like its Human by Feel (8: as shipped): off-beat kicks a little late, the backbeat late, ghost snares
+ * early, off-sixteenth hats late and the ones between beats early, claps late, percussion around the step */
+static int style_pocket(int l, int s, int v)
+{
+    int f;
+    if (l == L_KICK)
+        f = s % 4 == 0 ? 0 : 1;
+    else if (l == L_SNARE)
+        f = v < 65 ? -2 : 3;
+    else if (is_hat(l))
+        f = s % 2 ? 2 : (s % 4 == 2 ? -3 : -1);
+    else if (l == L_CLAP)
+        f = 4;
+    else
+        f = (s * 3 + l * 5 + (int)(g.c->seed & 3u)) % 7 - 3;
+    return f * (g.c->feel * 65 / 8) / 100;
 }
 static void drum_put(int l, int pos, int vel)
 {
@@ -1072,6 +1114,8 @@ static void build_drums(void)
                         v -= (s & 3) == 2 ? 10 : (s & 1) ? 22 : 0;
                 }
                 pos = dpos(l, s, lane_late(l), st->jit, &r);
+                if (g.c->pocket)
+                    pos = gclamp(pos + style_pocket(l, s, v), 0, (int)GEN_BAR - 1);
                 drum_hit(l, pos, v);
                 if ((l == L_CHH || l == L_SNARE) && loud && chance(&r, rat)) {
                     int n = chance(&r, 40) ? 3 : 2, i;       /* a ratchet */
@@ -1996,7 +2040,7 @@ int gen_valid(const gen_cfg_t *c)
         c->sim_chan > 16u || c->bend < 1u || c->bend > 12u || c->mb_xpose < -24 || c->mb_xpose > 24 || c->mb_tune > 127u ||
         c->mb_lo < 12u || c->mb_lo > 96u || c->hat_dens > 3u || c->flam > 127u || c->fill_every > 6u ||
         c->hat_straight > 100u || c->space > 100u || c->spread > 24u || c->couple > 3u || c->voice > 3u || c->ratchet > 127u ||
-        c->bell > 1u || c->bell_cc > 127u)
+        c->bell > 1u || c->bell_cc > 127u || c->pocket > 1u)
         return 0;
     for (i = 0; i < GEN_NLANES; i++)
         if (c->lane_note[i] > 127u)

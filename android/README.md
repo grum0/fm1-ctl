@@ -94,6 +94,13 @@ been tried). Version 0.2.0 adds:
 - **Rig → Kick tune**: Style (each style's own kick pitch, the default) or Key (tuned to the key, as 0.3.2 did).
 - The cowbell's decay while it plays a line is now per style (Miami bass bell a little longer).
 
+**0.3.4** (the funk batch, the pocket):
+
+- **Four funk styles** (50 in all): Talkbox funk, Modern boogie, Go-go, Blaxploitation.
+- **Play → Groove → Cut-A-Dor's pocket on the styles' drums** (off by default): the per-position pocket of
+  Cut-A-Dor's Boom Bap (off-beat kicks a little late, the backbeat late, ghost snares early, hats pushed and pulled)
+  on every style's own drums, scaled by Feel (8: as Cut-A-Dor ships it; higher: more).
+
 ## Getting the app
 
 On GitHub: **Actions → Android APK → Run workflow** (branch `android`), then open the run and download the

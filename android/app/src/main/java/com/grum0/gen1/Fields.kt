@@ -47,7 +47,8 @@ object F {
     const val RATCHET = 129
     const val OUT_DELAY = 130
     const val BELL = 131
-    const val COUNT = 132
+    const val POCKET = 132
+    const val COUNT = 133
 
     const val PF_ON = 0
     const val PF_CHAN = 1
@@ -65,7 +66,7 @@ object F {
 
     const val NPARTS = 7
     const val NLANES = 15
-    const val NSTYLES = 46
+    const val NSTYLES = 50
     const val NDEV = 8
     const val NDSET = 5
     const val NTRACKS = 4

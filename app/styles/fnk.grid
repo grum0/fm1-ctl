@@ -1,0 +1,27 @@
+# FNK batch (0.3.4): the funk styles from fm1-build-status.md, "Style designs (for coding)".
+
+style TALKBOX
+kick     X... ..x. X... ..x.
+snare    .... .... .... ...o
+clap     .... X... .... X...
+chat     xoXo xoXo xoXo xoXo
+cowbell  .... .... ..x. ....
+
+style MODBOOGIE
+kick     X... .... X.x. ....
+clap     .... X... .... X...
+chat     xoXo xoXo xoXo xo..
+ohat     .... .... .... ..x.
+
+style GOGO
+kick     X... ..x. ..X. ....
+snare    .... X..o .... X.o.
+ohat     ..x. ..x. ..x. ..x.
+cowbell  x.x. x.x. x.x. x.x.
+conga    x.xx .x.x x.xx .x.x
+
+style BLAX
+kick     X... ..x. .x.. ..x.
+snare    .... X..o .o.. X...
+chat     xxXx xxXx xxXx xxXx
+conga    .... x.x. .... x.xx
