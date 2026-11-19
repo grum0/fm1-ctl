@@ -101,6 +101,13 @@ been tried). Version 0.2.0 adds:
   Cut-A-Dor's Boom Bap (off-beat kicks a little late, the backbeat late, ghost snares early, hats pushed and pulled)
   on every style's own drums, scaled by Feel (8: as Cut-A-Dor ships it; higher: more).
 
+**0.3.5** (the R&B and electro batches):
+
+- **Five styles** (55 in all): Timbaland and Gated 80s pop (RNB); Kraftwerk, Italo disco and Miami bass (ELC).
+- **The Simmons zap** in Electro (a laser answer every 4th bar), 808 electro and Modern electro, and in the new
+  electro styles; Gated 80s pop's noise snare every 4th bar. Only with the Simmons in the drum set (Drums → drum
+  set), so with the default kit these styles play as before.
+
 ## Getting the app
 
 On GitHub: **Actions → Android APK → Run workflow** (branch `android`), then open the run and download the

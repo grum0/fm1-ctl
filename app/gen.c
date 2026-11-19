@@ -208,12 +208,13 @@ static const style_t STYLE[GEN_NSTYLES] = {
     [GS_ELECTRO] = {"Electro",
         {[L_KICK] = "9003009000900000", [L_SNARE] = "0000900000009000", [L_CLAP] = "0000900000009000",
          [L_CHH] = "9797979797979797", [L_OHH] = "0000000000300000", [L_COWB] = "0050005030050050",
-         [L_SIM1] = "0000000000000300"},
+         [L_SIM1] = "0000000000000070"},           /* 0.3.5: the zap as designed (the 4th bar: ZAP_RULES) */
         0, 0, 0, 0, 0, 15, FILL_ELECTRO, {{10, 9, 0, 2}, {12, 6, 10, 12}}, V_TRIAD, "9000009000900000", 2, BM_ROBOT,
         LM_HOOK, "9090009090009000", 72, 1, 1, CP_FREE, 0},
     [GS_ELECTRO2] = {"Modern electro",
         {[L_KICK] = "9000009000090000", [L_SNARE] = "0000900000009000", [L_CLAP] = "0000300000009000",
-         [L_RIM] = "0030000300003000", [L_CHH] = "9090909790909097", [L_CLAVE] = "0000030000300000"},
+         [L_RIM] = "0030000300003000", [L_CHH] = "9090909790909097", [L_CLAVE] = "0000030000300000",
+         [L_SIM1] = "000000000000000b"},           /* 0.3.5: a soft sonar ping, every other bar */
         0, 0, 0, 0, 0, 10, FILL_ELECTRO, {{9, 24, 21, 10}, {12, 10, 12, 6}}, V_TRIAD, "0000009000000090", 2, BM_ACID,
         LM_CALL, "9000900090709000", 72, 1, 1, CP_FREE, 0},
     [GS_WONKY] = {"Wonky",
@@ -241,7 +242,7 @@ static const style_t STYLE[GEN_NSTYLES] = {
     [GS_808] = {"808 electro",
         {[L_KICK] = "9000009000900900", [L_SNARE] = "0000900000009000", [L_CLAP] = "0000900000009000",
          [L_CHH] = "9797979797979797", [L_OHH] = "0000000000000030", [L_COWB] = "9050905090509050",
-         [L_TOML] = "0000000000000302", [L_SIM1] = "0000000300000000"},
+         [L_TOML] = "0000000000000302", [L_SIM1] = "0000000700000700"},   /* 0.3.5: pews between the claps */
         0, 0, 0, 0, 0, 30, FILL_ELECTRO, {{11, 9, 0, 2}, {12, 10, 12, 6}}, V_POWER, "0000009000000000", 2, BM_OCTAVE,
         LM_HOOK, "9090009090009090", 72, 1, 1, CP_FREE, 0},
     /* Tipper: mid tempo, heavy swing, edits and ratchets, a bass that moves under long notes */
@@ -403,14 +404,34 @@ static const style_t STYLE[GEN_NSTYLES] = {
     [GS_BLAX] = {"Blaxploitation", GRID_BLAX,
         2, 0, 1, 0, 2, 0, FILL_LIVE, {{1, 8, 20, 13}, {4, 5, 9, 13}}, V_TIGHT, "9797979797979797", 1, BM_OCTAVE, LM_HOOK,
         "9000700090007000", 79, 0, 2, CP_FREE, 0},
+    /* 0.3.5, the RNB batch: drums from app/styles/rnb.grid */
+    /* Timbaland: a stuttering kick, 32nd hats (ratchets), a tabla-like rim and conga, the stop before the bar */
+    [GS_TIMBALAND] = {"Timbaland", GRID_TIMBALAND,
+        0, 0, 0, 0, 0, 60, FILL_DROP, {{9, 25, 21, 5}, {7, 0, 8, 13}}, V_TIGHT, "9000000000000000", 1, BM_ROOT, LM_HOOK,
+        "9070000000700000", 72, 0, 2, CP_FOLLOW, 0},
+    /* Gated 80s pop: the plainest straight beat, a big snare, an 8th root bass, wide pads, tom fills */
+    [GS_GATED] = {"Gated 80s pop", GRID_GATED,
+        0, 0, 0, 0, 0, 0, FILL_TOMS, {{4, 17, 5, 2}, {0, 5, 9, 13}}, V_WIDE, "9000000000000000", 0, BM_ROOT, LM_HOOK,
+        "9000000000000000", 72, 0, 2, CP_FREE, 0},
+    /* the ELC batch: drums from app/styles/elc.grid */
+    /* Kraftwerk: metallic claves, a single machine zap, no looseness at all, plain triads and an 8th sequence */
+    [GS_KRAFTWERK] = {"Kraftwerk", GRID_KRAFTWERK,
+        0, 0, 0, 0, 0, 0, FILL_ELECTRO, {{10, 18, 23, 2}, {0, 5, 9, 13}}, V_TRIAD, "9000000000000000", 0, BM_ROBOT,
+        LM_HOOK, "9070907090709070", 72, 0, 2, CP_FREE, 0},
+    /* Italo disco: four-on-the-floor, the continuous octave bass, minor pads, a catchy line over a 16th arp */
+    [GS_ITALO] = {"Italo disco", GRID_ITALO,
+        0, 0, 0, 0, 0, 0, FILL_ELECTRO, {{10, 4, 5, 17}, {0, 5, 9, 13}}, V_WIDE, "9000000000000000", 0, BM_OCTAVE,
+        LM_HOOK, "9070907000000000", 79, 0, 1, CP_FREE, 0},
+    /* Miami bass: the broken kick under a long gliding 808 locked to it, cowbell, party claps */
+    [GS_MIAMI] = {"Miami bass", GRID_MIAMI,
+        0, 0, 0, 0, 0, 0, FILL_SNARE, {{21, 9, 5, 19}, {7, 0, 8, 13}}, V_OCT, "9000000000000000", 0, BM_GLIDE, LM_CALL,
+        "9070000000000000", 72, 0, 2, CP_LOCK, 0},
 };
 
 /* the styles' families, the tempos they sit at (as set on the MPC: half-time styles are counted fast), whether they
  * suit the Tanzbär Lite (the picker can hide the others), effects (SFX_*), and the artists or scene */
 #define SFX_CHOP 1u                      /* the phrase's last bar: beats 3 and 4 replay beats 1 and 2, every part */
 #define SFX_BELL 2u                      /* the cowbell plays a line (batch [D]) */
-#define SFX_ZAP4 4u                      /* the zap only in the 4th bar of every 4 */
-#define SFX_ZAP2 8u                      /* the zap only every other bar */
 static const struct { uint8_t cat, lo, hi, tanz, fx; const char *ref; } STYLE_META[GEN_NSTYLES] = {
     [GS_DILLA] = {CAT_HIP, 80, 95, 1, 0, "J Dilla, Slum Village"},
     [GS_SOULQ] = {CAT_HIP, 80, 95, 0, 0, "D'Angelo, Questlove"},
@@ -454,14 +475,19 @@ static const struct { uint8_t cat, lo, hi, tanz, fx; const char *ref; } STYLE_ME
     [GS_OLDSCHOOL] = {CAT_HIP, 95, 115, 1, 0, "Run-DMC, Def Jam"},
     [GS_BOUNCE] = {CAT_HIP, 95, 105, 1, 0, "Triggerman beat"},
     [GS_CHOPPED] = {CAT_HIP, 60, 75, 1, SFX_CHOP, "DJ Screw, Houston"},
-    [GS_BELLFUNK] = {CAT_ELC, 108, 124, 1, SFX_BELL | SFX_ZAP4, "Bambaataa-era bell riff"},
-    [GS_MIAMIBELL] = {CAT_ELC, 120, 135, 1, SFX_BELL | SFX_ZAP2, "bell-hook bass music"},
+    [GS_BELLFUNK] = {CAT_ELC, 108, 124, 1, SFX_BELL, "Bambaataa-era bell riff"},
+    [GS_MIAMIBELL] = {CAT_ELC, 120, 135, 1, SFX_BELL, "bell-hook bass music"},
     [GS_DETBELL] = {CAT_HSE, 125, 135, 1, SFX_BELL, "looping bell melody"},
     [GS_AFROBELL] = {CAT_FNK, 100, 118, 1, SFX_BELL, "Afrobeat bell over a funk groove"},
     [GS_TALKBOX] = {CAT_FNK, 95, 112, 1, 0, "Zapp, Roger Troutman"},
     [GS_MODBOOGIE] = {CAT_FNK, 95, 115, 1, 0, "Dam-Funk"},
     [GS_GOGO] = {CAT_FNK, 95, 120, 1, 0, "Chuck Brown, Washington DC"},
     [GS_BLAX] = {CAT_FNK, 90, 115, 0, 0, "Isaac Hayes, Curtis Mayfield"},
+    [GS_TIMBALAND] = {CAT_RNB, 90, 110, 1, 0, "Aaliyah, Missy Elliott"},
+    [GS_GATED] = {CAT_RNB, 90, 125, 1, 0, "Phil Collins, LinnDrum, Simmons"},
+    [GS_KRAFTWERK] = {CAT_ELC, 100, 130, 1, 0, "Euro-electro"},
+    [GS_ITALO] = {CAT_ELC, 110, 130, 1, 0, "Giorgio Moroder"},
+    [GS_MIAMI] = {CAT_ELC, 115, 135, 1, 0, "2 Live Crew, freestyle"},
 };
 static const char *const CAT_NAME[GEN_NCATS] = {"Hip-hop", "Funk", "R&B and pop", "Electro", "Breaks and beats",
                                                 "House and techno", "UK bass", "IDM", "Caribbean and world"};
@@ -1838,23 +1864,40 @@ static void bell_line(void)
     if (v >= 0)                                          /* the next bar's first hit */
         gput_ev(GP_DRUMS, (int)GEN_BAR - BELL_LEAD, EV_CC, g.c->bell_cc, v, 1, ch);
 }
-static int is_grid_zap(int pos)          /* a zap where the style's grid has one (not a fill's) */
+/* The Simmons lanes only in some bars: a grid is one bar, these designs want it rarer. bars: bit n = the bar n+1 of
+ * every 4 keeps the grid's hits; answer: in the bars not kept, another pattern instead (Electro's laser answer). */
+static const struct { uint8_t style, lane, bars; const char *answer; } ZAP_RULES[] = {
+    {GS_BELLFUNK, L_SIM1, 0x8, 0},
+    {GS_MIAMIBELL, L_SIM1, 0xA, 0},
+    {GS_ELECTRO, L_SIM1, 0x7, "0070000000707077"},
+    {GS_ELECTRO2, L_SIM1, 0xA, 0},
+    {GS_GATED, L_SIM2, 0x8, 0},
+    {GS_ITALO, L_SIM1, 0xA, 0},
+    {GS_MIAMI, L_SIM1, 0xA, 0},
+};
+static int is_grid_hit(int lane, int pos)  /* a hit where the style's grid has one (not a fill's) */
 {
     int step = (pos + GEN_STEP / 4) / GEN_STEP;
-    return step < 16 && sty()->lane[L_SIM1] && sty()->lane[L_SIM1][step] != '0';
+    return step < 16 && sty()->lane[lane] && sty()->lane[lane][step] != '0';
 }
-/* the zap only in some bars (SFX_ZAP4, SFX_ZAP2): a grid is one bar, these designs want it rarer */
 static void zap_bars(void)
 {
     gev_t *e = &wb->ev[GEV_OFF[GP_DRUMS]];
-    unsigned fx = STYLE_META[g.c->style % GEN_NSTYLES].fx;
-    int n = wb->n[GP_DRUMS], i, k = 0, note = g.c->lane_note[L_SIM1], ch = lane_ch(L_SIM1);
-    if (!(fx & (SFX_ZAP4 | SFX_ZAP2)) || bb % ((fx & SFX_ZAP4) ? 4u : 2u) == ((fx & SFX_ZAP4) ? 3u : 1u))
-        return;
-    for (i = 0; i < n; i++)
-        if (!(e[i].kind == EV_NOTE && e[i].a == note && e[i].ch == ch && is_grid_zap(e[i].pos)))
-            e[k++] = e[i];
-    wb->n[GP_DRUMS] = (uint16_t)k;
+    int i, k, n, r, s, note, ch;
+    for (r = 0; r < (int)(sizeof ZAP_RULES / sizeof ZAP_RULES[0]); r++) {
+        if (ZAP_RULES[r].style != g.c->style || (ZAP_RULES[r].bars >> (bb % 4u) & 1u))
+            continue;
+        note = g.c->lane_note[ZAP_RULES[r].lane];
+        ch = lane_ch(ZAP_RULES[r].lane);
+        for (i = 0, k = 0, n = wb->n[GP_DRUMS]; i < n; i++)
+            if (!(e[i].kind == EV_NOTE && e[i].a == note && e[i].ch == ch && is_grid_hit(ZAP_RULES[r].lane, e[i].pos)))
+                e[k++] = e[i];
+        wb->n[GP_DRUMS] = (uint16_t)k;
+        if (ZAP_RULES[r].answer)
+            for (s = 0; s < 16; s++)
+                if (ZAP_RULES[r].answer[s] != '0')
+                    drum_put(ZAP_RULES[r].lane, s * (int)GEN_STEP + ((s & 1) ? swing_sub() : 0), 100);
+    }
 }
 void gen_service(void)
 {

@@ -1008,6 +1008,54 @@ static void test_pocket_034(void)
     printf("0.3.4: pocket ok\n");
 }
 
+/* 0.3.5: the Simmons lanes' bar rules (with the Simmons in the drum set) */
+static void zap_steps(int style, int lane_note_v, uint16_t out[8])
+{
+    int i, b, st;
+    int64_t t0 = -1, bar = 2000 * MS;
+    fresh();
+    eng_set(F_TEMPO, 120, vnow);
+    eng_set(F_STYLE, style, vnow);
+    eng_set(F_DSET, DS_ALL, vnow);
+    eng_set(F_FILL_EVERY, 1, vnow);                       /* (no fills: just the grids) */
+    eng_set(F_CLOCK, CLK_INT_OUT, vnow);
+    eng_set(F_PART(GP_DRUMS, PF_ON), 1, vnow);
+    eng_play(1, vnow);
+    run_internal(17000);
+    eng_play(0, vnow);
+    for (i = 0; i < 8; i++)
+        out[i] = 0;
+    for (i = 0; i < nlog; i++)
+        if (log_[i].n == 3 && (log_[i].m[0] & 0xF0) == 0x90 && log_[i].m[2]) {
+            if (t0 < 0)
+                t0 = log_[i].t;
+            if (log_[i].m[1] != lane_note_v)
+                continue;
+            b = (int)((log_[i].t - t0 + 30 * MS) / bar);
+            st = (int)((log_[i].t - t0 + 30 * MS) % bar / (bar / 16));
+            if (b < 8)
+                out[b] |= (uint16_t)(1u << st);
+        }
+}
+static void test_zaps_035(void)
+{
+    uint16_t z[8];
+    int b, bad;
+    zap_steps(GS_ELECTRO, E.g.lane_note[L_SIM1], z);
+    for (b = 0, bad = 0; b < 8; b++)
+        bad += z[b] != (b % 4 == 3 ? (1u << 2 | 1u << 10 | 1u << 12 | 1u << 14 | 1u << 15) : 1u << 14);
+    CHECK(!bad, "electro zaps: %04x %04x %04x %04x", z[0], z[1], z[2], z[3]);
+    zap_steps(GS_ITALO, E.g.lane_note[L_SIM1], z);
+    for (b = 0, bad = 0; b < 8; b++)
+        bad += (z[b] != 0) != (b % 2 == 1);
+    CHECK(!bad, "italo zaps in bars 2 and 4 only: %04x %04x %04x %04x", z[0], z[1], z[2], z[3]);
+    zap_steps(GS_GATED, E.g.lane_note[L_SIM2], z);
+    for (b = 0, bad = 0; b < 8; b++)
+        bad += (z[b] != 0) != (b % 4 == 3);
+    CHECK(!bad, "gated noise in every 4th bar only: %04x %04x %04x %04x", z[0], z[1], z[2], z[3]);
+    printf("0.3.5: zap rules ok\n");
+}
+
 int main(void)
 {
     test_ranges();
@@ -1026,6 +1074,7 @@ int main(void)
     test_bell_032();
     test_bell_lines_033();
     test_pocket_034();
+    test_zaps_035();
     test_panic();
     printf(fails ? "FAILED (%d)\n" : "ok\n", fails);
     free(log_);

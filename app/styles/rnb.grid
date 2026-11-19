@@ -1,0 +1,15 @@
+# RNB batch (0.3.5): from fm1-build-status.md, "Style designs (for coding)". Gated 80s pop's Simmons noise plays
+# only in every 4th bar (ZAP_RULES in gen.c), and only with the Simmons in the drum set.
+
+style TIMBALAND
+kick     X..x ...x ..x. .x..
+snare    .... X... .... X.x.
+rim      ..x. .x.. x..x ..x.
+chat     x.xr x.x. xrx. x.rr
+conga    .x.. ...x .x.. x...
+
+style GATED
+kick     X... .... X... ....
+snare    .... X... .... X...
+chat     x.x. x.x. x.x. x.x.
+noise    .... .... .... X...
