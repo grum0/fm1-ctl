@@ -37,15 +37,15 @@ static const uint16_t SC_MASK[NSC] = {0xAB5, 0x5AD, 0x6AD, 0x6B5, 0x5AB};   /* b
 #define PENT_MAJ 0x295u                  /* major pentatonic: 0 2 4 7 9 */
 
 enum { Q_MAJ, Q_MIN, Q_7, Q_MAJ7, Q_MIN7, Q_9, Q_MAJ9, Q_MIN9, Q_MIN11, Q_13, Q_7SUS, Q_ADD9, Q_DIM7, Q_M7B5, Q_7S9,
-       Q_MIN6, Q_P5, NQ };
+       Q_MIN6, Q_P5, Q_MMAJ7, NQ };
 static const uint8_t QIV[NQ][6] = {{0, 4, 7}, {0, 3, 7}, {0, 4, 7, 10}, {0, 4, 7, 11}, {0, 3, 7, 10}, {0, 4, 7, 10, 14},
                                    {0, 4, 7, 11, 14}, {0, 3, 7, 10, 14}, {0, 3, 7, 10, 14, 17}, {0, 4, 7, 10, 14, 21},
                                    {0, 5, 7, 10}, {0, 4, 7, 14}, {0, 3, 6, 9}, {0, 3, 6, 10}, {0, 4, 7, 10, 15},
-                                   {0, 3, 7, 9}, {0, 7}};
-static const uint8_t QN[NQ] = {3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 4, 4, 4, 4, 5, 4, 2};
+                                   {0, 3, 7, 9}, {0, 7}, {0, 3, 7, 11}};
+static const uint8_t QN[NQ] = {3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 4, 4, 4, 4, 5, 4, 2, 4};
 /* (spelled so they read the same in capitals: the screen's large type has no lower case) */
 static const char *const QNAME[NQ] = {"", "min", "7", "maj7", "min7", "9", "maj9", "min9", "min11", "13", "7sus", "add9",
-                                      "dim7", "min7b5", "7#9", "min6", "5"};
+                                      "dim7", "min7b5", "7#9", "min6", "5", "minmaj7"};
 static const char *const PC_NAME[12] = {"C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"};
 
 /* progressions: chords as semitones above the key, a quality and a length in half bars (2, 4 or 8 in all) */
@@ -77,6 +77,7 @@ static const prog_t PROG_MIN[] = {
     /* 23 */ {SC_DOR, 4, {{0, Q_MIN, 2}, {3, Q_MAJ, 2}, {10, Q_MAJ, 2}, {5, Q_MAJ, 2}}},
     /* 24 */ {SC_PHR, 2, {{0, Q_P5, 6}, {1, Q_P5, 2}}},
     /* 25 */ {SC_PHR, 2, {{0, Q_MIN7, 6}, {1, Q_9, 2}}},
+    /* 26 */ {SC_AEO, 3, {{0, Q_MMAJ7, 4}, {8, Q_MAJ7, 2}, {5, Q_MIN9, 2}}},   /* the spy-film chord (Trip-hop) */
 };
 /* "major": where a style has no use for a bright key, its dominant side (mixolydian vamps) */
 static const prog_t PROG_MAJ[] = {
@@ -426,12 +427,31 @@ static const style_t STYLE[GEN_NSTYLES] = {
     [GS_MIAMI] = {"Miami bass", GRID_MIAMI,
         0, 0, 0, 0, 0, 0, FILL_SNARE, {{21, 9, 5, 19}, {7, 0, 8, 13}}, V_OCT, "9000000000000000", 0, BM_GLIDE, LM_CALL,
         "9070000000000000", 72, 0, 2, CP_LOCK, 0},
+    /* 0.3.6, the BRK batch: drums from app/styles/brk.grid */
+    /* LA beats: a steady kick and snare under scattered hats, rim and conga; lush pumping pads, harp runs, a sub */
+    [GS_LABEATS] = {"LA beats", GRID_LABEATS,
+        5, 0, 0, 2, 2, 0, FILL_DROP, {{3, 1, 13, 8}, {7, 1, 0, 8}}, V_TIGHT, "9000000000000000", 0, BM_GLIDE, LM_CALL,
+        "0000000700900000", 72, 0, 2, CP_FREE, 0},
+    /* Trip-hop: a plain heavy break, the snare late, the minor-major 7 strings, a slow bass, a gliding lead */
+    [GS_TRIPHOP] = {"Trip-hop", GRID_TRIPHOP,
+        2, 0, 3, 0, 1, 0, FILL_DROP, {{26, 5, 21, 26}, {8, 7, 0, 8}}, V_TIGHT, "9000000000000000", 0, BM_LAZY, LM_WHINE,
+        "9000000000000000", 67, 0, 2, CP_FREE, 0},
+    /* Broken beat: the snare on 2 and the "and" of 3, tight rootless stabs, a sliding bass, a 3+3+2 lead */
+    [GS_BROKEN] = {"Broken beat", GRID_BROKEN,
+        3, 0, 1, 0, 2, 0, FILL_SNARE, {{1, 3, 12, 1}, {0, 7, 8, 0}}, V_TIGHT, "9000003000900070", 2, BM_LIVE, LM_CALL,
+        "9009009090090090", 72, 0, 2, CP_FREE, 0},
+    /* Montreal bounce: a broken kick between hip-hop and house, skippy hats, off-beat stabs, a bouncing bass */
+    [GS_MONTREAL] = {"Montreal bounce", GRID_MONTREAL,
+        6, 0, 0, 1, 1, 0, FILL_DROP, {{14, 7, 15, 22}, {1, 2, 3, 0}}, V_TIGHT, "0090009000900090", 1, BM_OCTAVE, LM_CALL,
+        "0700000700070000", 74, 1, 2, CP_FREE, 0},
 };
 
 /* the styles' families, the tempos they sit at (as set on the MPC: half-time styles are counted fast), whether they
  * suit the Tanzbär Lite (the picker can hide the others), effects (SFX_*), and the artists or scene */
 #define SFX_CHOP 1u                      /* the phrase's last bar: beats 3 and 4 replay beats 1 and 2, every part */
 #define SFX_BELL 2u                      /* the cowbell plays a line (batch [D]) */
+#define SFX_PUMP 4u                      /* the chords pump: CC 11 dips on each kick (BRK) */
+#define SFX_HARP 8u                      /* the arp plays a harp run on the phrase's first beat (BRK) */
 static const struct { uint8_t cat, lo, hi, tanz, fx; const char *ref; } STYLE_META[GEN_NSTYLES] = {
     [GS_DILLA] = {CAT_HIP, 80, 95, 1, 0, "J Dilla, Slum Village"},
     [GS_SOULQ] = {CAT_HIP, 80, 95, 0, 0, "D'Angelo, Questlove"},
@@ -488,6 +508,10 @@ static const struct { uint8_t cat, lo, hi, tanz, fx; const char *ref; } STYLE_ME
     [GS_KRAFTWERK] = {CAT_ELC, 100, 130, 1, 0, "Euro-electro"},
     [GS_ITALO] = {CAT_ELC, 110, 130, 1, 0, "Giorgio Moroder"},
     [GS_MIAMI] = {CAT_ELC, 115, 135, 1, 0, "2 Live Crew, freestyle"},
+    [GS_LABEATS] = {CAT_BRK, 75, 110, 0, SFX_PUMP | SFX_HARP, "Flying Lotus, Brainfeeder"},
+    [GS_TRIPHOP] = {CAT_BRK, 70, 100, 0, 0, "Massive Attack, Portishead"},
+    [GS_BROKEN] = {CAT_BRK, 105, 125, 1, 0, "West London bruk"},
+    [GS_MONTREAL] = {CAT_BRK, 100, 125, 1, 0, "Kaytranada"},
 };
 static const char *const CAT_NAME[GEN_NCATS] = {"Hip-hop", "Funk", "R&B and pop", "Electro", "Breaks and beats",
                                                 "House and techno", "UK bass", "IDM", "Caribbean and world"};
@@ -1259,16 +1283,35 @@ static void build_chords(void)
 }
 
 /* ------------------------------------------------------------------ arp --- */
+/* the harp run (SFX_HARP, LA beats): on the phrase's first beat, 32nds up two octaves of the chord (with its top
+ * note when the chord has fewer than four tones), rising in velocity; on a polyphonic device they ring into beat 2 */
+static void harp_run(int base)
+{
+    const gdev_t *d = devp(GP_ARP);
+    uint8_t nt[6];
+    int n = voicing(chord_step(0), V_SEVENTH, base, 4, nt), m, i, t = (int)GEN_STEP / 2;
+    if (!n)
+        return;
+    m = 2 * n < 8 ? 2 * n : 8;
+    for (i = 0; i <= m && i < 8; i++) {
+        int note = i < m ? nt[i % n] + 12 * (i / n) : nt[0] + 24;
+        int dur = d->poly > 1 ? 2 * 4 * (int)GEN_STEP - i * t : t - 2;
+        gput_note(GP_ARP, i * t, note, gclamp(72 + i * 4, 1, d->vmax), dur);
+    }
+}
 static void build_arp(void)
 {
     const gen_part_t *pt = &g.c->part[GP_ARP];
     const style_t *st = sty();
     int div = st->arp_div ? st->arp_div : 1, s, base = 60 + 12 * pt->oct;
+    int harp = (STYLE_META[g.c->style % GEN_NSTYLES].fx & SFX_HARP) && bb % (uint32_t)phrase_len() == 0u;
     rng_t r;
     r.s = gh(pseed(GP_ARP, 1), bb % (uint32_t)phrase_len() + epoch() * 64u);
     if (div == 3)
         div = 1;
-    for (s = 0; s < 16; s += div) {
+    if (harp)
+        harp_run(base);
+    for (s = harp ? 4 : 0; s < 16; s += div) {
         uint8_t nt[6], seq[12];
         chord_t c = chord_step(s);
         int n = voicing(c, st->voicing == V_QUARTAL || st->voicing == V_POWER ? V_SEVENTH : st->voicing, base, 4, nt);
@@ -1899,6 +1942,42 @@ static void zap_bars(void)
                     drum_put(ZAP_RULES[r].lane, s * (int)GEN_STEP + ((s & 1) ? swing_sub() : 0), 100);
     }
 }
+/* The pump (SFX_PUMP, LA beats): the chord part's expression (CC 11) dips on each kick and swells back by the next
+ * 8th (or the next kick), the sidechain sound on the chords. Bar events on the chord part's channel, from the kicks
+ * the drum part plays this bar (built before the chords), or from the style's grid when the drums are off. */
+#define PUMP_LOW 40
+static void pump(void)
+{
+    const gev_t *e = &wb->ev[GEV_OFF[GP_DRUMS]];
+    int kp[16], nk = 0, i, j, ch = g.c->part[GP_CHORD].chan, eighth = 2 * (int)GEN_STEP;
+    if (!(STYLE_META[g.c->style % GEN_NSTYLES].fx & SFX_PUMP))
+        return;
+    if (g.c->part[GP_DRUMS].on) {
+        int note = g.c->lane_note[L_KICK], kch = lane_ch(L_KICK);
+        for (i = 0; i < wb->n[GP_DRUMS] && nk < 16; i++)
+            if (e[i].kind == EV_NOTE && e[i].a == note && e[i].ch == kch && (!nk || e[i].pos >= kp[nk - 1] + 6))
+                kp[nk++] = e[i].pos;
+    } else if (sty()->lane[L_KICK]) {
+        for (i = 0; i < 16; i++) {
+            int gho, w = wdec(sty()->lane[L_KICK][i], &gho);
+            if (w >= 7 && !gho)
+                kp[nk++] = i * (int)GEN_STEP;
+        }
+    }
+    for (i = 0; i < nk; i++) {
+        int a = kp[i], z = (a / eighth + 1) * eighth;
+        if (i + 1 < nk && kp[i + 1] - 1 < z)
+            z = kp[i + 1] - 1;
+        if (z > (int)GEN_BAR - 1)
+            z = (int)GEN_BAR - 1;
+        gput_ev(GP_CHORD, a, EV_CC, 11, PUMP_LOW, 1, ch);
+        if (z - a >= 3)
+            for (j = 1; j <= 3; j++)
+                gput_ev(GP_CHORD, a + (z - a) * j / 3, EV_CC, 11, PUMP_LOW + (127 - PUMP_LOW) * j / 3, 1, ch);
+        else
+            gput_ev(GP_CHORD, gclamp(a + 1, 0, (int)GEN_BAR - 1), EV_CC, 11, 127, 1, ch);
+    }
+}
 void gen_service(void)
 {
     uint32_t sig, target, f;
@@ -1936,6 +2015,8 @@ void gen_service(void)
             zap_bars();
         if (p == GP_DRUMS && g.c->bell && g.c->bell_cc)
             bell_line();
+        if (p == GP_CHORD)
+            pump();
         sort_ev(p);
     }
     wb->bar = target;
@@ -2116,6 +2197,7 @@ void gen_style_bpm(int s, int *lo, int *hi)
 }
 int gen_style_tanz(int s) { return STYLE_META[s % GEN_NSTYLES].tanz; }
 int gen_style_bell(int s) { return (STYLE_META[s % GEN_NSTYLES].fx & SFX_BELL) != 0; }
+int gen_style_pump(int s) { return (STYLE_META[s % GEN_NSTYLES].fx & SFX_PUMP) != 0; }
 const char *gen_style_ref(int s) { return STYLE_META[s % GEN_NSTYLES].ref ? STYLE_META[s % GEN_NSTYLES].ref : ""; }
 const char *gen_cat_name(int c) { return CAT_NAME[c % GEN_NCATS]; }
 const char *gen_cat_code(int c) { return CAT_CODE[c % GEN_NCATS]; }

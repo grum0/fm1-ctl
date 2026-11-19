@@ -685,7 +685,11 @@ void eng_set(int id, int v, int64_t now)
         return;
     }
     switch (id) {
-    case F_STYLE: E.g.style = (uint8_t)v; break;
+    case F_STYLE:
+        if (gen_style_pump(E.g.style) && !gen_style_pump(v) && E.g.part[GP_CHORD].on)
+            send3(0xB0u | E.g.part[GP_CHORD].chan, 11, 127);   /* leaving the pump: the chords' expression back up */
+        E.g.style = (uint8_t)v;
+        break;
     case F_ROOT: E.g.root = (uint8_t)v; break;
     case F_MINOR: E.g.minor = (uint8_t)v; break;
     case F_PHRASE: E.g.phrase = (uint8_t)v; break;

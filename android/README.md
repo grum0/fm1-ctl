@@ -108,6 +108,15 @@ been tried). Version 0.2.0 adds:
   electro styles; Gated 80s pop's noise snare every 4th bar. Only with the Simmons in the drum set (Drums → drum
   set), so with the default kit these styles play as before.
 
+**0.3.6** (the breaks and beats batch):
+
+- **Four styles** (59 in all): LA beats and Trip-hop (hidden in the Tanzbär picker), Broken beat and Montreal
+  bounce.
+- **The pump** in LA beats: the chord part's expression (CC 11) dips on every kick and swells back by the next 8th,
+  the sidechain sound on the pads without a compressor. Leaving the style puts CC 11 back to full.
+- **The harp run** in LA beats: on the first beat of each phrase the arp part plays a quick 32nd run up two octaves
+  of the chord.
+
 ## Getting the app
 
 On GitHub: **Actions → Android APK → Run workflow** (branch `android`), then open the run and download the

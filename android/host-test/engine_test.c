@@ -1056,6 +1056,107 @@ static void test_zaps_035(void)
     printf("0.3.5: zap rules ok\n");
 }
 
+/* 0.3.6: LA beats' pump (CC 11 on the chord channel dips on each kick, back to 127 by the next 8th) and harp run
+ * (the arp's eight 32nds up two octaves on the phrase's first beat only); neither in another style */
+static void brk_run(int style)
+{
+    fresh();
+    eng_set(F_TEMPO, 120, vnow);
+    eng_set(F_STYLE, style, vnow);
+    eng_set(F_FILL_EVERY, 1, vnow);                       /* (no fills) */
+    eng_set(F_CLOCK, CLK_INT_OUT, vnow);
+    eng_set(F_PART(GP_DRUMS, PF_ON), 1, vnow);
+    eng_set(F_PART(GP_CHORD, PF_ON), 1, vnow);
+    eng_set(F_PART(GP_ARP, PF_ON), 1, vnow);
+    eng_set(F_PART(GP_DRUMS, PF_CHAN), 9, vnow);         /* (each on its own channel) */
+    eng_set(F_PART(GP_CHORD, PF_CHAN), 1, vnow);
+    eng_set(F_PART(GP_ARP, PF_CHAN), 2, vnow);
+    eng_play(1, vnow);
+    run_internal(17000);
+    eng_play(0, vnow);
+}
+static void test_brk_036(void)
+{
+    int i, j, b, kicks = 0, lows = 0, near = 0, back = 0, cc11 = 0, bad = 0, run[8], last[8];
+    int cch, ach, kn = E.g.lane_note[L_KICK], kch;
+    int64_t t0 = -1, bar = 2000 * MS, t32 = 2000 * MS / 32;
+    brk_run(GS_LABEATS);
+    cch = E.g.part[GP_CHORD].chan, ach = E.g.part[GP_ARP].chan, kch = E.g.part[GP_DRUMS].chan;
+    for (i = 0; i < nlog; i++)
+        if (log_[i].n == 3 && (log_[i].m[0] & 0xF0) == 0x90 && log_[i].m[2] && t0 < 0)
+            t0 = log_[i].t;
+    for (i = 0; i < nlog; i++) {
+        const msg_t *m = &log_[i];
+        if (m->n != 3)
+            continue;
+        if ((m->m[0] & 0xF0) == 0x90 && m->m[2] && m->m[1] == kn && (m->m[0] & 15) == kch && m->t - t0 < 8 * bar)
+            kicks++;
+        if ((m->m[0] & 0xF0) == 0xB0 && m->m[1] == 11) {
+            CHECK((m->m[0] & 15) == cch, "pump CC 11 on channel %d, not the chord part's %d", m->m[0] & 15, cch);
+            if (m->m[2] != 40 || m->t - t0 >= 8 * bar)
+                continue;
+            lows++;
+            for (j = 0; j < nlog; j++)                   /* a kick at the same time */
+                if (log_[j].n == 3 && (log_[j].m[0] & 0xF0) == 0x90 && log_[j].m[2] && log_[j].m[1] == kn &&
+                    (log_[j].m[0] & 15) == kch && llabs(log_[j].t - m->t) <= 2 * MS) {
+                    near++;
+                    break;
+                }
+            for (j = i + 1; j < nlog; j++)               /* and back up by the next 8th */
+                if (log_[j].n == 3 && log_[j].m[0] == m->m[0] && log_[j].m[1] == 11) {
+                    if (log_[j].m[2] == 127 && log_[j].t - m->t <= 2000 * MS / 8 + 2 * MS)
+                        back++;
+                    if (log_[j].m[2] == 127 || log_[j].m[2] == 40)
+                        break;
+                }
+        }
+    }
+    CHECK(kicks > 16 && lows == kicks && near == lows && back == lows,
+          "pump: %d kicks, %d dips, %d with a kick, %d back to 127 in time", kicks, lows, near, back);
+    for (b = 0; b < 8; b++)
+        run[b] = 0, last[b] = -1;
+    for (i = 0; i < nlog; i++) {                         /* the arp's notes in beat 1 of each bar, 32nds apart, rising */
+        const msg_t *m = &log_[i];
+        int64_t at;
+        if (m->n != 3 || (m->m[0] & 0xF0) != 0x90 || !m->m[2] || (m->m[0] & 15) != ach)
+            continue;
+        at = m->t - t0 + 5 * MS;
+        b = (int)(at / bar);
+        if (b >= 8 || at % bar >= bar / 4)
+            continue;
+        if (b % 4 == 0 && ((last[b] >= 0 && m->m[1] <= last[b]) || llabs(at % bar - 5 * MS - run[b] * t32) > 3 * MS))
+            bad++;
+        last[b] = m->m[1];
+        run[b]++;
+    }
+    CHECK(run[0] == 8 && run[4] == 8 && run[1] <= 4 && run[2] <= 4 && run[3] <= 4 && run[5] <= 4,
+          "harp runs: %d %d %d %d %d %d notes in beat 1", run[0], run[1], run[2], run[3], run[4], run[5]);
+    CHECK(!bad, "harp run: %d notes not 32nds apart or not rising", bad);
+    nlog = 0;                                            /* leaving the pump: CC 11 back to 127 at once */
+    eng_set(F_STYLE, GS_DILLA, vnow);
+    CHECK(nlog == 1 && log_[0].m[0] == (0xB0 | cch) && log_[0].m[1] == 11 && log_[0].m[2] == 127,
+          "leaving LA beats: %d messages", nlog);
+    brk_run(GS_DILLA);
+    for (i = 0; i < 8; i++)
+        run[i] = 0;
+    t0 = -1;
+    for (i = 0; i < nlog; i++) {
+        const msg_t *m = &log_[i];
+        if (m->n != 3)
+            continue;
+        if ((m->m[0] & 0xF0) == 0x90 && m->m[2] && t0 < 0)
+            t0 = m->t;
+        cc11 += (m->m[0] & 0xF0) == 0xB0 && m->m[1] == 11;
+        if ((m->m[0] & 0xF0) == 0x90 && m->m[2] && (m->m[0] & 15) == ach && t0 >= 0 && m->t - t0 + 5 * MS < 8 * bar &&
+            (m->t - t0 + 5 * MS) % bar < bar / 4)
+            run[(m->t - t0 + 5 * MS) / bar]++;
+    }
+    for (b = 0, bad = 0; b < 8; b++)
+        bad += run[b] > 4;                               /* (an arp step and its ratchet: no run) */
+    CHECK(!cc11 && !bad, "Dilla: %d CC 11, %d bars with a run", cc11, bad);
+    printf("0.3.6: pump and harp run ok\n");
+}
+
 int main(void)
 {
     test_ranges();
@@ -1075,6 +1176,7 @@ int main(void)
     test_bell_lines_033();
     test_pocket_034();
     test_zaps_035();
+    test_brk_036();
     test_panic();
     printf(fails ? "FAILED (%d)\n" : "ok\n", fails);
     free(log_);

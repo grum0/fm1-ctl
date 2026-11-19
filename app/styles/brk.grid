@@ -1,0 +1,30 @@
+# BRK batch (0.3.6): from fm1-build-status.md. LA beats also pumps its chords (CC 11 on each kick) and opens each
+# phrase with a harp run on the arp part (STYLE_META.fx in gen.c).
+
+style LABEATS
+kick     X..x .... .x.x ..x.
+snare    .... X... .... X..o
+rim      .o.. ..o. .o.. ....
+chat     x.ox .xo. x.ox .xo.
+conga    .... ...o .... ..o.
+
+style TRIPHOP
+kick     X... ..X. .... ...x
+snare    .... X... .... X...
+rim      .... .... ..o. ....
+chat     x.x. x.x. x.x. x.x.
+ohat     .... .... .... ..x.
+
+style BROKEN
+kick     X... ..x. .... .x.x
+snare    .... X... ..X. .o..
+rim      ..o. .... o... ...o
+clap     .... X... .... ....
+chat     x.xo x.xo .xxo x.xo
+
+style MONTREAL
+kick     X... ..x. x... .x..
+clap     .... X... .... X...
+rim      .x.. ...o .x.. ....
+chat     .xX. .xX. .xX. .xX.
+conga    ...x .... ..x. ....

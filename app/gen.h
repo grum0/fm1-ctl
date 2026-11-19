@@ -21,6 +21,7 @@ enum { GS_DILLA, GS_SOULQ, GS_GFUNK, GS_BOMB, GS_QUINCY, GS_JUSTIFIED, GS_MPLS, 
        GS_BELLFUNK, GS_MIAMIBELL, GS_DETBELL, GS_AFROBELL,
        GS_TALKBOX, GS_MODBOOGIE, GS_GOGO, GS_BLAX,
        GS_TIMBALAND, GS_GATED, GS_KRAFTWERK, GS_ITALO, GS_MIAMI,
+       GS_LABEATS, GS_TRIPHOP, GS_BROKEN, GS_MONTREAL,
        GEN_NSTYLES };
 /* the styles' families, for a picker in two steps and a three-letter prefix */
 enum { CAT_HIP, CAT_FNK, CAT_RNB, CAT_ELC, CAT_BRK, CAT_HSE, CAT_BAS, CAT_IDM, CAT_WLD, GEN_NCATS };
@@ -97,8 +98,9 @@ uint16_t gen_lane_steps(int lane);       /* the drum part's hits this bar (for t
 const char *gen_style_name(int s);
 int gen_style_cat(int s);                /* CAT_* */
 void gen_style_bpm(int s, int *lo, int *hi);   /* the tempos it sits at, as set on the MPC (half-time styles counted fast) */
-int gen_style_tanz(int s);
-int gen_style_bell(int s);               /* 1: the cowbell plays a line in this style (Cowbell pitch: Style) */               /* 1: suits the Tanzbär Lite (not built on sampled breaks or a live kit) */
+int gen_style_tanz(int s);               /* 1: suits the Tanzbär Lite (not built on sampled breaks or a live kit) */
+int gen_style_bell(int s);               /* 1: the cowbell plays a line in this style (Cowbell pitch: Style) */
+int gen_style_pump(int s);               /* 1: the chord part's CC 11 dips on each kick in this style */
 const char *gen_style_ref(int s);        /* the artists or scene it comes from, "" if none */
 const char *gen_cat_name(int c);         /* "Hip-hop" */
 const char *gen_cat_code(int c);         /* "HIP" */
