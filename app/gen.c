@@ -366,12 +366,31 @@ static const style_t STYLE[GEN_NSTYLES] = {
     [GS_CHOPPED] = {"Chopped and screwed", GRID_CHOPPED,
         2, 2, 4, 2, 2, 0, FILL_NONE, {{3, 5, 22, 0}, {7, 0, 1, 8}}, V_TIGHT, "9000000000000000", 0, BM_GLIDE, LM_CALL,
         "9000000000000000", 60, 0, 2, CP_FOLLOW, 0},
+    /* 0.3.3, batch [D], the melodic-cowbell styles: drums from app/styles/bell.grid, bell lines in BELL_LINES */
+    /* Electro bell funk: the bell riff is the hook; stabs only at the phrase start, a robot bass on the kick */
+    [GS_BELLFUNK] = {"Electro bell funk", GRID_BELLFUNK,
+        1, 0, 1, 0, 1, 0, FILL_ELECTRO, {{10, 9, 0, 2}, {12, 6, 10, 12}}, V_TIGHT, "9000000000000000", 0, BM_ROBOT, LM_CALL,
+        "9000000000000000", 72, 0, 2, CP_FOLLOW, 0},
+    /* Miami bass bell: the broken kick and a long gliding sub, a chant-like bell hook around the fifth */
+    [GS_MIAMIBELL] = {"Miami bass bell", GRID_MIAMIBELL,
+        0, 0, 0, 0, 0, 0, FILL_SNARE, {{21, 5, 4, 19}, {7, 0, 8, 13}}, V_OCT, "9000000000000000", 0, BM_GLIDE, LM_CALL,
+        "9000000000000000", 72, 0, 2, CP_LOCK, 0},
+    /* Detroit bell techno: a 3+3+2 bell melody that slowly evolves, over held minor pads and a root sub */
+    [GS_DETBELL] = {"Detroit bell techno", GRID_DETBELL,
+        0, 0, 0, 0, 0, 0, FILL_NONE, {{13, 21, 9, 0}, {12, 10, 6, 12}}, V_WIDE, "9000000000000000", 0, BM_ROOT, LM_HOOK,
+        "9000000000000000", 72, 0, 2, CP_FREE, 0},
+    /* Afro-funk bell: a double bell (root and fifth) keeping time over a dorian vamp and a busy funk bass */
+    [GS_AFROBELL] = {"Afro-funk bell", GRID_AFROBELL,
+        3, 0, 1, 1, 2, 0, FILL_LIVE, {{13, 16, 20, 1}, {4, 5, 9, 13}}, V_TIGHT, "0000000000000090", 0, BM_BOOTSY, LM_CALL,
+        "9070900000000000", 72, 1, 2, CP_FREE, 0},
 };
 
 /* the styles' families, the tempos they sit at (as set on the MPC: half-time styles are counted fast), whether they
  * suit the Tanzbär Lite (the picker can hide the others), effects (SFX_*), and the artists or scene */
 #define SFX_CHOP 1u                      /* the phrase's last bar: beats 3 and 4 replay beats 1 and 2, every part */
 #define SFX_BELL 2u                      /* the cowbell plays a line (batch [D]) */
+#define SFX_ZAP4 4u                      /* the zap only in the 4th bar of every 4 */
+#define SFX_ZAP2 8u                      /* the zap only every other bar */
 static const struct { uint8_t cat, lo, hi, tanz, fx; const char *ref; } STYLE_META[GEN_NSTYLES] = {
     [GS_DILLA] = {CAT_HIP, 80, 95, 1, 0, "J Dilla, Slum Village"},
     [GS_SOULQ] = {CAT_HIP, 80, 95, 0, 0, "D'Angelo, Questlove"},
@@ -415,6 +434,10 @@ static const struct { uint8_t cat, lo, hi, tanz, fx; const char *ref; } STYLE_ME
     [GS_OLDSCHOOL] = {CAT_HIP, 95, 115, 1, 0, "Run-DMC, Def Jam"},
     [GS_BOUNCE] = {CAT_HIP, 95, 105, 1, 0, "Triggerman beat"},
     [GS_CHOPPED] = {CAT_HIP, 60, 75, 1, SFX_CHOP, "DJ Screw, Houston"},
+    [GS_BELLFUNK] = {CAT_ELC, 108, 124, 1, SFX_BELL | SFX_ZAP4, "Bambaataa-era bell riff"},
+    [GS_MIAMIBELL] = {CAT_ELC, 120, 135, 1, SFX_BELL | SFX_ZAP2, "bell-hook bass music"},
+    [GS_DETBELL] = {CAT_HSE, 125, 135, 1, SFX_BELL, "looping bell melody"},
+    [GS_AFROBELL] = {CAT_FNK, 100, 118, 1, SFX_BELL, "Afrobeat bell over a funk groove"},
 };
 static const char *const CAT_NAME[GEN_NCATS] = {"Hip-hop", "Funk", "R&B and pop", "Electro", "Breaks and beats",
                                                 "House and techno", "UK bass", "IDM", "Caribbean and world"};
@@ -1662,11 +1685,80 @@ static void chop(int p)
         for (i = 0; i < GEN_NLANES; i++)
             wb->lanes[i] = (uint16_t)((wb->lanes[i] & 0xFFu) | (wb->lanes[i] & 0xFFu) << 8);
 }
-/* The melodic cowbell: each cowbell hit gets a chord tone (root, fifth or third, by the seed and the bar), and the
- * drum's tune CC goes out half a sixteenth before it (the Tanzbär needs about 40 ms: that is 62 ms at 120 BPM, 40
- * at 187). The bar's first hit is the key's root, tuned at the end of the bar before, so each bar is still a pure
- * function of the bar. A pitch the drum can't play becomes its fifth, then its fourth, then the key's third. */
+/* The melodic cowbell. The drum's tune CC goes out half a sixteenth before each cowbell hit (the Tanzbär needs about
+ * 40 ms: that is 62 ms at 120 BPM, 40 at 187). A style with a written bell line (batch [D], BELL_LINES) plays its
+ * scale degrees; any other style, with Cowbell pitch on Melodic, plays chord tones (root, fifth or third by the seed,
+ * the bar and the step, the bar's first hit on the key's root). The bar's first hit is tuned at the end of the bar
+ * before, so each bar is still a pure function of the bar. A pitch the drum can't play becomes its fifth, then its
+ * fourth, then the key's third. */
 #define BELL_LEAD (GEN_STEP / 2)
+enum { BL_PLAIN, BL_DRIFT, BL_B7 };      /* as written; one note moving every 4th bar; the last hit b7 every 4th bar */
+/* the scale degree (1..7, in the progression's mode) of the cowbell hit on each step; two bars, '.' no hit */
+static const struct { uint8_t style, kind; const char *bar[2]; } BELL_LINES[] = {
+    {GS_BELLFUNK, BL_PLAIN, {"1..1..3.1..4.3..", "1..1..3.5..4.7.."}},
+    {GS_MIAMIBELL, BL_PLAIN, {"5.5...1.5.5...3.", "5.5...1.4.3...1."}},
+    {GS_DETBELL, BL_DRIFT, {"1..3..5.4..3..1.", "1..3..5.4..3..1."}},
+    {GS_AFROBELL, BL_B7, {"1.5.15.5.5.51.5.", "1.5.15.5.5.51.5."}},
+};
+static int bell_line_of(int style)
+{
+    int i;
+    for (i = 0; i < (int)(sizeof BELL_LINES / sizeof BELL_LINES[0]); i++)
+        if (BELL_LINES[i].style == style)
+            return i;
+    return -1;
+}
+static int scale_semis(int deg)          /* a scale degree's semitones above the key's root, in the current mode */
+{
+    uint16_t m = SC_MASK[cur_prog()->scale];
+    int i, n = 0;
+    for (i = 0; i < 12; i++)
+        if ((m >> i & 1u) && ++n == deg)
+            return i;
+    return 0;
+}
+static int nth_hit(const char *l, int k) /* the step of the k-th written hit (k >= 1), -1 if fewer */
+{
+    int i;
+    for (i = 0; i < 16; i++)
+        if (l[i] != '.' && k-- == 0)
+            return i;
+    return -1;
+}
+static int hits_in(const char *l)
+{
+    int i, n = 0;
+    for (i = 0; i < 16; i++)
+        n += l[i] != '.';
+    return n;
+}
+/* The degree of the written line's hit at `step` in `bar` (a hit the variation added takes the written hit before
+ * it). Mutate changes at most one note a bar, never the first. */
+static int bell_deg(int li, uint32_t bar, int step)
+{
+    const char *l = BELL_LINES[li].bar[bar & 1u];
+    int i, d = 1, n = hits_in(l), last = nth_hit(l, n - 1);
+    uint32_t e;
+    for (i = 0; i <= step && i < 16; i++)
+        if (l[i] != '.')
+            d = l[i] - '0';
+    if (BELL_LINES[li].kind == BL_DRIFT && n > 1) {      /* the last four moves (one every 4th bar) still stand */
+        static const uint8_t PENT[5] = {1, 3, 4, 5, 7};
+        uint32_t now = bar / 4u, from = now > 3u ? now - 3u : 1u;
+        for (e = from; e <= now && now; e++)
+            if (step == nth_hit(l, 1 + (int)(gh(g.c->seed, 0xD71Fu + e) % (uint32_t)(n - 1))))
+                d = PENT[gh(g.c->seed, 0xD720u + e) % 5u];
+    }
+    if (BELL_LINES[li].kind == BL_B7 && bar % 4u == 3u && step == last)
+        d = 7;
+    if (g.c->mutate && n > 1) {
+        uint32_t ep = bar / (uint32_t)phrase_len() / (uint32_t)(9 - gclamp(g.c->mutate, 1, 8));
+        uint32_t h = gh(g.c->seed + ep * 2u + (bar & 1u), 0xB3E1u);
+        if (ep && step == nth_hit(l, 1 + (int)(h % (uint32_t)(n - 1))))
+            d = (h >> 16 & 1u) ? d % 7 + 1 : (d + 5) % 7 + 1;   /* a scale step up or down */
+    }
+    return d;
+}
 static int bell_val(int pc)
 {
     const int off[4] = {0, 7, 5, g.c->minor ? 3 : 4};
@@ -1679,22 +1771,46 @@ static int bell_val(int pc)
 static void bell_line(void)
 {
     const gev_t *e = &wb->ev[GEV_OFF[GP_DRUMS]];
-    int n = wb->n[GP_DRUMS], i, v, note = g.c->lane_note[L_COWB], ch = lane_ch(L_COWB);
+    int n = wb->n[GP_DRUMS], i, v, note = g.c->lane_note[L_COWB], ch = lane_ch(L_COWB), li = bell_line_of(g.c->style);
     for (i = 0; i < n; i++) {
-        chord_t c;
-        uint32_t k;
-        int iv;
+        int step, pc;
         if (e[i].kind != EV_NOTE || e[i].a != note || e[i].pos < BELL_LEAD)
             continue;
-        c = chord_step(e[i].pos / (int)GEN_STEP);
-        k = gh(g.c->seed + bb * 16u + e[i].pos / GEN_STEP, 0xBE11u) % 5u;
-        iv = k < 2u ? 0 : k < 4u ? QIV[c.q][2] : QIV[c.q][1];
-        v = bell_val((c.root + iv) % 12);
+        step = (e[i].pos + GEN_STEP / 4) / GEN_STEP;     /* (a hit a little early still counts as its step) */
+        if (step > 15)
+            step = 15;
+        if (li >= 0) {
+            pc = g.c->root + scale_semis(bell_deg(li, bb, step));
+        } else {
+            chord_t c = chord_step(step);
+            uint32_t k = gh(g.c->seed + bb * 16u + (uint32_t)step, 0xBE11u) % 5u;
+            pc = c.root + (k < 2u ? 0 : k < 4u ? QIV[c.q][2] : QIV[c.q][1]);
+        }
+        v = bell_val(pc % 12);
         if (v >= 0)
             gput_ev(GP_DRUMS, e[i].pos - BELL_LEAD, EV_CC, g.c->bell_cc, v, 1, ch);
     }
-    if ((v = bell_val(g.c->root)) >= 0)                  /* the next bar's first hit */
+    v = bell_val((g.c->root + (li >= 0 ? scale_semis(bell_deg(li, bb + 1u, 0)) : 0)) % 12);
+    if (v >= 0)                                          /* the next bar's first hit */
         gput_ev(GP_DRUMS, (int)GEN_BAR - BELL_LEAD, EV_CC, g.c->bell_cc, v, 1, ch);
+}
+static int is_grid_zap(int pos)          /* a zap where the style's grid has one (not a fill's) */
+{
+    int step = (pos + GEN_STEP / 4) / GEN_STEP;
+    return step < 16 && sty()->lane[L_SIM1] && sty()->lane[L_SIM1][step] != '0';
+}
+/* the zap only in some bars (SFX_ZAP4, SFX_ZAP2): a grid is one bar, these designs want it rarer */
+static void zap_bars(void)
+{
+    gev_t *e = &wb->ev[GEV_OFF[GP_DRUMS]];
+    unsigned fx = STYLE_META[g.c->style % GEN_NSTYLES].fx;
+    int n = wb->n[GP_DRUMS], i, k = 0, note = g.c->lane_note[L_SIM1], ch = lane_ch(L_SIM1);
+    if (!(fx & (SFX_ZAP4 | SFX_ZAP2)) || bb % ((fx & SFX_ZAP4) ? 4u : 2u) == ((fx & SFX_ZAP4) ? 3u : 1u))
+        return;
+    for (i = 0; i < n; i++)
+        if (!(e[i].kind == EV_NOTE && e[i].a == note && e[i].ch == ch && is_grid_zap(e[i].pos)))
+            e[k++] = e[i];
+    wb->n[GP_DRUMS] = (uint16_t)k;
 }
 void gen_service(void)
 {
@@ -1729,6 +1845,8 @@ void gen_service(void)
         default: build_marble(); break;
         }
         chop(p);
+        if (p == GP_DRUMS)
+            zap_bars();
         if (p == GP_DRUMS && g.c->bell && g.c->bell_cc)
             bell_line();
         sort_ev(p);

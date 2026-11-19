@@ -134,8 +134,19 @@ fun RigScreen(s: Store) {
             }
             Text(
                 "Picking a style, changing the key and Start set the Tanzbär's tone and decays for the style and tune " +
-                    "its kick (and, where the style asks, toms, congas and claves) to the key. The Control page's " +
+                    "the toms, congas and claves where the style asks (and the kick, with Kick tune on Key). The Control page's " +
                     "Tanzbär sliders follow, and stay free to change until the next style or key.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Text("Kick tune", style = MaterialTheme.typography.bodyMedium)
+            ChipGrid(listOf("Style", "Key"), { (it == 1) == s.kickKey }, 2) {
+                s.kickKey = it == 1
+                s.touch()
+                s.applyTanzSound()
+            }
+            Text(
+                "Style: the style's own kick pitch. Key: the kick tuned to the key's root (its fifth in C, C# and D, " +
+                    "which the kick can't reach).",
                 style = MaterialTheme.typography.bodySmall,
             )
             Text("Cowbell pitch", style = MaterialTheme.typography.bodyMedium)
@@ -146,7 +157,8 @@ fun RigScreen(s: Store) {
             }
             Text(
                 "Fixed: one pitch, in the key. Melodic: the cowbell plays a line on the chords, retuned just before " +
-                    "each hit, with a short decay. Style: melodic in the cowbell styles still to come, fixed in the rest.",
+                    "each hit, with a short decay. Style: the bell styles (Electro bell funk, Miami bass bell, Detroit bell techno, " +
+                    "Afro-funk bell) play their written bell lines, the rest a fixed pitch.",
                 style = MaterialTheme.typography.bodySmall,
             )
             SwitchRow("Picking a style moves the tempo into its range", s.styleTempo) {

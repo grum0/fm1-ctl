@@ -85,6 +85,15 @@ been tried). Version 0.2.0 adds:
 - **Picking a style moves the tempo into its range** (off by default; not while following the MPC).
 - **Panic** no longer sends Reset All Controllers to the Tanzbär, and sends its sound again afterwards.
 
+**0.3.3** (batch [D], the bell styles):
+
+- **Four melodic-cowbell styles** (46 in all): Electro bell funk, Miami bass bell, Detroit bell techno, Afro-funk
+  bell. With Rig → Cowbell pitch on **Style** (the default) and the drums on the Tanzbär, the cowbell plays each
+  style's written bell line, retuned before every hit; Mutate changes at most one note a bar, never the first.
+  Detroit bell techno's loop slowly moves one note every 4th bar; Afro-funk bell ends every 4th bar on the flat 7th.
+- **Rig → Kick tune**: Style (each style's own kick pitch, the default) or Key (tuned to the key, as 0.3.2 did).
+- The cowbell's decay while it plays a line is now per style (Miami bass bell a little longer).
+
 ## Getting the app
 
 On GitHub: **Actions → Android APK → Run workflow** (branch `android`), then open the run and download the

@@ -50,9 +50,17 @@ object TanzData {
         intArrayOf(80, 70, 55, 80, 98, 72, 81, 72, 68, 64, 64, 64, 64, 67, 22, 89), // OLDSCHOOL
         intArrayOf(77, 60, 70, 75, 73, 68, 74, 68, 63, 64, 64, 64, 64, 64, 16, 83), // BOUNCE
         intArrayOf(82, 25, 40, 60, 114, 50, 93, 50, 75, 78, 75, 64, 48, 72, 36, 97), // CHOPPED
+        intArrayOf(80, 55, 70, 85, 86, 70, 81, 70, 75, 64, 32, 64, 64, 67, 16, 89), // BELLFUNK
+        intArrayOf(88, 50, 70, 90, 90, 72, 81, 72, 68, 64, 32, 64, 64, 67, 9, 87), // MIAMIBELL
+        intArrayOf(70, 50, 64, 75, 73, 64, 71, 64, 68, 64, 32, 64, 64, 67, 13, 82), // DETBELL
+        intArrayOf(59, 50, 55, 75, 82, 60, 68, 60, 63, 64, 32, 64, 56, 67, 27, 92), // AFROBELL
     )
     /** Per style, the voices besides the kick that follow the key: bit 0 tom, 1 conga, 2 clave. */
-    val FOLLOW = intArrayOf(0, 2, 0, 0, 2, 0, 1, 0, 0, 0, 2, 2, 1, 1, 0, 0, 4, 0, 1, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 2, 1, 1, 0, 0)
+    val FOLLOW = intArrayOf(0, 2, 0, 0, 2, 0, 1, 0, 0, 0, 2, 2, 1, 1, 0, 0, 4, 0, 1, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 2, 1, 1, 0, 0, 1, 0, 0, 2)
+    /** Per style, the kick tune (CC 3) with Kick tune: Style. */
+    val KICK_STYLE = intArrayOf(40, 36, 30, 60, 50, 56, 60, 50, 56, 50, 40, 44, 24, 30, 30, 64, 70, 44, 24, 56, 50, 20, 64, 44, 44, 56, 50, 56, 56, 36, 60, 56, 24, 16, 12, 44, 36, 36, 64, 30, 30, 10, 26, 16, 40, 44)
+    /** Per style, the cowbell decay (CC 85) while it plays a line. */
+    val BELL_DECAY = intArrayOf(19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 32, 24, 19)
     /** Tune: the CC, then its value for each pitch class from C; -1 where the drum cannot play it. */
     const val KICK_CC = 3
     val KICK = intArrayOf(-1, -1, -1, 0, 11, 21, 30, 38, 47, 56, 69, 90)
@@ -64,6 +72,4 @@ object TanzData {
     val BELL = intArrayOf(42, 49, 57, 67, 81, -1, 4, 9, 15, 21, 28, 35)
     const val CLAVE_CC = 86
     val CLAVE = intArrayOf(59, 66, 73, 80, 93, 127, -1, -1, -1, 12, 37, 51)
-    /** The cowbell's decay while it plays a line (45 ms). */
-    const val BELL_MELODIC_DECAY = 19
 }

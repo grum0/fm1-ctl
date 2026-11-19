@@ -884,6 +884,89 @@ static void test_bell_032(void)
     printf("0.3.2: melodic cowbell ok\n");
 }
 
+/* 0.3.3: batch [D]'s written bell lines */
+static void test_bell_lines_033(void)
+{
+    static const uint8_t TAB[12] = {42, 49, 57, 67, 81, 255, 4, 9, 15, 21, 28, 35};
+    static const int ST[4] = {GS_BELLFUNK, GS_MIAMIBELL, GS_DETBELL, GS_AFROBELL};
+    static const int FUNK[2][6] = {{1, 1, 3, 1, 4, 3}, {1, 1, 3, 5, 4, 7}};
+    static const int FSTEP[6] = {0, 3, 6, 8, 11, 13};
+    int i, j, k, r, bad, n, li;
+    fresh();
+    eng_set(F_STYLE, GS_BELLFUNK, vnow);
+    li = bell_line_of(GS_BELLFUNK);
+    for (bad = 0, i = 0; i < 2; i++)                     /* as written */
+        for (j = 0; j < 6; j++)
+            bad += bell_deg(li, (uint32_t)i, FSTEP[j]) != FUNK[i][j];
+    CHECK(li >= 0 && !bad, "bell funk: %d degrees not as written", bad);
+    eng_set(F_STYLE, GS_AFROBELL, vnow);
+    li = bell_line_of(GS_AFROBELL);
+    CHECK(bell_deg(li, 2, 14) == 5 && bell_deg(li, 3, 14) == 7 && bell_deg(li, 3, 12) == 1 && bell_deg(li, 3, 0) == 1,
+          "afro-funk: fifth, b7 every 4th bar, root on strong hits");
+    for (k = 0; k < 4; k++) {                            /* Mutate: at most one note a bar, never the first */
+        int moved = 0, firsts = 0, many = 0;
+        eng_set(F_STYLE, ST[k], vnow);
+        li = bell_line_of(ST[k]);
+        for (r = 0; r < 96; r++) {
+            int diff = 0, base[16];
+            eng_set(F_MUTATE, 0, vnow);
+            for (j = 0; j < 16; j++)
+                base[j] = bell_deg(li, (uint32_t)r, j);
+            eng_set(F_MUTATE, 8, vnow);
+            for (j = 0; j < 16; j++)
+                if (BELL_LINES[li].bar[r & 1][j] != '.' && bell_deg(li, (uint32_t)r, j) != base[j]) {
+                    diff++;
+                    firsts += j == 0;
+                }
+            moved += diff > 0;
+            many += diff > 1;
+        }
+        CHECK(moved > 10 && !firsts && !many, "style %d mutate: %d bars moved, %d firsts, %d bars with more", ST[k], moved,
+              firsts, many);
+    }
+    eng_set(F_MUTATE, 0, vnow);
+    for (k = 0; k < 4; k++)                              /* in the app: C and F minor, CCs from the line, in time */
+        for (r = 0; r < 2; r++) {
+            int64_t t0 = -1, bar = 2000 * MS, best;
+            fresh();
+            eng_set(F_TEMPO, 120, vnow);
+            eng_set(F_STYLE, ST[k], vnow);
+            eng_set(F_ROOT, r ? 5 : 0, vnow);
+            eng_set(F_MINOR, 1, vnow);
+            eng_set(F_CLOCK, CLK_INT_OUT, vnow);
+            eng_set(F_PART(GP_DRUMS, PF_ON), 1, vnow);
+            eng_bell_table(84, TAB);
+            eng_set(F_BELL, 1, vnow);
+            eng_play(1, vnow);
+            run_internal(8000);
+            eng_play(0, vnow);
+            li = bell_line_of(ST[k]);
+            for (i = 0, n = 0, bad = 0; i < nlog; i++) {
+                int64_t rel;
+                int b, step, want;
+                if (!(log_[i].n == 3 && (log_[i].m[0] & 0xF0) == 0x90 && log_[i].m[2] && log_[i].m[1] == 45))
+                    continue;
+                if (t0 < 0)
+                    t0 = log_[i].t;
+                rel = log_[i].t - t0 + 30 * MS;
+                b = (int)(rel / bar);
+                step = (int)(rel % bar / (bar / 16));
+                if (b < 1)
+                    continue;
+                for (j = 0, best = -1; j < nlog; j++)
+                    if (log_[j].n == 3 && (log_[j].m[0] & 0xF0) == 0xB0 && log_[j].m[1] == 84 && log_[j].t <= log_[i].t &&
+                        log_[j].t > (best < 0 ? -1 : log_[best].t))
+                        best = j;
+                want = bell_val((g.c->root + scale_semis(bell_deg(li, (uint32_t)b, step))) % 12);
+                n++;
+                bad += best < 0 || log_[i].t - log_[best].t < 30 * MS || log_[i].t - log_[best].t > 100 * MS ||
+                       log_[best].m[2] != want || want == 255;
+            }
+            CHECK(n > 12 && !bad, "style %d key %s: %d bell hits, %d wrong", ST[k], r ? "F" : "C", n, bad);
+        }
+    printf("0.3.3: bell lines ok\n");
+}
+
 int main(void)
 {
     test_ranges();
@@ -900,6 +983,7 @@ int main(void)
     test_styles_030();
     test_qol_031();
     test_bell_032();
+    test_bell_lines_033();
     test_panic();
     printf(fails ? "FAILED (%d)\n" : "ok\n", fails);
     free(log_);

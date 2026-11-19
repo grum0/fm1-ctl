@@ -54,12 +54,14 @@ def main():
     names = enum_styles()
     got = {}
     for n, r in rows('styles.tsv'):
-        if len(r) != len(COLS) + 2 or r[0] not in names or r[0] in got:
-            sys.exit('styles.tsv:%d: a known style, once, with %d values and a tune flag' % (n, len(COLS)))
-        vals = [cc_for_ms(cc, float(v)) if ms else int(v) for (_, cc, ms), v in zip(COLS, r[1:-1])]
-        if any(v < 0 or v > 127 for v in vals) or any(ch not in 'tcl-' for ch in r[-1]):
+        if len(r) != len(COLS) + 4 or r[0] not in names or r[0] in got:
+            sys.exit('styles.tsv:%d: a known style, once, with %d values, tune flags, ktune, bellmel' % (n, len(COLS)))
+        vals = [cc_for_ms(cc, float(v)) if ms else int(v) for (_, cc, ms), v in zip(COLS, r[1:len(COLS) + 1])]
+        flags, ktune, bellmel = r[len(COLS) + 1:]
+        bell = cc_for_ms(85, BELL_MELODIC_MS if bellmel == '-' else float(bellmel))
+        if any(v < 0 or v > 127 for v in vals + [int(ktune)]) or any(ch not in 'tcl-' for ch in flags):
             sys.exit('styles.tsv:%d: values 0..127, tune flags t c l or -' % n)
-        got[r[0]] = (vals, sum(1 << 'tcl'.index(ch) for ch in r[-1] if ch != '-'))
+        got[r[0]] = (vals, sum(1 << 'tcl'.index(ch) for ch in flags if ch != '-'), int(ktune), bell)
     missing = [s for s in names if s not in got]
     if missing:
         sys.exit('styles.tsv: no sound for %s' % ' '.join(missing))
@@ -78,13 +80,15 @@ def main():
     out += ['    )',
             '    /** Per style, the voices besides the kick that follow the key: bit 0 tom, 1 conga, 2 clave. */',
             '    val FOLLOW = intArrayOf(%s)' % ', '.join(str(got[s][1]) for s in names),
+            '    /** Per style, the kick tune (CC 3) with Kick tune: Style. */',
+            '    val KICK_STYLE = intArrayOf(%s)' % ', '.join(str(got[s][2]) for s in names),
+            '    /** Per style, the cowbell decay (CC 85) while it plays a line. */',
+            '    val BELL_DECAY = intArrayOf(%s)' % ', '.join(str(got[s][3]) for s in names),
             '    /** Tune: the CC, then its value for each pitch class from C; -1 where the drum cannot play it. */']
     for name, cc in TUNES:
         out.append('    const val %s_CC = %d' % (name, cc))
         out.append('    val %s = intArrayOf(%s)' % (name, ', '.join(map(str, tune[cc]))))
-    out += ['    /** The cowbell\'s decay while it plays a line (%d ms). */' % BELL_MELODIC_MS,
-            '    const val BELL_MELODIC_DECAY = %d' % cc_for_ms(85, BELL_MELODIC_MS),
-            '}', '']
+    out += ['}', '']
     text = '\n'.join(out)
     if '--check' in sys.argv:
         if not os.path.exists(OUT) or open(OUT, encoding='utf-8').read() != text:

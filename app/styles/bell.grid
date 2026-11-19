@@ -1,0 +1,33 @@
+# Batch [D]: the melodic-cowbell styles (claude/gen1-cowbell-styles.md). Their bell lines (the scale degree of each
+# cowbell hit) are in gen.c, BELL_LINES. The zap plays only with the Simmons in the drum set; gen.c keeps it to the
+# bars the designs give (every 4th bar, every other bar).
+
+style BELLFUNK
+kick     X... ..x. ..X. ....
+snare    .... X... .... X...
+clap     .... X... .... X...
+chat     x.x. x.x. x.x. x.xo
+cowbell  x..x ..x. x..x .x..
+zap      .... .... .... ..x.
+
+style MIAMIBELL
+kick     X... ...x ..x. ....
+snare    .... X... .... X...
+clap     .... X... .... X...
+chat     xxxx xxxx xxxx xxxx
+cowbell  x.x. ..x. x.x. ..x.
+zap      .... .... ..x. ....
+
+style DETBELL
+kick     X... X... X... X...
+clap     .... X... .... X...
+chat     ..o. ..o. ..o. ..o.
+ohat     ..x. ..x. ..x. ..x.
+cowbell  x..x ..x. x..x ..x.
+
+style AFROBELL
+kick     X..x ..x. X... .x..
+snare    .... X..o .o.. X...
+chat     x.x. x.x. x.x. x.x.
+conga    ..x. .xx. ..x. .x.x
+cowbell  x.x. xx.x .x.x x.x.

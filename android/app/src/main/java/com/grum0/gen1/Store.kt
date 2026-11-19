@@ -89,6 +89,7 @@ class Store(ctx: Context) {
     var tanzStyle by mutableStateOf(true)       // the Tanzbär's sound follows the style and the key (0.3.2)
     var bellMode by mutableStateOf(BELL_STYLE)  // the cowbell's pitch: the style's, fixed in the key, or a line
     var styleTempo by mutableStateOf(false)     // picking a style moves the tempo into its range
+    var kickKey by mutableStateOf(false)        // Kick tune: Key (else Style: the style's own kick tune) (0.3.3)
     val version: String = runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName }.getOrNull() ?: "?"
     val buildId: String = "$version (${BuildConfig.COMMIT})"     // e.g. "0.2.2 (0695589)"
     var keepAwake by mutableStateOf(true)       // the screen stays on while the app is up
@@ -220,12 +221,12 @@ class Store(ctx: Context) {
         }
         val row = TanzData.STYLE[st]
         TanzData.CCS.forEachIndexed { i, cc -> put(cc, row[i]) }
-        put(TanzData.KICK_CC, keyTune(TanzData.KICK))
+        put(TanzData.KICK_CC, if (kickKey) keyTune(TanzData.KICK) else TanzData.KICK_STYLE[st])
         val f = TanzData.FOLLOW[st]
         if (f and 1 != 0) put(TanzData.TOM_CC, keyTune(TanzData.TOM))
         if (f and 2 != 0) put(TanzData.CONGA_CC, keyTune(TanzData.CONGA))
         if (f and 4 != 0) put(TanzData.CLAVE_CC, keyTune(TanzData.CLAVE))
-        if (melodic) put(85, minOf(row[TanzData.CCS.indexOf(85)], TanzData.BELL_MELODIC_DECAY))
+        if (melodic) put(85, TanzData.BELL_DECAY[st])          // short, so a retune never catches its tail
         else put(TanzData.BELL_CC, keyTune(TanzData.BELL))
         touch()
     }
@@ -416,6 +417,7 @@ class Store(ctx: Context) {
             .putBoolean("tanzStyle", tanzStyle)
             .putInt("bellMode", bellMode)
             .putBoolean("styleTempo", styleTempo)
+            .putBoolean("kickKey", kickKey)
             .putString("tanz", tanz.entries.joinToString(",") { "${it.key}=${it.value}" })
             .apply()
     }
@@ -459,6 +461,7 @@ class Store(ctx: Context) {
         tanzStyle = prefs.getBoolean("tanzStyle", true)
         bellMode = prefs.getInt("bellMode", BELL_STYLE).coerceIn(BELL_STYLE, BELL_LINE)
         styleTempo = prefs.getBoolean("styleTempo", false)
+        kickKey = prefs.getBoolean("kickKey", false)
         val tk = prefs.getString("target_keys", null)?.split(",")
         if (tk != null && tk.size == F.NPARTS) {
             tk.forEachIndexed { p, k -> instIndex(k.trim())?.let { target[p] = it } }

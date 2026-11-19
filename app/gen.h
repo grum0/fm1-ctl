@@ -18,6 +18,7 @@ enum { GS_DILLA, GS_SOULQ, GS_GFUNK, GS_BOMB, GS_QUINCY, GS_JUSTIFIED, GS_MPLS, 
        /* (new styles go at the end: a saved style number keeps its meaning) */
        GS_BOOMBAP, GS_NEP_MIN, GS_NEP_CLICK, GS_NEP_CLUB, GS_NEP_SYNTH, GS_NEP_DARK, GS_NEP_STOMP, GS_NERD, GS_DUB,
        GS_MEMPHIS, GS_TRAP, GS_NATIVE, GS_WUTANG, GS_MADLIB, GS_ABSTRACT, GS_OLDSCHOOL, GS_BOUNCE, GS_CHOPPED,
+       GS_BELLFUNK, GS_MIAMIBELL, GS_DETBELL, GS_AFROBELL,
        GEN_NSTYLES };
 /* the styles' families, for a picker in two steps and a three-letter prefix */
 enum { CAT_HIP, CAT_FNK, CAT_RNB, CAT_ELC, CAT_BRK, CAT_HSE, CAT_BAS, CAT_IDM, CAT_WLD, GEN_NCATS };
