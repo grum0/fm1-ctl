@@ -117,6 +117,14 @@ been tried). Version 0.2.0 adds:
 - **The harp run** in LA beats: on the first beat of each phrase the arp part plays a quick 32nd run up two octaves
   of the chord.
 
+**0.3.8** (the UK bass batch):
+
+- **Three styles** (64 in all): Jungle (hidden in the Tanzbär picker), UK garage 2-step and Dubstep.
+- **Break edits** in Jungle: in every bar but a phrase's first, one or two beats of the break are replaced by another
+  beat of the bar, by a rising snare roll, or by the beat played backwards.
+- **The wobble** in Dubstep: the bass part's cutoff (its synth's filter CC, 74 if it has none) rides an LFO whose rate
+  changes bar by bar (quarter, 8th, 8th triplet, 16th). Leaving the style puts the filter back.
+
 **0.3.7** (the house and techno batch, and the JV-1010 part suggestions):
 
 - **Two styles** (61 in all): French touch and Dub techno.

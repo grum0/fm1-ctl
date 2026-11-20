@@ -23,6 +23,7 @@ enum { GS_DILLA, GS_SOULQ, GS_GFUNK, GS_BOMB, GS_QUINCY, GS_JUSTIFIED, GS_MPLS, 
        GS_TIMBALAND, GS_GATED, GS_KRAFTWERK, GS_ITALO, GS_MIAMI,
        GS_LABEATS, GS_TRIPHOP, GS_BROKEN, GS_MONTREAL,
        GS_FRENCH, GS_DUBTECH,
+       GS_JUNGLE, GS_UKG, GS_DUBSTEP,
        GEN_NSTYLES };
 /* the styles' families, for a picker in two steps and a three-letter prefix */
 enum { CAT_HIP, CAT_FNK, CAT_RNB, CAT_ELC, CAT_BRK, CAT_HSE, CAT_BAS, CAT_IDM, CAT_WLD, GEN_NCATS };
@@ -104,6 +105,8 @@ int gen_style_bell(int s);               /* 1: the cowbell plays a line in this 
 int gen_style_pump(int s);               /* 1: the chord part's CC 11 dips on each kick in this style */
 int gen_style_sweep(int s);              /* 1: the chord part's cutoff sweeps over 16 bars in this style */
 int gen_sweep_cc(int *rest);             /* the CC the sweep moves on the chord device, and its value at rest */
+int gen_style_wobble(int s);             /* 1: the bass part's cutoff wobbles in this style */
+int gen_wobble_cc(int *rest);            /* the CC the wobble moves on the bass device, and its value at rest */
 const char *gen_style_ref(int s);        /* the artists or scene it comes from, "" if none */
 const char *gen_cat_name(int c);         /* "Hip-hop" */
 const char *gen_cat_code(int c);         /* "HIP" */

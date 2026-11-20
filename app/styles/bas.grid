@@ -1,0 +1,19 @@
+# BAS batch (0.3.8): from fm1-build-status.md. Jungle's break is edited bar by bar (SFX_EDIT) and Dubstep's bass
+# wobbles (SFX_WOBBLE): STYLE_META.fx in gen.c.
+
+style JUNGLE
+kick     X.x. .... ..xx ....
+snare    .... X..o .o.. X..o
+cymbal   x.x. x.x. x.x. x.x.
+
+style UKG
+kick     X... .... ..x. ....
+snare    .... X... .... X...
+rim      ...o .o.. ...o ..o.
+chat     ..x. ..xo ..x. ..xx
+
+style DUBSTEP
+kick     X... .... .... ..x.
+snare    .... .... X... ....
+rim      .... .o.. .... .o..
+chat     ..x. ..x. ..x. ..x.

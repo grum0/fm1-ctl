@@ -1224,6 +1224,68 @@ static void test_hse_037(void)
     printf("0.3.7: filter sweep ok\n");
 }
 
+/* 0.3.8: Jungle's break edits (bars after the phrase's first differ from the grid's bar, the first is left as it
+ * is) and Dubstep's wobble (CC on the bass channel only in Dubstep; restored when the style is left) */
+static void bas_run(int style)
+{
+    fresh();
+    eng_set(F_TEMPO, 120, vnow);
+    eng_set(F_STYLE, style, vnow);
+    eng_set(F_FILL_EVERY, 1, vnow);                       /* (no fills) */
+    eng_set(F_CLOCK, CLK_INT_OUT, vnow);
+    eng_set(F_PART(GP_DRUMS, PF_ON), 1, vnow);
+    eng_set(F_PART(GP_DRUMS, PF_CHAN), 9, vnow);
+    eng_set(F_PART(GP_BASS, PF_ON), 1, vnow);
+    eng_set(F_PART(GP_BASS, PF_CHAN), 3, vnow);
+    eng_play(1, vnow);
+    run_internal(17000);
+    eng_play(0, vnow);
+}
+static uint32_t bas_bar_sig(int b, int64_t t0, int ch)  /* the bar's drum notes: which, where (16ths), as a hash */
+{
+    uint32_t h = 2166136261u;
+    int i;
+    for (i = 0; i < nlog; i++) {
+        const msg_t *m = &log_[i];
+        int64_t at = m->t - t0 + 5 * MS;
+        if (m->n == 3 && m->m[0] == (0x90 | ch) && m->m[2] && at >= b * 2000 * MS && at < (b + 1) * 2000 * MS)
+            h = (h ^ (uint32_t)(m->m[1] * 64 + (int)((at % (2000 * MS)) / (125 * MS)))) * 16777619u;
+    }
+    return h;
+}
+static void test_bas_038(void)
+{
+    int i, b, edited = 0, wob = 0, other = 0, rest, cc = gen_wobble_cc(&rest);
+    int64_t t0 = -1;
+    uint32_t first;
+    bas_run(GS_JUNGLE);
+    for (i = 0; i < nlog; i++)
+        if (log_[i].n == 3 && (log_[i].m[0] & 0xF0) == 0x90 && log_[i].m[2] && t0 < 0)
+            t0 = log_[i].t;
+    first = bas_bar_sig(0, t0, 9);
+    CHECK(first == bas_bar_sig(4, t0, 9), "Jungle: the phrase's first bars (1 and 5) differ: edited");
+    for (b = 1; b < 8; b++)
+        if (b != 4)
+            edited += bas_bar_sig(b, t0, 9) != first;
+    CHECK(edited == 6, "Jungle: %d of the 6 other bars edited", edited);
+    for (i = 0; i < nlog; i++)
+        other += log_[i].n == 3 && (log_[i].m[0] & 0xF0) == 0xB0 && log_[i].m[1] == cc && (log_[i].m[0] & 15) == 3;
+    CHECK(!other, "Jungle: %d wobble CCs", other);
+    bas_run(GS_DUBSTEP);
+    for (i = 0; i < nlog; i++)
+        wob += log_[i].n == 3 && log_[i].m[0] == (0xB0 | 3) && log_[i].m[1] == cc;
+    CHECK(wob >= 8 * 40, "Dubstep: %d wobble CCs on the bass channel in 8 bars", wob);
+    nlog = 0;
+    eng_set(F_STYLE, GS_DILLA, vnow);
+    CHECK(nlog == 1 && log_[0].m[0] == (0xB0 | 3) && log_[0].m[1] == cc && log_[0].m[2] == rest,
+          "leaving Dubstep: %d messages", nlog);
+    bas_run(GS_UKG);
+    for (i = 0, other = 0; i < nlog; i++)
+        other += log_[i].n == 3 && log_[i].m[0] == (0xB0 | 3) && log_[i].m[1] == cc;
+    CHECK(other < 40, "UK garage: %d CCs on the bass's cutoff", other);
+    printf("0.3.8: break edits and wobble ok\n");
+}
+
 int main(void)
 {
     test_ranges();
@@ -1245,6 +1307,7 @@ int main(void)
     test_zaps_035();
     test_brk_036();
     test_hse_037();
+    test_bas_038();
     test_panic();
     printf(fails ? "FAILED (%d)\n" : "ok\n", fails);
     free(log_);

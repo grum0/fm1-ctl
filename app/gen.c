@@ -455,6 +455,19 @@ static const style_t STYLE[GEN_NSTYLES] = {
     [GS_DUBTECH] = {"Dub techno", GRID_DUBTECH,
         0, 0, 0, 0, 0, 0, FILL_DROP, {{28, 3, 28, 3}, {0, 0, 0, 0}}, V_TIGHT, "0070000000900000", 1, BM_LAZY, LM_CALL,
         "0000000000000070", 72, 0, 2, CP_FREE, 0},
+    /* 0.3.8, the BAS batch: drums from app/styles/bas.grid */
+    /* Jungle: the chopped break (edited bar by bar, SFX_EDIT) with the ride, dark pads, a slow reggae-style bass */
+    [GS_JUNGLE] = {"Jungle", GRID_JUNGLE,
+        0, 0, 0, 0, 1, 0, FILL_DNB, {{28, 3, 28, 3}, {0, 0, 0, 0}}, V_WIDE, "9000000000000000", 0, BM_DUB, LM_CALL,
+        "9000000000000000", 72, 1, 2, CP_FREE, 0},
+    /* UK garage 2-step: the skipping kick under the heaviest shuffle, off-16th organ stabs, a rubbery bass */
+    [GS_UKG] = {"UK garage 2-step", GRID_UKG,
+        8, 0, 0, 0, 1, 0, FILL_SNARE, {{1, 8, 3, 13}, {0, 7, 8, 9}}, V_TIGHT, "0009000900090000", 1, BM_LIVE, LM_CALL,
+        "0700700000000000", 72, 0, 2, CP_FREE, 0},
+    /* Dubstep: half-step drums, sparse dark pads, held sub notes under the wobble (SFX_WOBBLE) */
+    [GS_DUBSTEP] = {"Dubstep", GRID_DUBSTEP,
+        2, 0, 0, 0, 1, 0, FILL_SNARE, {{25, 3, 28, 25}, {0, 0, 0, 0}}, V_WIDE, "9000000000000000", 0, BM_LAZY, LM_CALL,
+        "9000000700000000", 72, 0, 2, CP_FREE, 0},
 };
 
 /* the styles' families, the tempos they sit at (as set on the MPC: half-time styles are counted fast), whether they
@@ -464,6 +477,8 @@ static const style_t STYLE[GEN_NSTYLES] = {
 #define SFX_PUMP 4u                      /* the chords pump: CC 11 dips on each kick (BRK) */
 #define SFX_HARP 8u                      /* the arp plays a harp run on the phrase's first beat (BRK) */
 #define SFX_SWEEP 16u                    /* the chords' cutoff sweeps over 16 bars (HSE) */
+#define SFX_EDIT 32u                     /* break edits: beats replaced, reversed or rolled (Jungle) */
+#define SFX_WOBBLE 64u                   /* the bass part's cutoff wobbles at a rate per bar (Dubstep) */
 static const struct { uint8_t cat, lo, hi, tanz, fx; const char *ref; } STYLE_META[GEN_NSTYLES] = {
     [GS_DILLA] = {CAT_HIP, 80, 95, 1, 0, "J Dilla, Slum Village"},
     [GS_SOULQ] = {CAT_HIP, 80, 95, 0, 0, "D'Angelo, Questlove"},
@@ -526,6 +541,9 @@ static const struct { uint8_t cat, lo, hi, tanz, fx; const char *ref; } STYLE_ME
     [GS_MONTREAL] = {CAT_BRK, 100, 125, 1, 0, "Kaytranada"},
     [GS_FRENCH] = {CAT_HSE, 115, 130, 1, SFX_SWEEP, "Daft Punk, filter house"},
     [GS_DUBTECH] = {CAT_HSE, 110, 130, 1, SFX_SWEEP, "Basic Channel"},
+    [GS_JUNGLE] = {CAT_BAS, 160, 175, 0, SFX_EDIT, "Amen break, ragga"},
+    [GS_UKG] = {CAT_BAS, 130, 140, 1, 0, "Artful Dodger, MJ Cole"},
+    [GS_DUBSTEP] = {CAT_BAS, 138, 142, 1, SFX_WOBBLE, "Skream, Benga"},
 };
 static const char *const CAT_NAME[GEN_NCATS] = {"Hip-hop", "Funk", "R&B and pop", "Electro", "Breaks and beats",
                                                 "House and techno", "UK bass", "IDM", "Caribbean and world"};
@@ -1996,12 +2014,92 @@ static void pump(void)
  * 16 bars, closed at the phrase boundary and open in the middle, four steps a bar; it replaces the chords' own Flair
  * moves on that CC. Dub techno's is narrower and wanders a little bar by bar (from the seed). A pure function of the
  * bar, so recorded parts and SPP line up. */
-int gen_sweep_cc(int *rest)
+static int part_cut_cc(int p, int *rest)          /* a part's cutoff CC: its device's, 74 without one */
 {
-    const gdev_t *d = devp(GP_CHORD);
+    const gdev_t *d = devp(p);
     if (rest)
         *rest = d->cc ? d->rest : 127;
     return d->cc ? d->cc : 74;
+}
+int gen_sweep_cc(int *rest) { return part_cut_cc(GP_CHORD, rest); }
+int gen_wobble_cc(int *rest) { return part_cut_cc(GP_BASS, rest); }
+/* Break edits (SFX_EDIT, Jungle; drums only): in every bar but the phrase's first, the seed picks one or two beats
+ * and replaces each with another beat of the bar, with a snare roll (16ths, rising), or with itself played backwards
+ * (its four steps in reverse order). Done after the drums are built and before the bass, so the kick the bass and
+ * melodic kick follow is the edited one. A pure function of seed and bar, like chop(). */
+static void break_edits(void)
+{
+    gev_t *e = &wb->ev[GEV_OFF[GP_DRUMS]];
+    int n = wb->n[GP_DRUMS], cap = GEV_OFF[GP_DRUMS + 1] - GEV_OFF[GP_DRUMS], B = 4 * (int)GEN_STEP, S = (int)GEN_STEP;
+    int i, j, k, l, ne, m, tgt[2], op[2], src = 0, cut = 0;
+    uint32_t r;
+    if (!(STYLE_META[g.c->style % GEN_NSTYLES].fx & SFX_EDIT) || bb % (uint32_t)phrase_len() == 0u)
+        return;
+    r = gh(pseed(GP_DRUMS, 0xED17u), bb);
+    ne = 1 + (int)(r & 1u);
+    tgt[0] = (int)(r >> 1 & 3u);
+    tgt[1] = (tgt[0] + 1 + (int)(r >> 3 & 0xFFu) % 3) & 3;
+    op[0] = (int)(r >> 11 & 0xFFu) % 3;                 /* 0 another beat, 1 a snare roll, 2 backwards */
+    op[1] = (int)(r >> 19 & 0xFFu) % 3;
+    for (m = (int)(r >> 27 & 3u); ; m = (m + 1) & 3)   /* the beat copied: one not edited */
+        if (m != tgt[0] && (ne < 2 || m != tgt[1])) {
+            src = m;
+            break;
+        }
+    for (k = 0; k < ne; k++) {
+        if (op[k] == 2) {
+            for (i = 0; i < n; i++)
+                if ((int)e[i].pos / B == tgt[k]) {
+                    int o = (int)e[i].pos - tgt[k] * B, st = o / S;
+                    e[i].pos = (uint16_t)(tgt[k] * B + (3 - st) * S + (o - st * S));
+                }
+        } else
+            cut |= 1 << tgt[k];
+    }
+    for (i = 0, j = 0; i < n; i++)                      /* the replaced beats go */
+        if (!(cut >> ((int)e[i].pos / B & 3) & 1) || (int)e[i].pos >= (int)GEN_BAR)
+            e[j++] = e[i];
+    n = j;
+    for (k = 0; k < ne; k++)
+        if (op[k] == 0)
+            for (i = 0; i < j && n < cap; i++)
+                if ((int)e[i].pos / B == src) {
+                    e[n] = e[i];
+                    e[n++].pos = (uint16_t)(e[i].pos + (tgt[k] - src) * B);
+                }
+    wb->n[GP_DRUMS] = (uint16_t)n;
+    for (k = 0; k < ne; k++)
+        if (op[k] == 1)
+            for (i = 0; i < 4; i++)
+                drum_put(L_SNARE, tgt[k] * B + i * S, 60 + i * 15);
+    for (l = 0; l < GEN_NLANES; l++)                    /* the lanes' steps, as played now */
+        wb->lanes[l] = 0;
+    for (i = 0; i < (int)wb->n[GP_DRUMS]; i++)
+        for (l = 0; l < GEN_NLANES; l++)
+            if (e[i].kind == EV_NOTE && e[i].a == g.c->lane_note[l] && e[i].ch == lane_ch(l)) {
+                wb->lanes[l] |= (uint16_t)(1u << (gclamp(e[i].pos, 0, (int)GEN_BAR - 1) / S));
+                break;
+            }
+}
+/* The wobble (SFX_WOBBLE, Dubstep): the bass part's cutoff (its device's CC, 74 without one) rides a triangle LFO, its
+ * rate picked by the seed each bar (1/4, 1/8, 1/8 triplet, 1/16), a CC every 32nd triplet; it replaces the bass's
+ * own Flair moves on that CC. Bar events on the bass part's channel. */
+static void wobble(void)
+{
+    static const uint8_t PER[4] = {96, 48, 32, 24};     /* subticks: a quarter, an 8th, an 8th triplet, a 16th */
+    gev_t *e = &wb->ev[GEV_OFF[GP_BASS]];
+    int cc = part_cut_cc(GP_BASS, 0), ch = g.c->part[GP_BASS].chan, i, n = 0, t, per;
+    if (!(STYLE_META[g.c->style % GEN_NSTYLES].fx & SFX_WOBBLE))
+        return;
+    for (i = 0; i < wb->n[GP_BASS]; i++)
+        if (!(e[i].kind == EV_CC && e[i].a == cc && e[i].ch == ch))
+            e[n++] = e[i];
+    wb->n[GP_BASS] = (uint16_t)n;
+    per = PER[gh(pseed(GP_BASS, 0x30Bu), bb) % 4u];
+    for (t = 0; t < (int)GEN_BAR; t += 8) {
+        int x = (t % per) * 254 / per, v = x <= 127 ? x : 254 - x;
+        gput_ev(GP_BASS, t, EV_CC, (uint8_t)cc, (uint8_t)(24 + v * 86 / 127), 1, (uint8_t)ch);
+    }
 }
 static void sweep(void)
 {
@@ -2055,8 +2153,12 @@ void gen_service(void)
         default: build_marble(); break;
         }
         chop(p);
-        if (p == GP_DRUMS)
+        if (p == GP_DRUMS) {
+            break_edits();
             zap_bars();
+        }
+        if (p == GP_BASS)
+            wobble();
         if (p == GP_DRUMS && g.c->bell && g.c->bell_cc)
             bell_line();
         if (p == GP_CHORD) {
@@ -2245,6 +2347,7 @@ int gen_style_tanz(int s) { return STYLE_META[s % GEN_NSTYLES].tanz; }
 int gen_style_bell(int s) { return (STYLE_META[s % GEN_NSTYLES].fx & SFX_BELL) != 0; }
 int gen_style_pump(int s) { return (STYLE_META[s % GEN_NSTYLES].fx & SFX_PUMP) != 0; }
 int gen_style_sweep(int s) { return (STYLE_META[s % GEN_NSTYLES].fx & SFX_SWEEP) != 0; }
+int gen_style_wobble(int s) { return (STYLE_META[s % GEN_NSTYLES].fx & SFX_WOBBLE) != 0; }
 const char *gen_style_ref(int s) { return STYLE_META[s % GEN_NSTYLES].ref ? STYLE_META[s % GEN_NSTYLES].ref : ""; }
 const char *gen_cat_name(int c) { return CAT_NAME[c % GEN_NCATS]; }
 const char *gen_cat_code(int c) { return CAT_CODE[c % GEN_NCATS]; }

@@ -692,6 +692,10 @@ void eng_set(int id, int v, int64_t now)
             int rest, cc = gen_sweep_cc(&rest);                   /* leaving the sweep: the chords' cutoff back */
             send3(0xB0u | E.g.part[GP_CHORD].chan, (uint8_t)cc, (uint8_t)rest);
         }
+        if (gen_style_wobble(E.g.style) && !gen_style_wobble(v) && E.g.part[GP_BASS].on) {
+            int rest, cc = gen_wobble_cc(&rest);                  /* leaving the wobble: the bass's cutoff back */
+            send3(0xB0u | E.g.part[GP_BASS].chan, (uint8_t)cc, (uint8_t)rest);
+        }
         E.g.style = (uint8_t)v;
         break;
     case F_ROOT: E.g.root = (uint8_t)v; break;
