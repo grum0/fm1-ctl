@@ -1,0 +1,12 @@
+# HSE batch (0.3.7): from fm1-build-status.md. Both sweep the chord part's cutoff over 16 bars (STYLE_META.fx in gen.c).
+
+style FRENCH
+kick     X... X... X... X...
+clap     .... X... .... X...
+chat     .o.o .o.o .o.o .o.o
+ohat     ..X. ..X. ..X. ..X.
+
+style DUBTECH
+kick     X... X... X... X...
+rim      .... .... .... ...o
+chat     ..o. ..o. ..o. ..o.

@@ -688,6 +688,10 @@ void eng_set(int id, int v, int64_t now)
     case F_STYLE:
         if (gen_style_pump(E.g.style) && !gen_style_pump(v) && E.g.part[GP_CHORD].on)
             send3(0xB0u | E.g.part[GP_CHORD].chan, 11, 127);   /* leaving the pump: the chords' expression back up */
+        if (gen_style_sweep(E.g.style) && !gen_style_sweep(v) && E.g.part[GP_CHORD].on) {
+            int rest, cc = gen_sweep_cc(&rest);                   /* leaving the sweep: the chords' cutoff back */
+            send3(0xB0u | E.g.part[GP_CHORD].chan, (uint8_t)cc, (uint8_t)rest);
+        }
         E.g.style = (uint8_t)v;
         break;
     case F_ROOT: E.g.root = (uint8_t)v; break;

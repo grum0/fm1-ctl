@@ -78,6 +78,8 @@ static const prog_t PROG_MIN[] = {
     /* 24 */ {SC_PHR, 2, {{0, Q_P5, 6}, {1, Q_P5, 2}}},
     /* 25 */ {SC_PHR, 2, {{0, Q_MIN7, 6}, {1, Q_9, 2}}},
     /* 26 */ {SC_AEO, 3, {{0, Q_MMAJ7, 4}, {8, Q_MAJ7, 2}, {5, Q_MIN9, 2}}},   /* the spy-film chord (Trip-hop) */
+    /* 27 */ {SC_DOR, 2, {{0, Q_MIN7, 1}, {5, Q_7, 1}}},                     /* the one-bar disco loop (French touch) */
+    /* 28 */ {SC_AEO, 1, {{0, Q_MIN9, 8}}},                                   /* one chord (Dub techno) */
 };
 /* "major": where a style has no use for a bright key, its dominant side (mixolydian vamps) */
 static const prog_t PROG_MAJ[] = {
@@ -444,6 +446,15 @@ static const style_t STYLE[GEN_NSTYLES] = {
     [GS_MONTREAL] = {"Montreal bounce", GRID_MONTREAL,
         6, 0, 0, 1, 1, 0, FILL_DROP, {{14, 7, 15, 22}, {1, 2, 3, 0}}, V_TIGHT, "0090009000900090", 1, BM_OCTAVE, LM_CALL,
         "0700000700070000", 74, 1, 2, CP_FREE, 0},
+    /* 0.3.7, the HSE batch: drums from app/styles/hse.grid */
+    /* French touch: four on the floor, off-beat open hats, a one-bar disco loop under the filter sweep */
+    [GS_FRENCH] = {"French touch", GRID_FRENCH,
+        1, 0, 0, 0, 0, 0, FILL_DROP, {{27, 27, 1, 27}, {2, 0, 2, 0}}, V_TIGHT, "9000300900309000", 1, BM_OCTAVE, LM_CALL,
+        "9000000070000000", 72, 0, 2, CP_FREE, 0},
+    /* Dub techno: a soft round kick, one minor 9 stab on the off-beats for the delay, the cutoff wandering */
+    [GS_DUBTECH] = {"Dub techno", GRID_DUBTECH,
+        0, 0, 0, 0, 0, 0, FILL_DROP, {{28, 3, 28, 3}, {0, 0, 0, 0}}, V_TIGHT, "0070000000900000", 1, BM_LAZY, LM_CALL,
+        "0000000000000070", 72, 0, 2, CP_FREE, 0},
 };
 
 /* the styles' families, the tempos they sit at (as set on the MPC: half-time styles are counted fast), whether they
@@ -452,6 +463,7 @@ static const style_t STYLE[GEN_NSTYLES] = {
 #define SFX_BELL 2u                      /* the cowbell plays a line (batch [D]) */
 #define SFX_PUMP 4u                      /* the chords pump: CC 11 dips on each kick (BRK) */
 #define SFX_HARP 8u                      /* the arp plays a harp run on the phrase's first beat (BRK) */
+#define SFX_SWEEP 16u                    /* the chords' cutoff sweeps over 16 bars (HSE) */
 static const struct { uint8_t cat, lo, hi, tanz, fx; const char *ref; } STYLE_META[GEN_NSTYLES] = {
     [GS_DILLA] = {CAT_HIP, 80, 95, 1, 0, "J Dilla, Slum Village"},
     [GS_SOULQ] = {CAT_HIP, 80, 95, 0, 0, "D'Angelo, Questlove"},
@@ -512,6 +524,8 @@ static const struct { uint8_t cat, lo, hi, tanz, fx; const char *ref; } STYLE_ME
     [GS_TRIPHOP] = {CAT_BRK, 70, 100, 0, 0, "Massive Attack, Portishead"},
     [GS_BROKEN] = {CAT_BRK, 105, 125, 1, 0, "West London bruk"},
     [GS_MONTREAL] = {CAT_BRK, 100, 125, 1, 0, "Kaytranada"},
+    [GS_FRENCH] = {CAT_HSE, 115, 130, 1, SFX_SWEEP, "Daft Punk, filter house"},
+    [GS_DUBTECH] = {CAT_HSE, 110, 130, 1, SFX_SWEEP, "Basic Channel"},
 };
 static const char *const CAT_NAME[GEN_NCATS] = {"Hip-hop", "Funk", "R&B and pop", "Electro", "Breaks and beats",
                                                 "House and techno", "UK bass", "IDM", "Caribbean and world"};
@@ -1978,6 +1992,36 @@ static void pump(void)
             gput_ev(GP_CHORD, gclamp(a + 1, 0, (int)GEN_BAR - 1), EV_CC, 11, 127, 1, ch);
     }
 }
+/* The filter sweep (SFX_SWEEP, HSE): the chord part's cutoff (the device's CC, 74 without one) follows a triangle over
+ * 16 bars, closed at the phrase boundary and open in the middle, four steps a bar; it replaces the chords' own Flair
+ * moves on that CC. Dub techno's is narrower and wanders a little bar by bar (from the seed). A pure function of the
+ * bar, so recorded parts and SPP line up. */
+int gen_sweep_cc(int *rest)
+{
+    const gdev_t *d = devp(GP_CHORD);
+    if (rest)
+        *rest = d->cc ? d->rest : 127;
+    return d->cc ? d->cc : 74;
+}
+static void sweep(void)
+{
+    gev_t *e = &wb->ev[GEV_OFF[GP_CHORD]];
+    int cc = gen_sweep_cc(0), ch = g.c->part[GP_CHORD].chan, i, n = 0, j, lo = 24, hi = 112, wob = 0;
+    if (!(STYLE_META[g.c->style % GEN_NSTYLES].fx & SFX_SWEEP))
+        return;
+    for (i = 0; i < wb->n[GP_CHORD]; i++)                       /* the Flair's moves on that CC give way */
+        if (!(e[i].kind == EV_CC && e[i].a == cc && e[i].ch == ch))
+            e[n++] = e[i];
+    wb->n[GP_CHORD] = (uint16_t)n;
+    if (g.c->style == GS_DUBTECH) {
+        lo = 36, hi = 88;
+        wob = (int)(gh(pseed(GP_CHORD, 7), bb) % 13u) - 6;
+    }
+    for (j = 0; j < 4; j++) {
+        int x = (int)(bb % 16u) * 4 + j, v = lo + (hi - lo) * (32 - (x > 32 ? x - 32 : 32 - x)) / 32;
+        gput_ev(GP_CHORD, j * 4 * (int)GEN_STEP, EV_CC, (uint8_t)cc, (uint8_t)gclamp(v + wob, 0, 127), 1, (uint8_t)ch);
+    }
+}
 void gen_service(void)
 {
     uint32_t sig, target, f;
@@ -2015,8 +2059,10 @@ void gen_service(void)
             zap_bars();
         if (p == GP_DRUMS && g.c->bell && g.c->bell_cc)
             bell_line();
-        if (p == GP_CHORD)
+        if (p == GP_CHORD) {
             pump();
+            sweep();
+        }
         sort_ev(p);
     }
     wb->bar = target;
@@ -2198,6 +2244,7 @@ void gen_style_bpm(int s, int *lo, int *hi)
 int gen_style_tanz(int s) { return STYLE_META[s % GEN_NSTYLES].tanz; }
 int gen_style_bell(int s) { return (STYLE_META[s % GEN_NSTYLES].fx & SFX_BELL) != 0; }
 int gen_style_pump(int s) { return (STYLE_META[s % GEN_NSTYLES].fx & SFX_PUMP) != 0; }
+int gen_style_sweep(int s) { return (STYLE_META[s % GEN_NSTYLES].fx & SFX_SWEEP) != 0; }
 const char *gen_style_ref(int s) { return STYLE_META[s % GEN_NSTYLES].ref ? STYLE_META[s % GEN_NSTYLES].ref : ""; }
 const char *gen_cat_name(int c) { return CAT_NAME[c % GEN_NCATS]; }
 const char *gen_cat_code(int c) { return CAT_CODE[c % GEN_NCATS]; }

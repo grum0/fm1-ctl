@@ -1,0 +1,19 @@
+# The JV-1010 performance "GEN-1 Keys" (USER:01), one row per part (gen1-jv1010-hints.md). Part n listens on
+# channel n; part 10 (rhythm) is switched off by make_jv.py. source: exp8 = the SR-JV80-08 board in slot XP-B,
+# prA..prE = the presets (prD = GM). patch: 1-based. output: MIX or EFX. Change sounds here and in hints.tsv together.
+# part	source	patch	name	level	pan	chorus	reverb	output
+1	exp8	125	Jazz Rhodes	100	64	40	30	MIX
+2	exp8	141	Vinyl Rhodes	100	64	20	25	MIX
+3	exp8	155	Grungy Wurly	100	64	10	20	MIX
+4	exp8	189	Clav1	100	64	0	15	MIX
+5	exp8	208	WahWah Clav1	100	64	0	15	MIX
+6	exp8	18	B3 Sermon	100	64	0	25	EFX
+7	exp8	59	House Organ	100	64	0	20	EFX
+8	exp8	223	Moody Tron	100	64	20	60	MIX
+9	exp8	243	Space Tron	100	64	30	60	MIX
+11	exp8	235	Tron Choir	100	64	20	60	MIX
+12	exp8	252	Old Lead	100	64	10	40	MIX
+13	prC	14	MKS-80 Brass	100	64	20	30	MIX
+14	prD	56	OrchestraHit	100	64	0	40	MIX
+15	prC	50	Harp	95	64	10	55	MIX
+16	prE	67	House Chord	100	64	20	30	MIX

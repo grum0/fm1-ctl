@@ -117,6 +117,14 @@ been tried). Version 0.2.0 adds:
 - **The harp run** in LA beats: on the first beat of each phrase the arp part plays a quick 32nd run up two octaves
   of the chord.
 
+**0.3.7** (the house and techno batch, and the JV-1010 part suggestions):
+
+- **Two styles** (61 in all): French touch and Dub techno.
+- **The filter sweep** in both: the chord part's cutoff (CC 74, or the chord instrument's own filter CC) closes and
+  opens again over 16 bars, darkest at the phrase boundary. Dub techno's is narrower and wanders a little bar to bar.
+  Leaving the style opens the filter back to its resting value.
+- **JV-1010 part suggestions** (see below).
+
 ## Getting the app
 
 On GitHub: **Actions → Android APK → Run workflow** (branch `android`), then open the run and download the
@@ -126,6 +134,30 @@ from that source when Android asks. Needs Android 10 or newer.
 From 0.2.0 every build is signed with the same debug key (`android/debug.keystore`), so a new APK installs over the
 last and keeps its settings. Builds before 0.2.0 were each signed differently: **uninstall the old app once** before
 installing 0.2.0 (its settings go with it; the channels now default to the real ones).
+
+## JV-1010 part suggestions
+
+The JV-1010 can hold a 15-part performance, **"GEN-1 Keys" in USER:01** (Rhodes, Wurlitzer, clavinets, organs,
+Mellotrons, a lead, brass, an orchestra hit, a harp and a house chord, mostly from the SR-JV80-08 board). Part *n*
+listens on channel *n*; part 10 (rhythm) is off. For every style the app suggests which part suits its chords,
+Marble, arp and lead:
+
+- **Play**: a line under the style name, e.g. `JV  chords 1 Jazz Rhodes · Marble 3 Grungy Wurly`, only for the
+  parts that are on. The arp and lead belong to the Volca FM and the Monologue, so theirs read "try JV 15 Harp".
+- **Style picker**: each style shows its chords part as a tag ("JV 1"), so styles can be browsed by sound.
+- **Rig → Settings**: "Show JV-1010 part suggestions" (on by default).
+
+These are suggestions only: the app keeps sending each part on its own channel, and you pick the JV part on the
+MPC track's output channel. Nothing is sent to the JV by the app.
+
+**Loading the performance** (once): put the JV-1010 in Performance mode, then send
+`android/tools/jv1010/jv1010_user01.syx` to its MIDI IN from a computer with a SysEx tool (SysEx Librarian on a Mac,
+MIDI-OX on Windows) through a USB-MIDI interface. It writes USER:01. To call it up: Bank Select 80/0 and Program
+Change 1 on the Performance Control Channel. If the expansion board's sounds come up wrong, the board's group ID in
+`make_jv.py` (8, assumed) is the one value to change.
+
+The sounds and suggestions live in `android/tools/jv1010/` (`perf.tsv`, `hints.tsv`); `make_jv.py` writes both
+`JvData.kt` and the `.syx` from them, so the app and the JV always agree. Change a sound in both tables together.
 
 ## Wiring
 
@@ -184,6 +216,9 @@ forgets after a replug or a lock: the app shows a red line when the cable is in 
 - `android/tools/gen_fields.sh` rewrites `Fields.kt` after `gen1_engine.h` changes.
 - `python3 android/tools/tanzbar/make_tanz.py` rewrites `TanzData.kt` (the Tanzbär profile) after its `.tsv` files
   change; `android/tools/check.sh` fails if it is stale.
+- `python3 android/tools/jv1010/make_jv.py` rewrites `JvData.kt` and `jv1010_user01.syx` after `perf.tsv` or
+  `hints.tsv` change; it refuses a style without a `hints.tsv` row, and `android/tools/check.sh` fails if either
+  output is stale.
 - Style drums are written as grids (`app/styles/*.grid`: `X` accent, `x` hit, `o` ghost, `r` a hit ratchets may
   double, `.` rest); `python3 app/styles/make_grids.py` turns them into `app/style_grids.h` (committed;
   `android/tools/check.sh` fails if it is stale).

@@ -43,6 +43,10 @@ fun PlayScreen(s: Store) {
 
         Section("Song") {
             StylePicker(s)
+            if (s.jvHints) {
+                val jv = jvHintLine(s)
+                if (jv.isNotEmpty()) Text(jv, style = MaterialTheme.typography.bodySmall, color = Mint)
+            }
             Text("Key", style = MaterialTheme.typography.bodyMedium)
             ChipGrid(KEYS, { it == s.vals[F.ROOT] }, 6) { s.set(F.ROOT, it) }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {

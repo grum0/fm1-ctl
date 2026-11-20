@@ -1157,6 +1157,73 @@ static void test_brk_036(void)
     printf("0.3.6: pump and harp run ok\n");
 }
 
+/* 0.3.7: the HSE filter sweep: the chord part's cutoff over 16 bars falls to its low at the phrase boundary and
+ * climbs to the middle; none in another style; restored when the style is left */
+static int hse_cc[20];
+static int hse_pocket;
+static void hse_run(int style, int cc, int ch)
+{
+    int i, b;
+    int64_t t0 = -1, bar = 2000 * MS;
+    fresh();
+    eng_set(F_TEMPO, 120, vnow);
+    eng_set(F_STYLE, style, vnow);
+    eng_set(F_CLOCK, CLK_INT_OUT, vnow);
+    eng_set(F_PART(GP_DRUMS, PF_ON), 1, vnow);
+    eng_set(F_PART(GP_CHORD, PF_ON), 1, vnow);
+    eng_set(F_PART(GP_CHORD, PF_CHAN), ch, vnow);
+    eng_set(F_POCKET, hse_pocket, vnow);
+    eng_play(1, vnow);
+    run_internal(33000);
+    eng_play(0, vnow);
+    for (i = 0; i < 20; i++)
+        hse_cc[i] = -1;
+    for (i = 0; i < nlog; i++)
+        if (log_[i].n == 3 && (log_[i].m[0] & 0xF0) == 0x90 && log_[i].m[2] && t0 < 0)
+            t0 = log_[i].t;
+    for (i = 0; i < nlog; i++) {                         /* the first CC of each bar (on its downbeat) */
+        const msg_t *m = &log_[i];
+        if (m->n != 3 || m->m[0] != (0xB0 | ch) || m->m[1] != cc || t0 < 0)
+            continue;
+        b = (int)((m->t - t0 + 20 * MS) / bar);
+        if (b < 20 && hse_cc[b] < 0 && (m->t - t0 + 20 * MS) % bar < 40 * MS)
+            hse_cc[b] = m->m[2];
+    }
+}
+static void test_hse_037(void)
+{
+    int rest, cc = gen_sweep_cc(&rest), b, ok = 1, any = 0;
+    hse_run(GS_FRENCH, cc, 1);
+    for (b = 0; b < 16; b++)
+        ok &= hse_cc[b] >= 0;
+    CHECK(ok, "sweep: a CC %d on every downbeat (bar 0 %d, 8 %d, 15 %d)", cc, hse_cc[0], hse_cc[8], hse_cc[15]);
+    for (b = 1; b <= 8; b++)
+        ok &= hse_cc[b] > hse_cc[b - 1];
+    for (b = 9; b < 16; b++)
+        ok &= hse_cc[b] < hse_cc[b - 1];
+    CHECK(ok && hse_cc[0] < 40 && hse_cc[8] > 100 && hse_cc[16] == hse_cc[0],
+          "sweep shape: %d %d %d %d %d", hse_cc[0], hse_cc[4], hse_cc[8], hse_cc[12], hse_cc[16]);
+    nlog = 0;
+    eng_set(F_STYLE, GS_DILLA, vnow);
+    CHECK(nlog == 1 && log_[0].m[0] == 0xB1 && log_[0].m[1] == cc && log_[0].m[2] == rest,
+          "leaving French touch: %d messages", nlog);
+    hse_run(GS_DUBTECH, cc, 1);
+    CHECK(hse_cc[0] >= 0 && hse_cc[8] > hse_cc[0] && hse_cc[8] < 100, "Dub techno: %d %d", hse_cc[0], hse_cc[8]);
+    for (hse_pocket = 1, b = 0; b < 2; b++) {           /* with the pocket on too: notes and the sweep */
+        int notes = 0, i;
+        hse_run(b ? GS_DUBTECH : GS_FRENCH, cc, 1);
+        for (i = 0; i < nlog; i++)
+            notes += log_[i].n == 3 && (log_[i].m[0] & 0xF0) == 0x90 && log_[i].m[2];
+        CHECK(notes > 200 && hse_cc[0] >= 0 && hse_cc[8] > hse_cc[0], "pocket on, style %d: %d notes", b, notes);
+    }
+    hse_pocket = 0;
+    hse_run(GS_DILLA, cc, 1);
+    for (b = 0; b < 16; b++)
+        any += hse_cc[b] >= 0 && b > 0 && hse_cc[b] != hse_cc[b - 1];
+    CHECK(any < 4, "Dilla: %d bars with a moving cutoff on the downbeat", any);
+    printf("0.3.7: filter sweep ok\n");
+}
+
 int main(void)
 {
     test_ranges();
@@ -1177,6 +1244,7 @@ int main(void)
     test_pocket_034();
     test_zaps_035();
     test_brk_036();
+    test_hse_037();
     test_panic();
     printf(fails ? "FAILED (%d)\n" : "ok\n", fails);
     free(log_);

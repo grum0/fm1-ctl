@@ -28,7 +28,8 @@ import androidx.compose.ui.unit.dp
 
 /** The style, chosen in two steps: its family (HIP, FNK, ...), then the style, each with the tempos it sits at and
  *  the artists or scene it comes from. With "Hide styles that don't suit the Tanzbär" on, those are left out (the
- *  style playing always shows). */
+ *  style playing always shows). With the JV-1010 suggestions on, each row carries its chords part on the JV
+ *  ("JV 1"), so styles can be browsed by sound. */
 @Composable
 fun StylePicker(s: Store) {
     val cur = s.vals[F.STYLE].coerceIn(0, s.styleNames.size - 1)
@@ -86,6 +87,15 @@ fun StylePicker(s: Store) {
                                 if (s.styleRef[i].isNotEmpty()) {
                                     Text(s.styleRef[i], style = MaterialTheme.typography.bodySmall, color = Color(0xFF9A9AA6))
                                 }
+                            }
+                            val jv = JvData.CHORDS.getOrElse(i) { 0 }
+                            if (s.jvHints && jv > 0) {
+                                Text(
+                                    "JV $jv",
+                                    Modifier.padding(end = 8.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color(0xFF9A9AA6),
+                                )
                             }
                             Text("${s.styleLo[i]}–${s.styleHi[i]}", style = MaterialTheme.typography.bodyMedium, color = Mint)
                         }

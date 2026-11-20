@@ -1,0 +1,64 @@
+# JV-1010 part suggestions per style (gen1-jv1010-hints.md): the "GEN-1 Keys" part number for each GEN-1 part,
+# or - to keep the part's own instrument. Matched to app/gen.h's style enum by name; make_jv.py refuses a
+# style without a row. Columns: style, chords, marble, arp, lead (then the style's name, for reading only).
+GS_DILLA	1	3	-	-	# Dilla
+GS_SOULQ	1	2	-	-	# Soulquarians
+GS_GFUNK	1	9	-	12	# G-Funk
+GS_BOMB	14	13	-	-	# Bomb Squad
+GS_QUINCY	1	4	-	-	# Quincy Jones
+GS_JUSTIFIED	4	1	-	-	# Justified
+GS_MPLS	13	16	-	-	# Minneapolis 80s
+GS_NPG	6	1	-	-	# Prince NPG 90s
+GS_NJS	13	4	-	-	# New jack swing
+GS_BOOGIE	16	1	-	-	# Boogie
+GS_PFUNK	5	6	-	-	# P-Funk
+GS_JAZZFUNK	1	4	-	-	# Jazz-funk
+GS_ELECTRO	14	11	-	-	# Electro
+GS_ELECTRO2	9	11	-	-	# Modern electro
+GS_WONKY	16	12	-	-	# Wonky
+GS_BIGBEAT	6	14	-	-	# Big beat
+GS_BRAINDANCE	2	15	-	-	# Drill n bass
+GS_DETROIT	9	16	-	-	# Detroit techno
+GS_808	14	16	-	-	# 808 electro
+GS_GLITCH	3	5	-	-	# Glitch hop
+GS_HALFTIME	11	9	-	-	# Halftime
+GS_FLAT	16	4	-	-	# Flat Beat
+GS_RAVE	16	14	-	-	# Rave breaks
+GS_ACIDDREAM	16	7	-	-	# Acid house
+GS_BOOMBAP	2	3	-	-	# Boom Bap
+GS_NEP_MIN	4	16	-	-	# Neptunes Minimal
+GS_NEP_CLICK	4	2	-	-	# Neptunes Tongue-click
+GS_NEP_CLUB	4	13	-	-	# Neptunes Club
+GS_NEP_SYNTH	4	16	-	-	# Neptunes Synth-funk
+GS_NEP_DARK	11	8	-	-	# Neptunes Dark
+GS_NEP_STOMP	13	14	-	-	# Neptunes Stomp
+GS_NERD	5	6	-	-	# N.E.R.D. Funk-rock
+GS_DUB	6	16	-	-	# Dub one-drop
+GS_MEMPHIS	11	8	-	-	# Memphis
+GS_TRAP	11	9	-	-	# Trap
+GS_NATIVE	1	2	-	-	# Native Tongues
+GS_WUTANG	3	8	-	-	# Wu-Tang
+GS_MADLIB	2	3	-	-	# Madlib
+GS_ABSTRACT	11	9	-	-	# Abstract NY
+GS_OLDSCHOOL	13	14	-	-	# Old School
+GS_BOUNCE	16	13	-	-	# New Orleans bounce
+GS_CHOPPED	1	11	-	-	# Chopped and screwed
+GS_BELLFUNK	14	13	-	-	# Electro bell funk
+GS_MIAMIBELL	16	14	-	-	# Miami bass bell
+GS_DETBELL	9	11	-	-	# Detroit bell techno
+GS_AFROBELL	6	13	-	-	# Afro-funk bell
+GS_TALKBOX	4	16	-	12	# Talkbox funk
+GS_MODBOOGIE	9	1	-	12	# Modern boogie
+GS_GOGO	13	6	-	-	# Go-go
+GS_BLAX	5	8	-	-	# Blaxploitation
+GS_TIMBALAND	8	4	-	-	# Timbaland
+GS_GATED	13	9	-	-	# Gated 80s pop
+GS_KRAFTWERK	9	11	-	-	# Kraftwerk
+GS_ITALO	9	16	-	-	# Italo disco
+GS_MIAMI	16	14	-	-	# Miami bass
+GS_LABEATS	2	9	15	-	# LA beats
+GS_TRIPHOP	8	1	-	12	# Trip-hop
+GS_BROKEN	1	4	-	-	# Broken beat
+GS_MONTREAL	16	1	-	-	# Montreal bounce
+GS_FRENCH	16	1	-	-	# French touch
+GS_DUBTECH	16	9	-	-	# Dub techno

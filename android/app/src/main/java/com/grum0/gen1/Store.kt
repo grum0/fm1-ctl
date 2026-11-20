@@ -86,6 +86,7 @@ class Store(ctx: Context) {
     val styleTanz: List<Boolean>                // suits the Tanzbär Lite (not built on sampled breaks or a live kit)
     val styleRef: List<String>                  // the artists or scene it comes from
     var hideNonTanz by mutableStateOf(false)    // the style picker leaves out the styles that don't suit the Tanzbär
+    var jvHints by mutableStateOf(true)         // show the JV-1010 part suggestions (Play, style picker; 0.3.7)
     var tanzStyle by mutableStateOf(true)       // the Tanzbär's sound follows the style and the key (0.3.2)
     var bellMode by mutableStateOf(BELL_STYLE)  // the cowbell's pitch: the style's, fixed in the key, or a line
     var styleTempo by mutableStateOf(false)     // picking a style moves the tempo into its range
@@ -414,6 +415,7 @@ class Store(ctx: Context) {
             .putInt("rig_version", RIG_VERSION)
             .putBoolean("keepAwake", keepAwake)
             .putBoolean("hideNonTanz", hideNonTanz)
+            .putBoolean("jvHints", jvHints)
             .putBoolean("tanzStyle", tanzStyle)
             .putInt("bellMode", bellMode)
             .putBoolean("styleTempo", styleTempo)
@@ -458,6 +460,7 @@ class Store(ctx: Context) {
         if (rigV < 3 && jv != null && chan[jv] == OLD_JV_CHAN) chan[jv] = INSTRUMENTS[jv].defChan
         keepAwake = prefs.getBoolean("keepAwake", true)
         hideNonTanz = prefs.getBoolean("hideNonTanz", false)
+        jvHints = prefs.getBoolean("jvHints", true)
         tanzStyle = prefs.getBoolean("tanzStyle", true)
         bellMode = prefs.getInt("bellMode", BELL_STYLE).coerceIn(BELL_STYLE, BELL_LINE)
         styleTempo = prefs.getBoolean("styleTempo", false)

@@ -127,6 +127,17 @@ fun RigScreen(s: Store) {
                     "Lite's kit can't play convincingly. The style playing stays as it is.",
                 style = MaterialTheme.typography.bodySmall,
             )
+            SwitchRow("Show JV-1010 part suggestions", s.jvHints) {
+                s.jvHints = it
+                s.touch()
+            }
+            Text(
+                "Performance GEN-1 Keys in USER:01; send jv1010_user01.syx (android/tools/jv1010 in the repository) " +
+                    "to load it. Play shows which JV part suits each style's chords, Marble, arp and lead, and the " +
+                    "style picker tags each style with its chords part. Pick the part on the MPC track's output " +
+                    "channel: the app keeps sending on its own channels.",
+                style = MaterialTheme.typography.bodySmall,
+            )
             SwitchRow("Tanzbär sound follows the style and key", s.tanzStyle) {
                 s.tanzStyle = it
                 s.touch()
