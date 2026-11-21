@@ -468,6 +468,12 @@ static const style_t STYLE[GEN_NSTYLES] = {
     [GS_DUBSTEP] = {"Dubstep", GRID_DUBSTEP,
         2, 0, 0, 0, 1, 0, FILL_SNARE, {{25, 3, 28, 25}, {0, 0, 0, 0}}, V_WIDE, "9000000000000000", 0, BM_LAZY, LM_CALL,
         "9000000700000000", 72, 0, 2, CP_FREE, 0},
+    /* 0.3.9, the IDM batch: drums from app/styles/idm.grid */
+    /* Braindance (Rephlex): kick and snare on 16, the hats, tom and claves each looping at their own length
+     * (SFX_POLY), all lining up again at the phrase start; sparse dorian chords, a toy-like bell lead */
+    [GS_REPHLEX] = {"Braindance", GRID_REPHLEX,
+        0, 0, 0, 0, 0, 0, FILL_SNARE, {{1, 8, 13, 1}, {0, 7, 8, 9}}, V_WIDE, "9000000000000000", 0, BM_OCTAVE, LM_CALL,
+        "9090900090909000", 76, 0, 1, CP_FREE, 0},
 };
 
 /* the styles' families, the tempos they sit at (as set on the MPC: half-time styles are counted fast), whether they
@@ -479,6 +485,7 @@ static const style_t STYLE[GEN_NSTYLES] = {
 #define SFX_SWEEP 16u                    /* the chords' cutoff sweeps over 16 bars (HSE) */
 #define SFX_EDIT 32u                     /* break edits: beats replaced, reversed or rolled (Jungle) */
 #define SFX_WOBBLE 64u                   /* the bass part's cutoff wobbles at a rate per bar (Dubstep) */
+#define SFX_POLY 128u                    /* hats, tom and claves loop at their own lengths (Braindance) */
 static const struct { uint8_t cat, lo, hi, tanz, fx; const char *ref; } STYLE_META[GEN_NSTYLES] = {
     [GS_DILLA] = {CAT_HIP, 80, 95, 1, 0, "J Dilla, Slum Village"},
     [GS_SOULQ] = {CAT_HIP, 80, 95, 0, 0, "D'Angelo, Questlove"},
@@ -544,6 +551,7 @@ static const struct { uint8_t cat, lo, hi, tanz, fx; const char *ref; } STYLE_ME
     [GS_JUNGLE] = {CAT_BAS, 160, 175, 0, SFX_EDIT, "Amen break, ragga"},
     [GS_UKG] = {CAT_BAS, 130, 140, 1, 0, "Artful Dodger, MJ Cole"},
     [GS_DUBSTEP] = {CAT_BAS, 138, 142, 1, SFX_WOBBLE, "Skream, Benga"},
+    [GS_REPHLEX] = {CAT_IDM, 90, 140, 1, SFX_POLY, "Rephlex"},
 };
 static const char *const CAT_NAME[GEN_NCATS] = {"Hip-hop", "Funk", "R&B and pop", "Electro", "Breaks and beats",
                                                 "House and techno", "UK bass", "IDM", "Caribbean and world"};
@@ -2081,6 +2089,52 @@ static void break_edits(void)
                 break;
             }
 }
+/* Polymeter (SFX_POLY, Braindance; Style drum mode): the closed hat, tom and claves loop at their own lengths,
+ * Euclidean patterns whose lengths and hits the seed picks once (hat 10-14 steps with 7 hits in 12's proportion,
+ * tom 9-11 with 3, claves 5-7 with 3), counted from the phrase start, so every lane lines up again with the kick and
+ * snare at each phrase. Replaces those lanes as the grid wrote them; in a fill bar the last beat keeps its fill.
+ * A pure function of seed and bar. */
+static int euclid_hit(int len, int hits, int i)  /* hits spread evenly over len steps (Bresenham), step i */
+{
+    return (i * hits) % len < hits;
+}
+static void polymeter(void)
+{
+    static const uint8_t PL[3] = {L_CHH, L_TOML, L_CLAVE};
+    gev_t *e = &wb->ev[GEV_OFF[GP_DRUMS]];
+    const style_t *st = sty();
+    int n = wb->n[GP_DRUMS], S = (int)GEN_STEP, i, j, k, len[3], hits[3], end = 16, base;
+    uint32_t h;
+    rng_t r;
+    if (!(STYLE_META[g.c->style % GEN_NSTYLES].fx & SFX_POLY) || g.c->part[GP_DRUMS].mode != DM_STYLE)
+        return;
+    h = gh(pseed(GP_DRUMS, 0x9E1u), 0u);
+    len[0] = 10 + (int)(h % 5u), hits[0] = (len[0] * 7 + 6) / 12;
+    len[1] = 9 + (int)(h / 5u % 3u), hits[1] = 3;
+    len[2] = 5 + (int)(h / 15u % 3u), hits[2] = 3;
+    if (fill_bar(bb))
+        end = 12;
+    for (i = 0, j = 0; i < n; i++) {                    /* those lanes, as the grid wrote them, go */
+        int drop = 0, st16 = ((int)e[i].pos + S / 2) / S;
+        for (k = 0; k < 3; k++)
+            drop |= e[i].kind == EV_NOTE && e[i].a == g.c->lane_note[PL[k]] && e[i].ch == lane_ch(PL[k]) && st16 < end;
+        if (!drop)
+            e[j++] = e[i];
+    }
+    wb->n[GP_DRUMS] = (uint16_t)j;
+    r.s = gh(pseed(GP_DRUMS, 0x9E2u), bb);
+    base = (int)(bb % (uint32_t)phrase_len()) * 16;
+    for (k = 0; k < 3; k++) {
+        int l = PL[k];
+        wb->lanes[l] &= (uint16_t)~((1u << end) - 1u);
+        for (i = 0; i < end; i++) {
+            int a = (base + i) % len[k];
+            if (!euclid_hit(len[k], hits[k], a) || (l == L_CHH && !hat_keep(i)))
+                continue;
+            drum_hit(l, dpos(l, i, lane_late(l), st->jit, &r), a == 0 ? 112 : l == L_CHH && (i & 1) ? 64 : 88);
+        }
+    }
+}
 /* The wobble (SFX_WOBBLE, Dubstep): the bass part's cutoff (its device's CC, 74 without one) rides a triangle LFO, its
  * rate picked by the seed each bar (1/4, 1/8, 1/8 triplet, 1/16), a CC every 32nd triplet; it replaces the bass's
  * own Flair moves on that CC. Bar events on the bass part's channel. */
@@ -2155,6 +2209,7 @@ void gen_service(void)
         chop(p);
         if (p == GP_DRUMS) {
             break_edits();
+            polymeter();
             zap_bars();
         }
         if (p == GP_BASS)

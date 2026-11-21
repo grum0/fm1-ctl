@@ -117,6 +117,12 @@ been tried). Version 0.2.0 adds:
 - **The harp run** in LA beats: on the first beat of each phrase the arp part plays a quick 32nd run up two octaves
   of the chord.
 
+**0.3.9** (IDM):
+
+- **Braindance** (Rephlex; 65 styles in all) with **polymeter**: the kick and snare keep a 16-step bar while the closed
+  hat, tom and claves each loop at their own length (the seed picks it: hat 10–14 steps, tom 9–11, claves 5–7), so
+  the groove keeps shifting and comes back together at the start of every phrase. Style drum mode only.
+
 **0.3.8** (the UK bass batch):
 
 - **Three styles** (64 in all): Jungle (hidden in the Tanzbär picker), UK garage 2-step and Dubstep.

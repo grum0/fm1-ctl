@@ -1,0 +1,9 @@
+# IDM batch (0.3.9): from fm1-build-status.md. Braindance's hats, tom and claves are rewritten by the polymeter
+# (SFX_POLY in gen.c), which loops each at its own length; the rows below are the design's first 16 steps.
+
+style REPHLEX
+kick     X... ..x. ..x. ....
+snare    .... X... .... X.o.
+chat     x.xx .x.x x.x. x.xx
+tom      x..x ..x. ..x. .x..
+claves   x.x. x..x .x.x ..x.

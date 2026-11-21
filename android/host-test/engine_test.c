@@ -1286,6 +1286,62 @@ static void test_bas_038(void)
     printf("0.3.8: break edits and wobble ok\n");
 }
 
+/* 0.3.9: Braindance's polymeter: the closed hat, tom and claves each repeat at a length of their own (hat 10-14,
+ * tom 9-11, claves 5-7) inside the phrase, and the second phrase plays the first again (all lanes line up) */
+static int idm_period(const uint8_t *hit, int lo, int hi)
+{
+    int L, i, ok;
+    for (L = lo; L <= hi; L++) {
+        for (i = 0, ok = 1; i + L < 64; i++)
+            ok &= hit[i] == hit[i + L];
+        if (ok)
+            return L;
+    }
+    return 0;
+}
+static void test_idm_039(void)
+{
+    static const int NOTE[3] = {43, 40, 46}, LO[3] = {10, 9, 5}, HI[3] = {14, 11, 7};
+    uint8_t hit[3][128];
+    int i, k, per[3], same = 1, cnt[3] = {0, 0, 0};
+    int64_t t0 = -1;
+    fresh();
+    eng_set(F_TEMPO, 120, vnow);
+    eng_set(F_STYLE, GS_REPHLEX, vnow);
+    eng_set(F_FILL_EVERY, 1, vnow);                       /* (no fills) */
+    eng_set(F_CLOCK, CLK_INT_OUT, vnow);
+    eng_set(F_PART(GP_DRUMS, PF_ON), 1, vnow);
+    eng_set(F_PART(GP_DRUMS, PF_CHAN), 9, vnow);
+    eng_play(1, vnow);
+    run_internal(17000);
+    eng_play(0, vnow);
+    memset(hit, 0, sizeof hit);
+    for (i = 0; i < nlog; i++)
+        if (log_[i].n == 3 && log_[i].m[0] == 0x99 && log_[i].m[2] && t0 < 0)
+            t0 = log_[i].t;
+    for (i = 0; i < nlog; i++) {
+        const msg_t *m = &log_[i];
+        int st;
+        if (m->n != 3 || m->m[0] != 0x99 || !m->m[2])
+            continue;
+        st = (int)((m->t - t0 + 62 * MS) / (125 * MS));
+        for (k = 0; k < 3; k++)
+            if (m->m[1] == NOTE[k] && st < 128)
+                hit[k][st] = 1, cnt[k]++;
+    }
+    for (k = 0; k < 3; k++) {
+        per[k] = idm_period(hit[k], LO[k], HI[k]);
+        for (i = 0; i < 64; i++)
+            same &= hit[k][i] == hit[k][i + 64];
+    }
+    CHECK(per[0] && per[1] && per[2], "polymeter: lengths hat %d, tom %d, claves %d (hits %d %d %d)", per[0], per[1],
+          per[2], cnt[0], cnt[1], cnt[2]);
+    CHECK(same, "polymeter: the second phrase differs from the first");
+    CHECK(cnt[0] > 32 && cnt[1] > 16 && cnt[2] > 32, "polymeter: hits %d %d %d", cnt[0], cnt[1], cnt[2]);
+    CHECK(per[0] != 16 && per[1] != 16, "polymeter: lanes loop at 16");
+    printf("0.3.9: polymeter ok (hat %d, tom %d, claves %d)\n", per[0], per[1], per[2]);
+}
+
 int main(void)
 {
     test_ranges();
@@ -1308,6 +1364,7 @@ int main(void)
     test_brk_036();
     test_hse_037();
     test_bas_038();
+    test_idm_039();
     test_panic();
     printf(fails ? "FAILED (%d)\n" : "ok\n", fails);
     free(log_);
