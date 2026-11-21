@@ -1,0 +1,33 @@
+# WLD batch (0.4.0): from fm1-build-status.md.
+
+style DANCEHALL
+kick     X... ..x. X... ..x.
+snare    .... X... .... X...
+rim      ..x. ..x. ..x. ..x.
+chat     x.x. x.x. x.x. x.xx
+
+style REGGAETON
+kick     X... X... X... X...
+snare    ...x ..x. ...x ..x.
+chat     x.x. x.x. x.x. x.x.
+
+style REGGAETON2
+kick     X... .... X... ....
+snare    ...o ..o. ...o ..o.
+clap     ...x .... ...x ....
+rim      .... .... .... ...o
+chat     x.x. x.xx x.x. x.x.
+
+style AFROBEAT
+kick     X... ..x. .x.. ..x.
+snare    ..o. x.o. .o.. x.oo
+chat     xoxo xoxo xoxo xoxo
+cowbell  x.x. xx.x .x.x x.x.
+claves   x..x ..x. ..x. x...
+conga    .x.x x.x. .x.x x.xx
+
+style BAILE
+kick     X... ..x. ..x. ....
+tom      ...x .... .x.. .x..
+conga    .x.. .x.x ...x x..x
+clap     .... X... .... X...

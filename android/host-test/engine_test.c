@@ -1342,6 +1342,46 @@ static void test_idm_039(void)
     printf("0.3.9: polymeter ok (hat %d, tom %d, claves %d)\n", per[0], per[1], per[2]);
 }
 
+/* 0.4.0: the WLD batch plays (drums, chords and bass in every new style, the tempo range and family set) and
+ * carries none of the bar effects (no CC 11, no cutoff moves beyond the parts' own) */
+static void test_wld_040(void)
+{
+    static const int ST[5] = {GS_DANCEHALL, GS_REGGAETON, GS_REGGAETON2, GS_AFROBEAT, GS_BAILE};
+    int k, i;
+    for (k = 0; k < 5; k++) {
+        int dr = 0, ch = 0, bs = 0, cc11 = 0, lo, hi;
+        gen_style_bpm(ST[k], &lo, &hi);
+        CHECK(gen_style_cat(ST[k]) == CAT_WLD && lo >= 85 && hi <= 135 && lo < hi && gen_style_tanz(ST[k]),
+              "WLD style %d: family %d, %d-%d", ST[k], gen_style_cat(ST[k]), lo, hi);
+        CHECK(!gen_style_pump(ST[k]) && !gen_style_sweep(ST[k]) && !gen_style_wobble(ST[k]), "WLD style %d: effects", ST[k]);
+        fresh();
+        eng_set(F_TEMPO, 100, vnow);
+        eng_set(F_STYLE, ST[k], vnow);
+        eng_set(F_CLOCK, CLK_INT_OUT, vnow);
+        eng_set(F_PART(GP_DRUMS, PF_ON), 1, vnow);
+        eng_set(F_PART(GP_DRUMS, PF_CHAN), 9, vnow);
+        eng_set(F_PART(GP_CHORD, PF_ON), 1, vnow);
+        eng_set(F_PART(GP_CHORD, PF_CHAN), 1, vnow);
+        eng_set(F_PART(GP_BASS, PF_ON), 1, vnow);
+        eng_set(F_PART(GP_BASS, PF_CHAN), 3, vnow);
+        eng_play(1, vnow);
+        run_internal(10000);
+        eng_play(0, vnow);
+        for (i = 0; i < nlog; i++) {
+            const msg_t *m = &log_[i];
+            if (m->n != 3)
+                continue;
+            dr += m->m[0] == 0x99 && m->m[2];
+            ch += m->m[0] == 0x91 && m->m[2];
+            bs += m->m[0] == 0x93 && m->m[2];
+            cc11 += (m->m[0] & 0xF0) == 0xB0 && m->m[1] == 11;
+        }
+        CHECK(dr > 40 && ch > 4 && bs > 4 && !cc11, "WLD style %d: drums %d, chords %d, bass %d, CC 11 %d", ST[k], dr, ch,
+              bs, cc11);
+    }
+    printf("0.4.0: WLD styles ok\n");
+}
+
 int main(void)
 {
     test_ranges();
@@ -1365,6 +1405,7 @@ int main(void)
     test_hse_037();
     test_bas_038();
     test_idm_039();
+    test_wld_040();
     test_panic();
     printf(fails ? "FAILED (%d)\n" : "ok\n", fails);
     free(log_);

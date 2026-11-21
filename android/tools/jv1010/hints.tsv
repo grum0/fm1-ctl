@@ -66,3 +66,8 @@ GS_JUNGLE	9	11	-	-	# Jungle
 GS_UKG	7	1	-	-	# UK garage 2-step
 GS_DUBSTEP	11	9	-	-	# Dubstep
 GS_REPHLEX	9	15	15	-	# Braindance
+GS_DANCEHALL	7	13	-	-	# Dancehall
+GS_REGGAETON	16	14	-	-	# Reggaeton classic
+GS_REGGAETON2	9	15	-	-	# Reggaeton modern
+GS_AFROBEAT	6	13	-	-	# Afrobeat
+GS_BAILE	14	16	-	-	# Baile funk

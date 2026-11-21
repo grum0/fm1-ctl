@@ -117,6 +117,14 @@ been tried). Version 0.2.0 adds:
 - **The harp run** in LA beats: on the first beat of each phrase the arp part plays a quick 32nd run up two octaves
   of the chord.
 
+**0.4.0** (Caribbean and world; the original style plan done):
+
+- **Five styles** (70 in all), all suiting the Tanzbär: Dancehall (snare on 2 and 4, an off-beat organ skank, a
+  reggae bass riff), Reggaeton classic (four on the floor under the dembow snare), Reggaeton modern (kick on 1 and 3,
+  a soft dembow, a sliding 808), Afrobeat (clave and cowbell against each other, congas, a 16th arp ostinato) and
+  Baile funk (the tamborzão on kick, tom and conga, no hats).
+- Every style of the 2026-11-15 plan is now built, apart from those moved into batches [A] and [B].
+
 **0.3.9** (IDM):
 
 - **Braindance** (Rephlex; 65 styles in all) with **polymeter**: the kick and snare keep a 16-step bar while the closed

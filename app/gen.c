@@ -80,6 +80,8 @@ static const prog_t PROG_MIN[] = {
     /* 26 */ {SC_AEO, 3, {{0, Q_MMAJ7, 4}, {8, Q_MAJ7, 2}, {5, Q_MIN9, 2}}},   /* the spy-film chord (Trip-hop) */
     /* 27 */ {SC_DOR, 2, {{0, Q_MIN7, 1}, {5, Q_7, 1}}},                     /* the one-bar disco loop (French touch) */
     /* 28 */ {SC_AEO, 1, {{0, Q_MIN9, 8}}},                                   /* one chord (Dub techno) */
+    /* 29 */ {SC_AEO, 4, {{0, Q_MIN, 2}, {8, Q_MAJ, 2}, {10, Q_MAJ, 2}, {0, Q_MIN, 2}}},  /* i-VI-VII-i (Reggaeton) */
+    /* 30 */ {SC_AEO, 4, {{0, Q_MIN7, 2}, {8, Q_MAJ7, 2}, {3, Q_MAJ7, 2}, {10, Q_7, 2}}}, /* i-VI-III-VII */
 };
 /* "major": where a style has no use for a bright key, its dominant side (mixolydian vamps) */
 static const prog_t PROG_MAJ[] = {
@@ -474,6 +476,27 @@ static const style_t STYLE[GEN_NSTYLES] = {
     [GS_REPHLEX] = {"Braindance", GRID_REPHLEX,
         0, 0, 0, 0, 0, 0, FILL_SNARE, {{1, 8, 13, 1}, {0, 7, 8, 9}}, V_WIDE, "9000000000000000", 0, BM_OCTAVE, LM_CALL,
         "9090900090909000", 76, 0, 1, CP_FREE, 0},
+    /* 0.4.0, the WLD batch: drums from app/styles/wld.grid */
+    /* Dancehall: snare on 2 and 4, the rim and an organ skank on the off-beats, a reggae bass riff, a hook over it */
+    [GS_DANCEHALL] = {"Dancehall", GRID_DANCEHALL,
+        1, 0, 0, 0, 0, 0, FILL_SNARE, {{2, 21, 6, 2}, {0, 7, 8, 9}}, V_TIGHT, "0090009000900090", 1, BM_DUB, LM_HOOK,
+        "9009009000900900", 72, 1, 2, CP_FREE, 0},
+    /* Reggaeton classic: four on the floor under the dembow snare, minor stabs, an 808 locked to the kick */
+    [GS_REGGAETON] = {"Reggaeton classic", GRID_REGGAETON,
+        0, 0, 0, 0, 0, 0, FILL_TOMS, {{29, 10, 29, 4}, {0, 7, 8, 9}}, V_WIDE, "9000000000000000", 2, BM_ROOT, LM_HOOK,
+        "9009009000909000", 72, 0, 2, CP_LOCK, 0},
+    /* Reggaeton modern: kick on 1 and 3, a soft dembow marked by the clap, lush chords, a sliding 808 */
+    [GS_REGGAETON2] = {"Reggaeton modern", GRID_REGGAETON2,
+        0, 0, 0, 0, 1, 0, FILL_DROP, {{30, 22, 30, 5}, {0, 7, 8, 9}}, V_TIGHT, "9000000000000000", 0, BM_GLIDE, LM_CALL,
+        "9090909090909090", 72, 0, 2, CP_FREE, 0},
+    /* Afrobeat: clave and bell against each other, congas, muted dorian stabs with a 16th arp ostinato, horn riffs */
+    [GS_AFROBEAT] = {"Afrobeat", GRID_AFROBEAT,
+        3, 0, 0, 0, 2, 0, FILL_LIVE, {{0, 1, 0, 12}, {0, 7, 8, 9}}, V_TIGHT, "9090009000900090", 1, BM_LIVE, LM_CALL,
+        "9090009000000000", 72, 1, 1, CP_FREE, 0},
+    /* Baile funk: the tamborzão on kick, tom and conga, no hats, claps on 2 and 4, an 808 locked to the kick */
+    [GS_BAILE] = {"Baile funk", GRID_BAILE,
+        0, 0, 0, 0, 0, 0, FILL_TOMS, {{11, 9, 11, 24}, {0, 7, 8, 9}}, V_OCT, "9000000000000000", 0, BM_ROOT, LM_CALL,
+        "9000000090000000", 72, 0, 2, CP_LOCK, 0},
 };
 
 /* the styles' families, the tempos they sit at (as set on the MPC: half-time styles are counted fast), whether they
@@ -552,6 +575,11 @@ static const struct { uint8_t cat, lo, hi, tanz, fx; const char *ref; } STYLE_ME
     [GS_UKG] = {CAT_BAS, 130, 140, 1, 0, "Artful Dodger, MJ Cole"},
     [GS_DUBSTEP] = {CAT_BAS, 138, 142, 1, SFX_WOBBLE, "Skream, Benga"},
     [GS_REPHLEX] = {CAT_IDM, 90, 140, 1, SFX_POLY, "Rephlex"},
+    [GS_DANCEHALL] = {CAT_WLD, 85, 105, 1, 0, "Sleng Teng era, digital"},
+    [GS_REGGAETON] = {CAT_WLD, 90, 100, 1, 0, "Dembow, Daddy Yankee era"},
+    [GS_REGGAETON2] = {CAT_WLD, 85, 100, 1, 0, "Dembow, today"},
+    [GS_AFROBEAT] = {CAT_WLD, 100, 130, 1, 0, "Fela Kuti"},
+    [GS_BAILE] = {CAT_WLD, 125, 135, 1, 0, "Rio tamborzão"},
 };
 static const char *const CAT_NAME[GEN_NCATS] = {"Hip-hop", "Funk", "R&B and pop", "Electro", "Breaks and beats",
                                                 "House and techno", "UK bass", "IDM", "Caribbean and world"};
