@@ -27,6 +27,7 @@ enum { GS_DILLA, GS_SOULQ, GS_GFUNK, GS_BOMB, GS_QUINCY, GS_JUSTIFIED, GS_MPLS, 
        GS_REPHLEX,
        GS_DANCEHALL, GS_REGGAETON, GS_REGGAETON2, GS_AFROBEAT, GS_BAILE,
        GS_GRIME, GS_DNB, GS_JACK, GS_JUKE,
+       GS_APHEX, GS_BOC, GS_AUTECHRE, GS_WARP,
        GEN_NSTYLES };
 /* the styles' families, for a picker in two steps and a three-letter prefix */
 enum { CAT_HIP, CAT_FNK, CAT_RNB, CAT_ELC, CAT_BRK, CAT_HSE, CAT_BAS, CAT_IDM, CAT_WLD, GEN_NCATS };
@@ -110,6 +111,7 @@ int gen_style_sweep(int s);              /* 1: the chord part's cutoff sweeps ov
 int gen_sweep_cc(int *rest);             /* the CC the sweep moves on the chord device, and its value at rest */
 int gen_style_wobble(int s);             /* 1: the bass part's cutoff wobbles in this style */
 int gen_wobble_cc(int *rest);            /* the CC the wobble moves on the bass device, and its value at rest */
+int gen_style_warble(int s);             /* 1: the chords' and lead's pitch bend drifts in this style */
 const char *gen_style_ref(int s);        /* the artists or scene it comes from, "" if none */
 const char *gen_cat_name(int c);         /* "Hip-hop" */
 const char *gen_cat_code(int c);         /* "HIP" */

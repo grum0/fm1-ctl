@@ -717,6 +717,12 @@ void eng_set(int id, int v, int64_t now)
             int rest, cc = gen_sweep_cc(&rest);                   /* leaving the sweep: the chords' cutoff back */
             send3(0xB0u | E.g.part[GP_CHORD].chan, (uint8_t)cc, (uint8_t)rest);
         }
+        if (gen_style_warble(E.g.style) && !gen_style_warble(v)) {   /* leaving the warble: bends centred */
+            if (E.g.part[GP_CHORD].on)
+                send3(0xE0u | E.g.part[GP_CHORD].chan, 0, 64);
+            if (E.g.part[GP_LEAD].on)
+                send3(0xE0u | E.g.part[GP_LEAD].chan, 0, 64);
+        }
         if (gen_style_wobble(E.g.style) && !gen_style_wobble(v) && E.g.part[GP_BASS].on) {
             int rest, cc = gen_wobble_cc(&rest);                  /* leaving the wobble: the bass's cutoff back */
             send3(0xB0u | E.g.part[GP_BASS].chan, (uint8_t)cc, (uint8_t)rest);

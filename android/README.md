@@ -117,6 +117,16 @@ been tried). Version 0.2.0 adds:
 - **The harp run** in LA beats: on the first beat of each phrase the arp part plays a quick 32nd run up two octaves
   of the chord.
 
+**0.4.3** (batch [A], part 2):
+
+- **Four IDM styles** (78 in all): Aphex acid-electro (a 303 line whose cutoff drifts over 8 bars), Boards of Canada
+  haze, Autechre machine funk, Warp ambient techno (the arp in 16ths).
+- **Warble** (Boards of Canada): the chords' and lead's pitch drifts up to 25 cents like worn tape, slowly and never
+  quite the same twice. Leaving the style centres the pitch bend again.
+- **Drift** (Autechre, Style drum mode): the drums play the Grids map at a position that glides somewhere new every
+  8 bars, so the groove keeps morphing and never comes back; the bass follows the drifting kick. Your own Grids
+  settings are left as they are.
+
 **0.4.2** (batch [A], part 1):
 
 - **Four styles** (74 in all): Grime, Drum and bass (hidden in the Tanzbär picker), Chicago jack, Ghetto house / juke.

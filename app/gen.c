@@ -515,6 +515,24 @@ static const style_t STYLE[GEN_NSTYLES] = {
     [GS_JUKE] = {"Ghetto house / juke", GRID_JUKE,
         0, 0, 0, 0, 0, 0, FILL_SNARE, {{21, 0, 21, 6}, {0, 0, 0, 0}}, V_TIGHT, "9009009009009000", 1, BM_ROOT, LM_HOOK,
         "9009009009000000", 72, 0, 2, CP_LOCK, 0},
+    /* 0.4.3, batch [A] part 2: drums from app/styles/a2.grid */
+    /* Aphex acid-electro: an electro beat under a 303 line whose cutoff drifts over 8 bars, sad wide pads */
+    [GS_APHEX] = {"Aphex acid-electro", GRID_APHEX,
+        2, 0, 0, 0, 1, 0, FILL_TOMS, {{3, 1, 21, 3}, {0, 7, 8, 9}}, V_WIDE, "9000000000000000", 0, BM_ACID, LM_CALL,
+        "9000000000000000", 72, 0, 2, CP_FREE, 0},
+    /* Boards of Canada haze: soft dusty drums, wide nostalgic chords and a slow lead that warble like worn tape */
+    [GS_BOC] = {"Boards of Canada haze", GRID_BOC,
+        3, 0, 0, 0, 2, 0, FILL_NONE, {{1, 13, 8, 1}, {0, 7, 8, 9}}, V_WIDE, "9000000000000000", 0, BM_LAZY, LM_CALL,
+        "9000900090009000", 72, 0, 2, CP_FREE, 0},
+    /* Autechre machine funk: the drums on the Grids map, drifting bar by bar (SFX_DRIFT), cold clusters, the bass
+     * locked to the drifting kick */
+    [GS_AUTECHRE] = {"Autechre machine funk", GRID_AUTECHRE,
+        0, 0, 0, 0, 0, 0, FILL_NONE, {{25, 21, 13, 25}, {0, 7, 8, 9}}, V_WIDE, "9000000000000000", 0, BM_ROBOT, LM_CALL,
+        "9090909090909090", 72, 0, 2, CP_LOCK, 0},
+    /* Warp ambient techno: a gentle four on the floor, warm wide pads, the arp in 16ths over two octaves */
+    [GS_WARP] = {"Warp ambient techno", GRID_WARP,
+        0, 0, 0, 0, 0, 0, FILL_SNARE, {{1, 8, 13, 22}, {0, 7, 8, 9}}, V_WIDE, "9000000000000000", 0, BM_ROOT, LM_CALL,
+        "9000000000000000", 76, 0, 1, CP_FREE, 0},
 };
 
 /* the styles' families, the tempos they sit at (as set on the MPC: half-time styles are counted fast), whether they
@@ -528,6 +546,8 @@ static const style_t STYLE[GEN_NSTYLES] = {
 #define SFX_WOBBLE 64u                   /* the bass part's cutoff wobbles at a rate per bar (Dubstep) */
 #define SFX_POLY 128u                    /* hats, tom and claves loop at their own lengths (Braindance) */
 #define SFX_SECT 256u                    /* 8-bar sections: bass and stabs, then the lead (Grime) */
+#define SFX_WARBLE 512u                  /* the chords' and lead's pitch drifts like worn tape (Boards of Canada) */
+#define SFX_DRIFT 1024u                  /* the drums on the Grids map, its X/Y drifting bar by bar (Autechre) */
 static const struct { uint8_t cat, lo, hi, tanz; uint16_t fx; const char *ref; } STYLE_META[GEN_NSTYLES] = {
     [GS_DILLA] = {CAT_HIP, 80, 95, 1, 0, "J Dilla, Slum Village"},
     [GS_SOULQ] = {CAT_HIP, 80, 95, 0, 0, "D'Angelo, Questlove"},
@@ -603,6 +623,10 @@ static const struct { uint8_t cat, lo, hi, tanz; uint16_t fx; const char *ref; }
     [GS_DNB] = {CAT_BAS, 170, 178, 0, SFX_WOBBLE, "Goldie, Reese bass"},
     [GS_JACK] = {CAT_HSE, 118, 128, 1, 0, "Trax Records"},
     [GS_JUKE] = {CAT_HSE, 125, 160, 1, 0, "Dance Mania, footwork"},
+    [GS_APHEX] = {CAT_IDM, 110, 130, 1, SFX_WOBBLE, "Aphex Twin, Analord"},
+    [GS_BOC] = {CAT_IDM, 85, 100, 1, SFX_WARBLE, "Boards of Canada"},
+    [GS_AUTECHRE] = {CAT_IDM, 90, 120, 1, SFX_DRIFT, "Autechre"},
+    [GS_WARP] = {CAT_IDM, 120, 135, 1, 0, "Warp, Artificial Intelligence"},
 };
 static const char *const CAT_NAME[GEN_NCATS] = {"Hip-hop", "Funk", "R&B and pop", "Electro", "Breaks and beats",
                                                 "House and techno", "UK bass", "IDM", "Caribbean and world"};
@@ -2186,6 +2210,38 @@ static void polymeter(void)
         }
     }
 }
+/* Warble (SFX_WARBLE, Boards of Canada): the chords' and lead's pitch bend drifts up to 25 cents either way like worn
+ * tape, a triangle of 3 bars with a slower one of 7 bars mixed in so it never quite repeats, eight bends a bar.
+ * Bar events, a pure function of the bar; nothing on a device without pitch bend, nor in a bar where the part
+ * bends by itself (the lead's slides). */
+static void warble(int p)
+{
+    int t, rg;
+    if (!(STYLE_META[g.c->style % GEN_NSTYLES].fx & SFX_WARBLE) || (p != GP_CHORD && p != GP_LEAD))
+        return;
+    rg = bend_range(p);
+    if (!rg)
+        return;
+    for (t = 0; t < wb->n[p]; t++)                     /* a bar where the part bends by itself keeps its own */
+        if (wb->ev[GEV_OFF[p] + t].kind == EV_BEND)
+            return;
+    for (t = 0; t < (int)GEN_BAR; t += (int)GEN_BAR / 8) {
+        long a3 = (long)(bb % 3u) * GEN_BAR + t, a7 = (long)(bb % 7u) * GEN_BAR + t;
+        int x3 = (int)(a3 * 200 / (3L * GEN_BAR)), x7 = (int)(a7 * 200 / (7L * GEN_BAR));
+        int c3 = (x3 <= 100 ? x3 : 200 - x3) - 50, c7 = (x7 <= 100 ? x7 : 200 - x7) - 50;  /* -50..50 each */
+        int cents = (c3 * 2 + c7) / 6, v = gclamp(8192 + cents * 8192 / (100 * rg), 0, 16383);
+        gput_ev(p, t, EV_BEND, (uint8_t)(v & 127), (uint8_t)(v >> 7), 1, (uint8_t)g.c->part[p].chan);
+    }
+}
+/* Drift (SFX_DRIFT, Autechre; Style drum mode): for this bar the drums play the Grids map at an X/Y that glides
+ * between seeded points every 8 bars, so the groove morphs and does not come back; set before the parts are built
+ * (so the bass follows the same kick) and put back after. A pure function of seed and bar. */
+static int drift_xy(int axis)
+{
+    uint32_t k = bb / 8u, f = bb % 8u, s = pseed(GP_DRUMS, 0xD1F7u + (uint32_t)axis);
+    int a = 16 + (int)(gh(s, k) % 96u), z = 16 + (int)(gh(s, k + 1u) % 96u);
+    return a + (z - a) * (int)f / 8;
+}
 /* Sections (SFX_SECT, Grime): 16 bars in two halves of 8, counted from the song start: the first half plays the bass
  * and chord stabs with the drums (no lead), the second drops them for the lead; the last beat of each half is a stop,
  * only a kick and a clap on its first 16th. A pure function of the bar. */
@@ -2222,6 +2278,13 @@ static void wobble(void)
         if (!(e[i].kind == EV_CC && e[i].a == cc && e[i].ch == ch))
             e[n++] = e[i];
     wb->n[GP_BASS] = (uint16_t)n;
+    if (g.c->style == GS_APHEX) {                       /* the 303's cutoff drifting over 8 bars, 40..110 */
+        for (t = 0; t < (int)GEN_BAR; t += 48) {
+            int a = (int)(bb % 8u) * (int)GEN_BAR + t, x = a * 254 / (8 * (int)GEN_BAR), v = x <= 127 ? x : 254 - x;
+            gput_ev(GP_BASS, t, EV_CC, (uint8_t)cc, (uint8_t)(40 + v * 70 / 127), 1, (uint8_t)ch);
+        }
+        return;
+    }
     if (g.c->style == GS_DNB) {                         /* the Reese: one slow sweep over two bars, 30..100 */
         for (t = 0; t < (int)GEN_BAR; t += 32) {
             int a = (int)(bb & 1u) * (int)GEN_BAR + t, x = a * 254 / (2 * (int)GEN_BAR), v = x <= 127 ? x : 254 - x;
@@ -2257,7 +2320,8 @@ static void sweep(void)
 void gen_service(void)
 {
     uint32_t sig, target, f;
-    int b, p;
+    int b, p, drift;
+    uint8_t gx0 = 0, gy0 = 0;
     if (!g.c)
         return;
     sig = cfg_sig();
@@ -2274,6 +2338,12 @@ void gen_service(void)
     bb = target;
     memset(wb->n, 0, sizeof wb->n);
     memset(wb->lanes, 0, sizeof wb->lanes);
+    drift = (STYLE_META[g.c->style % GEN_NSTYLES].fx & SFX_DRIFT) && g.c->part[GP_DRUMS].mode == DM_STYLE;
+    if (drift) {
+        gx0 = g.c->gx, gy0 = g.c->gy;
+        g.c->part[GP_DRUMS].mode = DM_GRIDS;
+        g.c->gx = (uint8_t)drift_xy(0), g.c->gy = (uint8_t)drift_xy(1);
+    }
     for (p = 0; p < GEN_NPARTS; p++) {
         if (!g.c->part[p].on)
             continue;
@@ -2288,6 +2358,7 @@ void gen_service(void)
         }
         chop(p);
         sections(p);
+        warble(p);
         if (p == GP_DRUMS) {
             break_edits();
             polymeter();
@@ -2302,6 +2373,10 @@ void gen_service(void)
             sweep();
         }
         sort_ev(p);
+    }
+    if (drift) {
+        g.c->part[GP_DRUMS].mode = DM_STYLE;
+        g.c->gx = gx0, g.c->gy = gy0;
     }
     wb->bar = target;
     wb->sig = sig;
@@ -2484,6 +2559,7 @@ int gen_style_bell(int s) { return (STYLE_META[s % GEN_NSTYLES].fx & SFX_BELL) !
 int gen_style_pump(int s) { return (STYLE_META[s % GEN_NSTYLES].fx & SFX_PUMP) != 0; }
 int gen_style_sweep(int s) { return (STYLE_META[s % GEN_NSTYLES].fx & SFX_SWEEP) != 0; }
 int gen_style_wobble(int s) { return (STYLE_META[s % GEN_NSTYLES].fx & SFX_WOBBLE) != 0; }
+int gen_style_warble(int s) { return (STYLE_META[s % GEN_NSTYLES].fx & SFX_WARBLE) != 0; }
 const char *gen_style_ref(int s) { return STYLE_META[s % GEN_NSTYLES].ref ? STYLE_META[s % GEN_NSTYLES].ref : ""; }
 const char *gen_cat_name(int c) { return CAT_NAME[c % GEN_NCATS]; }
 const char *gen_cat_code(int c) { return CAT_CODE[c % GEN_NCATS]; }

@@ -1493,6 +1493,79 @@ static void test_a1_042(void)
     printf("0.4.2: sections, Reese ok\n");
 }
 
+/* 0.4.3: batch [A] part 2. The four play; Boards of Canada's warble (bends within 25 cents on the chords and lead,
+ * centred when the style is left); Autechre's drift (the bars keep changing and the Grids settings are left as they
+ * were); Aphex's cutoff a slow drift; none of it in other styles */
+static void a2_run(int style, int secs)
+{
+    fresh();
+    eng_set(F_TEMPO, 120, vnow);
+    eng_set(F_STYLE, style, vnow);
+    eng_set(F_FILL_EVERY, 1, vnow);                       /* (no fills) */
+    eng_set(F_CLOCK, CLK_INT_OUT, vnow);
+    eng_set(F_PART(GP_DRUMS, PF_ON), 1, vnow);
+    eng_set(F_PART(GP_DRUMS, PF_CHAN), 9, vnow);
+    eng_set(F_PART(GP_CHORD, PF_ON), 1, vnow);
+    eng_set(F_PART(GP_CHORD, PF_CHAN), 1, vnow);
+    eng_set(F_PART(GP_BASS, PF_ON), 1, vnow);
+    eng_set(F_PART(GP_BASS, PF_CHAN), 3, vnow);
+    eng_set(F_PART(GP_LEAD, PF_ON), 1, vnow);
+    eng_set(F_PART(GP_LEAD, PF_CHAN), 4, vnow);
+    eng_play(1, vnow);
+    run_internal(secs * 1000 + 500);
+    eng_play(0, vnow);
+}
+static void test_a2_043(void)
+{
+    static const int ST[4] = {GS_APHEX, GS_BOC, GS_AUTECHRE, GS_WARP};
+    int i, k, bends = 0, wide = 0, lo = 16383, hi = 0, gx, gy, distinct = 0, rest, cc = gen_wobble_cc(&rest), acid = 0;
+    int64_t t0 = -1;
+    uint32_t sig[16];
+    for (k = 0; k < 4; k++) {
+        int dr = 0;
+        a2_run(ST[k], 6);
+        for (i = 0; i < nlog; i++)
+            dr += log_[i].n == 3 && log_[i].m[0] == 0x99 && log_[i].m[2];
+        CHECK(dr > 15, "batch [A] style %d plays %d drum notes", ST[k], dr);
+    }
+    a2_run(GS_BOC, 8);
+    for (i = 0; i < nlog; i++) {
+        const msg_t *m = &log_[i];
+        if (m->n == 3 && m->m[0] == 0xE1) {               /* (the chords: the lead may bend by itself too) */
+            int v = m->m[1] | m->m[2] << 7;
+            bends++;
+            lo = v < lo ? v : lo, hi = v > hi ? v : hi;
+            wide += v < 8192 - 8192 / 4 || v > 8192 + 8192 / 4;   /* over 25 cents even at a 1-semitone range */
+        }
+    }
+    CHECK(bends >= 4 * 8 && !wide && hi > lo, "warble: %d bends on the chords, %d..%d", bends, lo, hi);
+    nlog = 0;
+    eng_set(F_STYLE, GS_DILLA, vnow);
+    CHECK(nlog == 2 && log_[0].m[0] == 0xE1 && log_[0].m[2] == 64 && log_[1].m[0] == 0xE4 && log_[1].m[2] == 64,
+          "leaving the warble: %d messages", nlog);
+    a2_run(GS_DILLA, 4);
+    for (i = 0, bends = 0; i < nlog; i++)
+        bends += log_[i].n == 3 && (log_[i].m[0] == 0xE1 || log_[i].m[0] == 0xE4) && log_[i].m[1] != 0;
+    CHECK(!bends, "Dilla: %d warble bends", bends);
+    gx = eng_get(F_GX), gy = eng_get(F_GY);
+    a2_run(GS_AUTECHRE, 16);
+    for (i = 0; i < nlog; i++)
+        if (log_[i].n == 3 && log_[i].m[0] == 0x99 && log_[i].m[2] && t0 < 0)
+            t0 = log_[i].t;
+    for (k = 0; k < 16; k++)
+        sig[k] = bas_bar_sig(k, t0, 9);
+    for (k = 1; k < 16; k++)
+        distinct += sig[k] != sig[k - 1];
+    CHECK(distinct >= 8, "drift: only %d of 15 bars changed", distinct);
+    CHECK(eng_get(F_GX) == gx && eng_get(F_GY) == gy && eng_get(F_PART(GP_DRUMS, PF_MODE)) == 0,
+          "drift: the Grids settings or the drum mode moved");
+    a2_run(GS_APHEX, 4);
+    for (i = 0; i < nlog; i++)
+        acid += log_[i].n == 3 && log_[i].m[0] == 0xB3 && log_[i].m[1] == cc;
+    CHECK(acid >= 16 && acid <= 24, "Aphex: %d cutoff CCs in about 2 bars (8 a bar)", acid);
+    printf("0.4.3: warble, drift, acid cutoff ok\n");
+}
+
 int main(void)
 {
     test_ranges();
@@ -1519,6 +1592,7 @@ int main(void)
     test_wld_040();
     test_tanz_ofs_041();
     test_a1_042();
+    test_a2_043();
     test_panic();
     printf(fails ? "FAILED (%d)\n" : "ok\n", fails);
     free(log_);
