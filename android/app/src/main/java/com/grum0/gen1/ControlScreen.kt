@@ -58,14 +58,28 @@ fun ControlScreen(s: Store) {
 
         Section("Tanzbär Lite") {
             Text(
-                "Sent on the Tanzbär's channel (${s.chan[0]}). The knobs stay where you leave them.",
+                if (s.tanzStyle) {
+                    "Sent on the Tanzbär's channel (${s.chan[0]}). The sound follows the style: a knob the style sets " +
+                        "keeps your change as an offset (shown in brackets) on every style. Tunings stay on the key."
+                } else {
+                    "Sent on the Tanzbär's channel (${s.chan[0]}). The knobs stay where you leave them."
+                },
                 style = MaterialTheme.typography.bodySmall,
             )
             for (voice in TANZ) {
                 Text(voice.name, Modifier.padding(top = 8.dp), style = MaterialTheme.typography.titleSmall, color = Mint)
                 for ((label, cc) in voice.knobs) {
-                    ValueSlider("$label  (CC $cc)", s.tanzValue(cc), { s.setTanz(cc, it) })
+                    val ofs = s.tanzOffset(cc)
+                    ValueSlider(
+                        "$label  (CC $cc)",
+                        s.tanzValue(cc),
+                        { s.setTanz(cc, it) },
+                        note = if (ofs == 0) "" else if (ofs > 0) "(+$ofs)" else "($ofs)",
+                    )
                 }
+            }
+            if (s.tanzStyle) {
+                SmallButton("Back to the style's sound (offsets to 0)") { s.resetTanzOffsets() }
             }
         }
 

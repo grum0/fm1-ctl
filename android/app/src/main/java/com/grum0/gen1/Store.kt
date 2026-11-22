@@ -206,8 +206,35 @@ class Store(ctx: Context) {
      * on a style or key change, on Start, when the output opens and after a panic. From the screen's side, never
      * from the clock. The values also move the Control page's Tanzbär sliders, which stay free to change after.
      */
+    /** The style's own value for the Tanzbär knob in slot i (TanzData.CCS order); the cowbell decay is the short
+     *  line decay while the cowbell plays a line. */
+    private fun tanzBase(i: Int, st: Int, melodic: Boolean): Int =
+        if (melodic && TanzData.CCS[i] == 85) TanzData.BELL_DECAY[st] else TanzData.STYLE[st][i]
+
+    private fun tanzMelodic() = tanzStyle && drumsOnTanz() && bellMelodic()
+
+    /** 0.4.1: the offset slot of a Tanzbär CC the style sets, while the sound follows the style; else -1 (a plain
+     *  knob). Tunings, pans, clap trigger and cymbal tune have no slot. */
+    fun tanzSlot(cc: Int): Int {
+        if (!tanzStyle || !drumsOnTanz() || vals[F.STYLE] !in TanzData.STYLE.indices) return -1
+        return TanzData.CCS.indexOf(cc)
+    }
+
+    /** The player's offset on that knob (0 when it has none or the sound doesn't follow the style). */
+    fun tanzOffset(cc: Int): Int {
+        val i = tanzSlot(cc)
+        return if (i < 0) 0 else vals[F.TANZ_OFS0 + i]
+    }
+
+    /** "Back to the style's sound": every offset to 0, and the style's values sent again. */
+    fun resetTanzOffsets() {
+        for (i in 0 until F.TANZ_NOFS) Native.nSet(F.TANZ_OFS0 + i, 0)
+        refreshAll()
+        applyTanzSound()
+    }
+
     fun applyTanzSound() {
-        val melodic = tanzStyle && drumsOnTanz() && bellMelodic()
+        val melodic = tanzMelodic()
         if (vals[F.BELL] != (if (melodic) 1 else 0)) {
             Native.nSet(F.BELL, if (melodic) 1 else 0)
             refreshAll()
@@ -220,15 +247,14 @@ class Store(ctx: Context) {
             tanz[cc] = v
             sendCc(ti, cc, v)
         }
-        val row = TanzData.STYLE[st]
-        TanzData.CCS.forEachIndexed { i, cc -> put(cc, row[i]) }
+        // the style's values with the player's offsets (the arithmetic is the engine's, eng_tanz_mix)
+        TanzData.CCS.forEachIndexed { i, cc -> put(cc, Native.nTanzMix(i, tanzBase(i, st, melodic))) }
         put(TanzData.KICK_CC, if (kickKey) keyTune(TanzData.KICK) else TanzData.KICK_STYLE[st])
         val f = TanzData.FOLLOW[st]
         if (f and 1 != 0) put(TanzData.TOM_CC, keyTune(TanzData.TOM))
         if (f and 2 != 0) put(TanzData.CONGA_CC, keyTune(TanzData.CONGA))
         if (f and 4 != 0) put(TanzData.CLAVE_CC, keyTune(TanzData.CLAVE))
-        if (melodic) put(85, TanzData.BELL_DECAY[st])          // short, so a retune never catches its tail
-        else put(TanzData.BELL_CC, keyTune(TanzData.BELL))
+        if (!melodic) put(TanzData.BELL_CC, keyTune(TanzData.BELL))   // (a line tunes it hit by hit)
         touch()
     }
 
@@ -343,6 +369,12 @@ class Store(ctx: Context) {
     fun sendCc(inst: Int, cc: Int, v: Int) = Native.nSend(0xB0 or (chan[inst] - 1), cc, v.coerceIn(0, 127))
 
     fun setTanz(cc: Int, v: Int) {
+        val i = tanzSlot(cc)
+        if (i >= 0) {                        // 0.4.1: the knob's distance from the style's value is kept as an offset
+            val id = F.TANZ_OFS0 + i
+            Native.nSet(id, Native.nTanzOffset(i, tanzBase(i, vals[F.STYLE], tanzMelodic()), v))
+            vals[id] = Native.nGet(id)
+        }
         tanz[cc] = v
         sendCc(0, cc, v)
         touch()

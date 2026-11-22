@@ -548,6 +548,22 @@ JNIEXPORT jint JNICALL J(nCount)(JNIEnv *env, jobject self, jint kind)
 
 /* a style's family and the tempos it sits at: out[0] CAT_*, [1] lowest BPM, [2] highest, [3] 1 if it suits the
  * Tanzbär Lite */
+/* 0.4.1: the Tanzbär value to send for slot (TanzData.CCS order) over the style's base, with the player's offset */
+JNIEXPORT jint JNICALL J(nTanzMix)(JNIEnv *env, jobject self, jint slot, jint base)
+{
+    int v;
+    (void)env, (void)self;
+    pthread_mutex_lock(&mu);
+    v = eng_tanz_mix(slot, base);
+    pthread_mutex_unlock(&mu);
+    return v;
+}
+/* the offset that a knob at value means over the style's base */
+JNIEXPORT jint JNICALL J(nTanzOffset)(JNIEnv *env, jobject self, jint slot, jint base, jint value)
+{
+    (void)env, (void)self;
+    return eng_tanz_offset(slot, base, value);
+}
 /* 1 if the style's cowbell plays a line (Cowbell pitch: Style) */
 JNIEXPORT jint JNICALL J(nStyleBell)(JNIEnv *env, jobject self, jint style)
 {

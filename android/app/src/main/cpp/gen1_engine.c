@@ -18,6 +18,7 @@ typedef struct {
     uint8_t arp_on, arp_mode, arp_rate, arp_oct, arp_latch;
     uint8_t seq_ch, out_delay;
     trk_t trk[NTRACKS];
+    int8_t tanz_ofs[TANZ_NOFS];          /* 0.4.1: the player's offsets on the style's Tanzbär sound */
 } ecfg_t;
 
 static struct {
@@ -109,7 +110,10 @@ void eng_range(int id, int *lo, int *hi)
         case F_OUT_DELAY: h = 40; break;
         case F_BELL: h = 1; break;
         case F_POCKET: h = 1; break;
-        default: break;                  /* flam, ratchets: 0..127 */
+        default:
+            if (id >= F_TANZ_OFS0)       /* the Tanzbär offsets */
+                l = -127;
+            break;                       /* flam, ratchets: 0..127 */
         }
     } else if (id >= F_TRK0) {
         switch ((id - F_TRK0) % 5) {
@@ -178,7 +182,7 @@ int eng_get(int id)
         case F_OUT_DELAY: return E.c.out_delay;
         case F_BELL: return E.g.bell;
         case F_POCKET: return E.g.pocket;
-        default: return E.g.ratchet;
+        default: return id >= F_TANZ_OFS0 ? E.c.tanz_ofs[id - F_TANZ_OFS0] : E.g.ratchet;
         }
     }
     if (id >= F_TRK0) {
@@ -607,6 +611,22 @@ void eng_panic(int64_t now)
     }
 }
 
+/* 0.4.1: the Tanzbär knobs as offsets on the style's sound. The arithmetic lives here (portable core); the app asks
+ * for the value to send and for the offset a knob position means. */
+static int clamp127(int v) { return v < 0 ? 0 : v > 127 ? 127 : v; }
+int eng_tanz_mix(int slot, int base)
+{
+    if (base < 0)
+        return -1;
+    if (slot < 0 || slot >= TANZ_NOFS)
+        return base;
+    return clamp127(base + E.c.tanz_ofs[slot]);
+}
+int eng_tanz_offset(int slot, int base, int value)
+{
+    (void)slot;
+    return clamp127(value) - base;
+}
 void eng_set(int id, int v, int64_t now)
 {
     int lo, hi;
@@ -637,7 +657,12 @@ void eng_set(int id, int v, int64_t now)
         case F_OUT_DELAY: E.c.out_delay = (uint8_t)v; break;
         case F_BELL: E.g.bell = (uint8_t)v; break;
         case F_POCKET: E.g.pocket = (uint8_t)v; break;
-        default: E.g.ratchet = (uint8_t)v; break;
+        default:
+            if (id >= F_TANZ_OFS0)
+                E.c.tanz_ofs[id - F_TANZ_OFS0] = (int8_t)v;
+            else
+                E.g.ratchet = (uint8_t)v;
+            break;
         }
         return;
     }

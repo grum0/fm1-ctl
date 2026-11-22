@@ -117,6 +117,15 @@ been tried). Version 0.2.0 adds:
 - **The harp run** in LA beats: on the first beat of each phrase the arp part plays a quick 32nd run up two octaves
   of the chord.
 
+**0.4.1** (Tanzbär knobs as offsets):
+
+- With "Tanzbär sound follows the style and key" on, the Control page's Tanzbär knobs that a style sets (kick decay
+  and tone; snare tone, noise and decay; clap filter, decay and attack; tom, conga, cowbell and clave decays; cymbal
+  tone and decay; hat decays) become **offsets on every style's value**: turn the cowbell's decay up once and it rings
+  longer on every style. The knob shows the value sent, with the offset in brackets, e.g. "52 (+21)".
+- Tunings have no offset, so the drums stay in key. "Back to the style's sound (offsets to 0)" under the knobs clears
+  them. With the follow switch off the knobs are plain values, as before (the offsets are kept for later).
+
 **0.4.0** (Caribbean and world; the original style plan done):
 
 - **Five styles** (70 in all), all suiting the Tanzbär: Dancehall (snare on 2 and 4, an off-beat organ skank, a

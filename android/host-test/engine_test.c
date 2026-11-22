@@ -1382,6 +1382,44 @@ static void test_wld_040(void)
     printf("0.4.0: WLD styles ok\n");
 }
 
+/* 0.4.1: the Tanzbär knobs as offsets on the style's sound (eng_tanz_mix, eng_tanz_offset) */
+static void test_tanz_ofs_041(void)
+{
+    int s, o, ok = 1;
+    fresh();
+    for (s = 0; s < TANZ_NOFS; s++)
+        ok &= eng_get(F_TANZ_OFS0 + s) == 0;
+    CHECK(ok, "tanz offsets: not 0 by default");
+    o = eng_tanz_offset(3, 19, 40);
+    CHECK(o == 21, "tanz offsets: knob 40 over 19 gives %d", o);
+    eng_set(F_TANZ_OFS0 + 3, o, vnow);
+    CHECK(eng_get(F_TANZ_OFS0 + 3) == 21, "tanz offsets: kept %d", eng_get(F_TANZ_OFS0 + 3));
+    CHECK(eng_tanz_mix(3, 60) == 81, "tanz offsets: the next style's 60 sends %d", eng_tanz_mix(3, 60));
+    CHECK(eng_tanz_mix(3, 120) == 127, "tanz offsets: not clamped at 127 (%d)", eng_tanz_mix(3, 120));
+    CHECK(eng_tanz_mix(4, 60) == 60 && eng_get(F_TANZ_OFS0 + 4) == 0, "tanz offsets: another slot moved");
+    eng_set(F_TANZ_OFS0 + 3, -50, vnow);
+    CHECK(eng_tanz_mix(3, 30) == 0, "tanz offsets: not clamped at 0 (%d)", eng_tanz_mix(3, 30));
+    o = eng_tanz_offset(5, 0, 127);
+    eng_set(F_TANZ_OFS0 + 5, o, vnow);
+    CHECK(eng_tanz_mix(5, 0) == 127, "tanz offsets: 127 not reachable from 0 (%d)", eng_tanz_mix(5, 0));
+    o = eng_tanz_offset(5, 127, 0);
+    eng_set(F_TANZ_OFS0 + 5, o, vnow);
+    CHECK(eng_tanz_mix(5, 127) == 0, "tanz offsets: 0 not reachable from 127 (%d)", eng_tanz_mix(5, 127));
+    CHECK(eng_tanz_offset(5, 64, 300) == 63 && eng_tanz_offset(5, 64, -9) == -64, "tanz offsets: knob value not clamped");
+    eng_set(F_TANZ_OFS0 + 6, 200, vnow);
+    CHECK(eng_get(F_TANZ_OFS0 + 6) == 127, "tanz offsets: setting not clamped to 127 (%d)", eng_get(F_TANZ_OFS0 + 6));
+    eng_set(F_TANZ_OFS0 + 6, -200, vnow);
+    CHECK(eng_get(F_TANZ_OFS0 + 6) == -127, "tanz offsets: setting not clamped to -127");
+    CHECK(eng_tanz_mix(TANZ_NOFS, 55) == 55 && eng_tanz_mix(-1, 55) == 55, "tanz offsets: out-of-range slot changed");
+    CHECK(eng_tanz_mix(3, -1) == -1, "tanz offsets: a missing style value became %d", eng_tanz_mix(3, -1));
+    CHECK(eng_get(F_RATCHET) == 0 && eng_get(F_POCKET) == 0, "tanz offsets: neighbours moved");
+    eng_defaults(vnow);
+    for (s = 0, ok = 1; s < TANZ_NOFS; s++)
+        ok &= eng_get(F_TANZ_OFS0 + s) == 0;
+    CHECK(ok, "tanz offsets: eng_defaults left offsets");
+    printf("0.4.1: Tanzbär offsets ok\n");
+}
+
 int main(void)
 {
     test_ranges();
@@ -1406,6 +1444,7 @@ int main(void)
     test_bas_038();
     test_idm_039();
     test_wld_040();
+    test_tanz_ofs_041();
     test_panic();
     printf(fails ? "FAILED (%d)\n" : "ok\n", fails);
     free(log_);

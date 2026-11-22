@@ -31,7 +31,18 @@ def enum_styles():
     return re.findall(r'GS_[A-Z0-9_]+', body)
 
 
+def check_nofs():
+    # the engine keeps one offset per COLS value (0.4.1): the two counts must agree
+    h = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'app', 'src', 'main', 'cpp',
+                          'gen1_engine.h'), encoding='utf-8').read()
+    m = re.search(r'#define\s+TANZ_NOFS\s+(\d+)', h)
+    if not m or int(m.group(1)) != len(COLS):
+        sys.exit('gen1_engine.h: TANZ_NOFS (%s) must equal the %d Tanzbär values in make_tanz.py'
+                 % (m.group(1) if m else 'missing', len(COLS)))
+
+
 def main():
+    check_nofs()
     tune, decay = {}, {}
     for n, r in rows('measured.tsv'):
         if r[0] == 'tune':

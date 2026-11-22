@@ -23,6 +23,7 @@ enum { RATE_4, RATE_8, RATE_8T, RATE_16, RATE_16T, RATE_32, NRATE };
 #define ENG_LOOKAHEAD_NS 30000000LL      /* how far ahead the internal clock is made */
 
 /* A setting is one integer with an id; Kotlin has the same ids (tools/gen_fields.sh makes Fields.kt). */
+#define TANZ_NOFS 16                    /* the Tanzbär values a style sets that the player can offset (0.4.1) */
 enum {
     F_STYLE, F_ROOT, F_MINOR, F_PHRASE, F_FEEL, F_MUTATE, F_PROG, F_DSET, F_SEED, F_GX, F_GY, F_CHAOS, F_SIM2,
     F_SIM_CHAN, F_BEND, F_MB_XPOSE, F_MB_TUNE, F_MB_LO, F_SWING,
@@ -35,7 +36,8 @@ enum {
     F_OUT_DELAY,                         /* 0.3.1: following, ms from a tick's arrival to what it plays (default 5) */
     F_BELL,                              /* 0.3.2: the cowbell plays a line (the app sets it from Cowbell pitch) */
     F_POCKET,                            /* 0.3.4: Cut-A-Dor's pocket on the styles' drums (Style mode), by Feel */
-    F_COUNT
+    F_TANZ_OFS0,                         /* 0.4.1: TANZ_NOFS offsets on the Tanzbär's style sound (TanzData.CCS order) */
+    F_COUNT = F_TANZ_OFS0 + TANZ_NOFS
 };
 enum { PF_ON, PF_CHAN, PF_DEV, PF_VAR, PF_DENS, PF_FLAIR, PF_MODE, PF_OCT };
 enum { TF_STEPS, TF_HITS, TF_ROT, TF_NOTE, TF_MUTE };
@@ -47,6 +49,8 @@ typedef void (*eng_sink_t)(void *ud, int64_t when_ns, const uint8_t *msg, int le
 
 void eng_init(eng_sink_t sink, void *ud);
 int eng_get(int id);
+int eng_tanz_mix(int slot, int base);            /* a style's Tanzbär value with the player's offset: 0..127 (-1: none) */
+int eng_tanz_offset(int slot, int base, int value);   /* the offset that turns base into value (value clamped) */
 void eng_range(int id, int *lo, int *hi);
 void eng_set(int id, int v, int64_t now);        /* clamped; a part's channel or device change ends its notes first */
 void eng_defaults(int64_t now);                  /* everything back to its default (stops, notes off) */

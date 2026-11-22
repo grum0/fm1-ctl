@@ -20,6 +20,8 @@ object Native {
     external fun nPanic()
     external fun nBellTable(cc: Int, tab: ByteArray)
     external fun nStyleBell(style: Int): Int
+    external fun nTanzMix(slot: Int, base: Int): Int                 // 0.4.1: style value + the player's offset
+    external fun nTanzOffset(slot: Int, base: Int, value: Int): Int  // the offset a knob value means
     external fun nMonOpen(on: Int)
     external fun nMonRead(since: Int, t: LongArray, b: ByteArray, res: IntArray)
     external fun nDefaults()

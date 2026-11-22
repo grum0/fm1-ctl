@@ -96,11 +96,15 @@ fun SliderRow(
 
 /** A controller slider: not a setting, a number sent straight out. */
 @Composable
-fun ValueSlider(label: String, value: Int, onChange: (Int) -> Unit, max: Int = 127) {
+fun ValueSlider(label: String, value: Int, onChange: (Int) -> Unit, max: Int = 127, note: String = "") {
     Column(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(label, style = MaterialTheme.typography.bodyMedium)
-            Text(value.toString(), style = MaterialTheme.typography.bodyMedium, color = Mint)
+            Text(
+                if (note.isEmpty()) value.toString() else "$value  $note",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Mint,
+            )
         }
         Slider(
             value = value.toFloat(),
