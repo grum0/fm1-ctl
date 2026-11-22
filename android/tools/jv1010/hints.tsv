@@ -71,3 +71,7 @@ GS_REGGAETON	16	14	-	-	# Reggaeton classic
 GS_REGGAETON2	9	15	-	-	# Reggaeton modern
 GS_AFROBEAT	6	13	-	-	# Afrobeat
 GS_BAILE	14	16	-	-	# Baile funk
+GS_GRIME	14	12	-	-	# Grime
+GS_DNB	9	1	-	-	# Drum and bass
+GS_JACK	16	7	-	-	# Chicago jack
+GS_JUKE	16	14	-	-	# Ghetto house / juke

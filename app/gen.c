@@ -497,6 +497,24 @@ static const style_t STYLE[GEN_NSTYLES] = {
     [GS_BAILE] = {"Baile funk", GRID_BAILE,
         0, 0, 0, 0, 0, 0, FILL_TOMS, {{11, 9, 11, 24}, {0, 7, 8, 9}}, V_OCT, "9000000000000000", 0, BM_ROOT, LM_CALL,
         "9000000090000000", 72, 0, 2, CP_LOCK, 0},
+    /* 0.4.2, batch [A] part 1: drums from app/styles/a1.grid */
+    /* Grime: claps on 2 and 4, icy rim and claves, no hats; square stabs and bass in the first 8 bars of 16, the
+     * lead in the second (SFX_SECT) */
+    [GS_GRIME] = {"Grime", GRID_GRIME,
+        0, 0, 0, 0, 0, 0, FILL_NONE, {{21, 9, 21, 25}, {0, 0, 0, 0}}, V_OCT, "0009000000090000", 1, BM_LIVE, LM_HOOK,
+        "9000900000000000", 72, 0, 2, CP_FREE, 0},
+    /* Drum and bass: a clean two-step under a long Reese bass, its cutoff on a slow LFO (the wobble's slow rate) */
+    [GS_DNB] = {"Drum and bass", GRID_DNB,
+        0, 0, 0, 0, 0, 0, FILL_DNB, {{28, 3, 28, 3}, {0, 0, 0, 0}}, V_WIDE, "9000000000000000", 0, BM_LAZY, LM_CALL,
+        "9000000000000000", 72, 0, 2, CP_FREE, 0},
+    /* Chicago jack: four on the floor, the jacking hat, one minor 7 vamp stabbed all phrase, a repeating bass riff */
+    [GS_JACK] = {"Chicago jack", GRID_JACK,
+        4, 0, 0, 0, 1, 0, FILL_NONE, {{0, 0, 0, 0}, {0, 0, 0, 0}}, V_TIGHT, "9009009000900900", 1, BM_ROBOT, LM_CALL,
+        "0000000000000070", 72, 0, 2, CP_FREE, 0},
+    /* Ghetto house / juke: kicks in 3-step groups, chopped chord stabs in 3s, an 808 locked to the kick */
+    [GS_JUKE] = {"Ghetto house / juke", GRID_JUKE,
+        0, 0, 0, 0, 0, 0, FILL_SNARE, {{21, 0, 21, 6}, {0, 0, 0, 0}}, V_TIGHT, "9009009009009000", 1, BM_ROOT, LM_HOOK,
+        "9009009009000000", 72, 0, 2, CP_LOCK, 0},
 };
 
 /* the styles' families, the tempos they sit at (as set on the MPC: half-time styles are counted fast), whether they
@@ -509,7 +527,8 @@ static const style_t STYLE[GEN_NSTYLES] = {
 #define SFX_EDIT 32u                     /* break edits: beats replaced, reversed or rolled (Jungle) */
 #define SFX_WOBBLE 64u                   /* the bass part's cutoff wobbles at a rate per bar (Dubstep) */
 #define SFX_POLY 128u                    /* hats, tom and claves loop at their own lengths (Braindance) */
-static const struct { uint8_t cat, lo, hi, tanz, fx; const char *ref; } STYLE_META[GEN_NSTYLES] = {
+#define SFX_SECT 256u                    /* 8-bar sections: bass and stabs, then the lead (Grime) */
+static const struct { uint8_t cat, lo, hi, tanz; uint16_t fx; const char *ref; } STYLE_META[GEN_NSTYLES] = {
     [GS_DILLA] = {CAT_HIP, 80, 95, 1, 0, "J Dilla, Slum Village"},
     [GS_SOULQ] = {CAT_HIP, 80, 95, 0, 0, "D'Angelo, Questlove"},
     [GS_GFUNK] = {CAT_HIP, 88, 100, 1, 0, "Dr. Dre, West Coast"},
@@ -580,6 +599,10 @@ static const struct { uint8_t cat, lo, hi, tanz, fx; const char *ref; } STYLE_ME
     [GS_REGGAETON2] = {CAT_WLD, 85, 100, 1, 0, "Dembow, today"},
     [GS_AFROBEAT] = {CAT_WLD, 100, 130, 1, 0, "Fela Kuti"},
     [GS_BAILE] = {CAT_WLD, 125, 135, 1, 0, "Rio tamborzão"},
+    [GS_GRIME] = {CAT_BAS, 138, 142, 1, SFX_SECT, "Wiley, Dizzee Rascal"},
+    [GS_DNB] = {CAT_BAS, 170, 178, 0, SFX_WOBBLE, "Goldie, Reese bass"},
+    [GS_JACK] = {CAT_HSE, 118, 128, 1, 0, "Trax Records"},
+    [GS_JUKE] = {CAT_HSE, 125, 160, 1, 0, "Dance Mania, footwork"},
 };
 static const char *const CAT_NAME[GEN_NCATS] = {"Hip-hop", "Funk", "R&B and pop", "Electro", "Breaks and beats",
                                                 "House and techno", "UK bass", "IDM", "Caribbean and world"};
@@ -2163,6 +2186,28 @@ static void polymeter(void)
         }
     }
 }
+/* Sections (SFX_SECT, Grime): 16 bars in two halves of 8, counted from the song start: the first half plays the bass
+ * and chord stabs with the drums (no lead), the second drops them for the lead; the last beat of each half is a stop,
+ * only a kick and a clap on its first 16th. A pure function of the bar. */
+static void sections(int p)
+{
+    int second = (int)(bb % 16u) >= 8, i, j, B = 3 * 4 * (int)GEN_STEP;
+    if (!(STYLE_META[g.c->style % GEN_NSTYLES].fx & SFX_SECT))
+        return;
+    if ((second && (p == GP_BASS || p == GP_CHORD)) || (!second && p == GP_LEAD))
+        wb->n[p] = 0;
+    if (p == GP_DRUMS && bb % 8u == 7u) {
+        gev_t *e = &wb->ev[GEV_OFF[GP_DRUMS]];
+        for (i = 0, j = 0; i < wb->n[GP_DRUMS]; i++)
+            if ((int)e[i].pos < B - (int)GEN_STEP / 2)
+                e[j++] = e[i];
+        wb->n[GP_DRUMS] = (uint16_t)j;
+        for (i = 0; i < GEN_NLANES; i++)
+            wb->lanes[i] &= 0x0FFFu;
+        drum_put(L_KICK, B, 110);
+        drum_put(L_CLAP, B, 110);
+    }
+}
 /* The wobble (SFX_WOBBLE, Dubstep): the bass part's cutoff (its device's CC, 74 without one) rides a triangle LFO, its
  * rate picked by the seed each bar (1/4, 1/8, 1/8 triplet, 1/16), a CC every 32nd triplet; it replaces the bass's
  * own Flair moves on that CC. Bar events on the bass part's channel. */
@@ -2177,6 +2222,13 @@ static void wobble(void)
         if (!(e[i].kind == EV_CC && e[i].a == cc && e[i].ch == ch))
             e[n++] = e[i];
     wb->n[GP_BASS] = (uint16_t)n;
+    if (g.c->style == GS_DNB) {                         /* the Reese: one slow sweep over two bars, 30..100 */
+        for (t = 0; t < (int)GEN_BAR; t += 32) {
+            int a = (int)(bb & 1u) * (int)GEN_BAR + t, x = a * 254 / (2 * (int)GEN_BAR), v = x <= 127 ? x : 254 - x;
+            gput_ev(GP_BASS, t, EV_CC, (uint8_t)cc, (uint8_t)(30 + v * 70 / 127), 1, (uint8_t)ch);
+        }
+        return;
+    }
     per = PER[gh(pseed(GP_BASS, 0x30Bu), bb) % 4u];
     for (t = 0; t < (int)GEN_BAR; t += 8) {
         int x = (t % per) * 254 / per, v = x <= 127 ? x : 254 - x;
@@ -2235,6 +2287,7 @@ void gen_service(void)
         default: build_marble(); break;
         }
         chop(p);
+        sections(p);
         if (p == GP_DRUMS) {
             break_edits();
             polymeter();

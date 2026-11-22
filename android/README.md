@@ -117,6 +117,13 @@ been tried). Version 0.2.0 adds:
 - **The harp run** in LA beats: on the first beat of each phrase the arp part plays a quick 32nd run up two octaves
   of the chord.
 
+**0.4.2** (batch [A], part 1):
+
+- **Four styles** (74 in all): Grime, Drum and bass (hidden in the Tanzbär picker), Chicago jack, Ghetto house / juke.
+- **Grime's sections**: every 16 bars split in two halves; the first plays the square-wave bass and stabs with the
+  drums, the second drops them for the lead, and each half ends on a kick-and-clap stop.
+- **Drum and bass's Reese**: the bass synth's filter sweeps slowly over two bars (the wobble's slow rate).
+
 **0.4.1** (Tanzbär knobs as offsets):
 
 - With "Tanzbär sound follows the style and key" on, the Control page's Tanzbär knobs that a style sets (kick decay

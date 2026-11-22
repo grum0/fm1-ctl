@@ -26,6 +26,7 @@ enum { GS_DILLA, GS_SOULQ, GS_GFUNK, GS_BOMB, GS_QUINCY, GS_JUSTIFIED, GS_MPLS, 
        GS_JUNGLE, GS_UKG, GS_DUBSTEP,
        GS_REPHLEX,
        GS_DANCEHALL, GS_REGGAETON, GS_REGGAETON2, GS_AFROBEAT, GS_BAILE,
+       GS_GRIME, GS_DNB, GS_JACK, GS_JUKE,
        GEN_NSTYLES };
 /* the styles' families, for a picker in two steps and a three-letter prefix */
 enum { CAT_HIP, CAT_FNK, CAT_RNB, CAT_ELC, CAT_BRK, CAT_HSE, CAT_BAS, CAT_IDM, CAT_WLD, GEN_NCATS };

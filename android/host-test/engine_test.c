@@ -1420,6 +1420,79 @@ static void test_tanz_ofs_041(void)
     printf("0.4.1: Tanzbär offsets ok\n");
 }
 
+/* 0.4.2: batch [A] part 1. Grime's sections (bass in bars 1-8 of 16, the lead in 9-16, a kick-and-clap stop on the
+ * last beat of each half), Drum and bass's Reese slower than Dubstep's wobble, every new style plays */
+static void a1_run(int style, int secs)
+{
+    fresh();
+    eng_set(F_TEMPO, 120, vnow);
+    eng_set(F_STYLE, style, vnow);
+    eng_set(F_FILL_EVERY, 1, vnow);                       /* (no fills) */
+    eng_set(F_CLOCK, CLK_INT_OUT, vnow);
+    eng_set(F_PART(GP_DRUMS, PF_ON), 1, vnow);
+    eng_set(F_PART(GP_DRUMS, PF_CHAN), 9, vnow);
+    eng_set(F_PART(GP_BASS, PF_ON), 1, vnow);
+    eng_set(F_PART(GP_BASS, PF_CHAN), 3, vnow);
+    eng_set(F_PART(GP_LEAD, PF_ON), 1, vnow);
+    eng_set(F_PART(GP_LEAD, PF_CHAN), 4, vnow);
+    eng_play(1, vnow);
+    run_internal(secs * 1000 + 500);
+    eng_play(0, vnow);
+}
+static void test_a1_042(void)
+{
+    static const int ST[4] = {GS_GRIME, GS_DNB, GS_JACK, GS_JUKE};
+    int i, k, bass[16] = {0}, lead[16] = {0}, stop_ok = 1, stop_n = 0, ok = 1, rest, cc = gen_wobble_cc(&rest), reese = 0,
+        dub = 0, dilla_late = 0;
+    int64_t t0 = -1, bar = 2000 * MS;
+    for (k = 0; k < 4; k++) {
+        int dr = 0;
+        a1_run(ST[k], 8);
+        for (i = 0; i < nlog; i++)
+            dr += log_[i].n == 3 && log_[i].m[0] == 0x99 && log_[i].m[2];
+        CHECK(dr > 20 && gen_style_cat(ST[k]) >= 0, "batch [A] style %d plays %d drum notes", ST[k], dr);
+    }
+    a1_run(GS_GRIME, 32);
+    for (i = 0; i < nlog; i++)
+        if (log_[i].n == 3 && log_[i].m[0] == 0x99 && log_[i].m[2] && t0 < 0)
+            t0 = log_[i].t;
+    for (i = 0; i < nlog; i++) {
+        const msg_t *m = &log_[i];
+        int64_t at = m->t - t0 + 5 * MS;
+        int b = (int)(at / bar);
+        if (m->n != 3 || (m->m[0] & 0xF0) != 0x90 || !m->m[2] || b >= 16)
+            continue;
+        if (m->m[0] == 0x93)
+            bass[b]++;
+        if (m->m[0] == 0x94)
+            lead[b]++;
+        if (m->m[0] == 0x99 && (b == 7 || b == 15) && at % bar >= 3 * bar / 4 - 20 * MS) {
+            stop_n++;
+            stop_ok &= m->m[1] == 36 || m->m[1] == 41;
+        }
+    }
+    for (i = 0; i < 16; i++)
+        ok &= i < 8 ? !lead[i] : !bass[i];
+    CHECK(ok && bass[0] && lead[8], "Grime sections: bass %d %d, lead %d %d", bass[0], bass[8], lead[0], lead[8]);
+    CHECK(stop_ok && stop_n == 4, "Grime stop: %d notes on the last beats, only kick and clap: %d", stop_n, stop_ok);
+    a1_run(GS_DNB, 4);
+    for (i = 0; i < nlog; i++)
+        reese += log_[i].n == 3 && log_[i].m[0] == 0xB3 && log_[i].m[1] == cc;
+    a1_run(GS_DUBSTEP, 4);
+    for (i = 0; i < nlog; i++)
+        dub += log_[i].n == 3 && log_[i].m[0] == 0xB3 && log_[i].m[1] == cc;
+    CHECK(reese > 0 && reese * 3 < dub, "Reese %d CCs against Dubstep's %d", reese, dub);
+    a1_run(GS_DILLA, 20);
+    t0 = -1;
+    for (i = 0; i < nlog; i++)
+        if (log_[i].n == 3 && (log_[i].m[0] & 0xF0) == 0x90 && log_[i].m[2] && t0 < 0)
+            t0 = log_[i].t;
+    for (i = 0; i < nlog; i++)
+        dilla_late += log_[i].n == 3 && log_[i].m[0] == 0x93 && log_[i].m[2] && log_[i].t - t0 >= 8 * bar;
+    CHECK(dilla_late > 0, "Dilla's bass stops after 8 bars");
+    printf("0.4.2: sections, Reese ok\n");
+}
+
 int main(void)
 {
     test_ranges();
@@ -1445,6 +1518,7 @@ int main(void)
     test_idm_039();
     test_wld_040();
     test_tanz_ofs_041();
+    test_a1_042();
     test_panic();
     printf(fails ? "FAILED (%d)\n" : "ok\n", fails);
     free(log_);
