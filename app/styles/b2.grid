@@ -1,0 +1,32 @@
+# Batch [B] part 2 and batch [C] (0.4.5): from fm1-build-status.md and gen1-style-batch-c.md. Latin freestyle's
+# zap plays every other bar and its noise in bar 4 of every 4 (ZAP_RULES in gen.c), only with the Simmons.
+
+style TRIBAL
+kick     X... X... X... X...
+clap     .... X... .... X...
+claves   ..x. x... x..x ..x.
+conga    x.xx .xx. x.xx .xxx
+tom      .... ..x. .... x.x.
+
+style GHETTOTECH
+kick     X... X... X... X..x
+clap     .... X... .... X.x.
+chat     xx.x xx.x xx.x xx.x
+ohat     ..x. ..x. ..x. ..x.
+cowbell  x..x ..x. x..x ..x.
+
+style CUMBIA
+kick     X... .... X... ....
+chat     X.xx X.xx X.xx X.xx
+conga    ..x. .xx. ..x. .xx.
+cowbell  ..x. ..x. ..x. ..x.
+claves   .... x... .... x...
+
+style FREESTYLE
+kick     X... ..x. ..X. .x..
+snare    .... X... .... X...
+clap     .... X... .... X...
+chat     x.xx x.xx x.xx x.xx
+ohat     .... .... .... ..x.
+zap      .... .... .... ...x
+noise    .... .... .... X...

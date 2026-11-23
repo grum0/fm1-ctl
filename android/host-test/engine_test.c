@@ -1606,6 +1606,40 @@ static void test_b1_044(void)
     printf("0.4.4: batch [B] part 1 ok\n");
 }
 
+/* 0.4.5: batch [B] part 2 and Latin freestyle. The four play; Latin freestyle's zap only in bars 2 and 4 of every
+ * 4 (its last 16th) and its noise only in bar 4 (with the Simmons in the drum set); no pump (CC 11 dips) and no
+ * warble (bends off centre on the chord channel; the lead may slide by itself) in any of them */
+static void test_b2_045(void)
+{
+    static const int ST[4] = {GS_TRIBAL, GS_GHETTOTECH, GS_CUMBIA, GS_FREESTYLE};
+    uint16_t z[8], n[8];
+    int k, i, b, bad = 0, fx = 0;
+    for (k = 0; k < 4; k++) {
+        int dr = 0, ch = 0;
+        a2_run(ST[k], 8);
+        for (i = 0; i < nlog; i++) {
+            const msg_t *m = &log_[i];
+            if (m->n == 3 && m->m[0] == 0x99 && m->m[2])
+                dr++;
+            if (m->n == 3 && (m->m[0] & 0xF0) == 0x90 && m->m[2] && (m->m[0] & 15) == 1)
+                ch++;
+            fx += m->n == 3 && m->m[0] == 0xB1 && m->m[1] == 11 && m->m[2] < 127;   /* (the reset to 127 is not) */
+            fx += m->n == 3 && m->m[0] == 0xE1 && (m->m[1] || m->m[2] != 64);       /* (nor the centred bend) */
+        }
+        CHECK(dr > 20 && ch > 0, "style %d plays %d drum and %d chord notes", ST[k], dr, ch);
+    }
+    CHECK(!fx, "bar effects in the new styles: %d", fx);
+    zap_steps(GS_FREESTYLE, E.g.lane_note[L_SIM1], z);
+    zap_steps(GS_FREESTYLE, E.g.lane_note[L_SIM2], n);
+    for (b = 0; b < 8; b++) {
+        bad += z[b] != (b % 2 == 1 ? 1u << 15 : 0u);
+        bad += n[b] != (b % 4 == 3 ? 1u << 12 : 0u);
+    }
+    CHECK(!bad, "freestyle zaps %04x %04x %04x %04x, noise %04x %04x %04x %04x", z[0], z[1], z[2], z[3], n[0], n[1],
+          n[2], n[3]);
+    printf("0.4.5: batch [B] part 2 and Latin freestyle ok\n");
+}
+
 int main(void)
 {
     test_ranges();
@@ -1634,6 +1668,7 @@ int main(void)
     test_a1_042();
     test_a2_043();
     test_b1_044();
+    test_b2_045();
     test_panic();
     printf(fails ? "FAILED (%d)\n" : "ok\n", fails);
     free(log_);

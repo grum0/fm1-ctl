@@ -117,6 +117,15 @@ been tried). Version 0.2.0 adds:
 - **The harp run** in LA beats: on the first beat of each phrase the arp part plays a quick 32nd run up two octaves
   of the chord.
 
+**0.4.5** (batch [B], part 2, and Latin freestyle; every planned style is now built):
+
+- **Four styles** (86 in all): Tribal guarachero (conga rolls and the 2-3 clave over a steady four on the floor),
+  Detroit ghettotech (straight and fast with the 808 cowbell), Cumbia (the güira scrape on the closed hat, the bass on
+  1 and 3, accordion off-beats in i–iv–V7) and Latin freestyle (the syncopated kick, synth-brass stabs, a sad lead
+  over a 16th arp).
+- **Latin freestyle's Simmons**: with the Simmons in the drum set, the zap plays every other bar and the noise pad in
+  bar 4 of every 4; the fills of it and Detroit ghettotech end on a zap.
+
 **0.4.4** (batch [B], part 1):
 
 - **Four styles** (82 in all): Ballroom / vogue (the Ha-dance clap and off-beat crashes), Jersey club, Gqom (no kick

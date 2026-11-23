@@ -82,6 +82,7 @@ static const prog_t PROG_MIN[] = {
     /* 28 */ {SC_AEO, 1, {{0, Q_MIN9, 8}}},                                   /* one chord (Dub techno) */
     /* 29 */ {SC_AEO, 4, {{0, Q_MIN, 2}, {8, Q_MAJ, 2}, {10, Q_MAJ, 2}, {0, Q_MIN, 2}}},  /* i-VI-VII-i (Reggaeton) */
     /* 30 */ {SC_AEO, 4, {{0, Q_MIN7, 2}, {8, Q_MAJ7, 2}, {3, Q_MAJ7, 2}, {10, Q_7, 2}}}, /* i-VI-III-VII */
+    /* 31 */ {SC_AEO, 3, {{0, Q_MIN, 4}, {5, Q_MIN, 2}, {7, Q_7, 2}}},     /* i-iv-V7, the harmonic minor's (Cumbia) */
 };
 /* "major": where a style has no use for a bright key, its dominant side (mixolydian vamps) */
 static const prog_t PROG_MAJ[] = {
@@ -550,6 +551,23 @@ static const style_t STYLE[GEN_NSTYLES] = {
     [GS_KUDURO] = {"Kuduro", GRID_KUDURO,
         0, 0, 0, 0, 0, 0, FILL_TOMS, {{21, 9, 21, 25}, {0, 0, 0, 0}}, V_OCT, "9000000000000000", 0, BM_ROOT, LM_HOOK,
         "9090009090900090", 72, 0, 2, CP_LOCK, 0},
+    /* 0.4.5, batch [B] part 2 and batch [C]: drums from app/styles/b2.grid */
+    /* Tribal guarachero: conga rolls and the 2-3 clave over a steady four on the floor; a high pentatonic flute call */
+    [GS_TRIBAL] = {"Tribal guarachero", GRID_TRIBAL,
+        0, 0, 0, 0, 1, 0, FILL_TOMS, {{21, 3, 21, 9}, {0, 0, 0, 0}}, V_WIDE, "9000000000000000", 0, BM_ROOT, LM_CALL,
+        "9070007090000000", 79, 1, 2, CP_FOLLOW, 0},
+    /* Detroit ghettotech: straight and fast, the 808 cowbell, a chant hook; the electro fill ends on a zap */
+    [GS_GHETTOTECH] = {"Detroit ghettotech", GRID_GHETTOTECH,
+        0, 0, 0, 0, 0, 0, FILL_ELECTRO, {{21, 11, 21, 9}, {0, 0, 0, 0}}, V_OCT, "9000000000000000", 0, BM_ROOT, LM_HOOK,
+        "9070907000000000", 72, 0, 2, CP_FOLLOW, 0},
+    /* Cumbia: the guira scrape on the closed hat, the bass on 1 and 3, accordion off-beats in i-iv-V7 */
+    [GS_CUMBIA] = {"Cumbia", GRID_CUMBIA,
+        1, 0, 0, 0, 1, 0, FILL_LIVE, {{31, 31, 31, 31}, {0, 0, 0, 0}}, V_TIGHT, "0090009000900090", 1, BM_ROOT, LM_SOLO,
+        "9090909090909090", 76, 0, 2, CP_LOCK, 0},
+    /* Latin freestyle: the syncopated kick, gated snares, zaps, brass stabs on off-16ths, a sad lead over a 16th arp */
+    [GS_FREESTYLE] = {"Latin freestyle", GRID_FREESTYLE,
+        0, 0, 0, 0, 0, 0, FILL_ELECTRO, {{4, 10, 4, 17}, {0, 0, 0, 0}}, V_WIDE, "0700070007000700", 1, BM_OCTAVE, LM_SOLO,
+        "9000007000900070", 76, 0, 1, CP_FOLLOW, 0},
 };
 
 /* the styles' families, the tempos they sit at (as set on the MPC: half-time styles are counted fast), whether they
@@ -649,6 +667,10 @@ static const struct { uint8_t cat, lo, hi, tanz; uint16_t fx; const char *ref; }
     [GS_JERSEY] = {CAT_HSE, 130, 140, 1, SFX_TRIP, "Jersey club"},
     [GS_GQOM] = {CAT_WLD, 120, 127, 1, 0, "Durban, South Africa"},
     [GS_KUDURO] = {CAT_WLD, 130, 140, 1, 0, "Buraka Som Sistema, Angola"},
+    [GS_TRIBAL] = {CAT_WLD, 125, 135, 1, 0, "3Ball MTY, Mexico"},
+    [GS_GHETTOTECH] = {CAT_ELC, 145, 160, 1, 0, "DJ Assault, DJ Godfather"},
+    [GS_CUMBIA] = {CAT_WLD, 85, 110, 1, 0, "Colombia, digital cumbia"},
+    [GS_FREESTYLE] = {CAT_ELC, 112, 128, 1, 0, "Shannon, Lisa Lisa, Stevie B"},
 };
 static const char *const CAT_NAME[GEN_NCATS] = {"Hip-hop", "Funk", "R&B and pop", "Electro", "Breaks and beats",
                                                 "House and techno", "UK bass", "IDM", "Caribbean and world"};
@@ -2054,6 +2076,8 @@ static const struct { uint8_t style, lane, bars; const char *answer; } ZAP_RULES
     {GS_GATED, L_SIM2, 0x8, 0},
     {GS_ITALO, L_SIM1, 0xA, 0},
     {GS_MIAMI, L_SIM1, 0xA, 0},
+    {GS_FREESTYLE, L_SIM1, 0xA, 0},
+    {GS_FREESTYLE, L_SIM2, 0x8, 0},
 };
 static int is_grid_hit(int lane, int pos)  /* a hit where the style's grid has one (not a fill's) */
 {
