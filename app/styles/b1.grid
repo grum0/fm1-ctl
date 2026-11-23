@@ -1,0 +1,26 @@
+# Batch [B] part 1 (0.4.4): from fm1-build-status.md. Jersey club's last three kicks bounce as 8th-note triplets
+# (SFX_TRIP in gen.c); Gqom has no kick on 1 and no hats.
+
+style BALLROOM
+kick     X... .... X... ....
+clap     .... X... .... X...
+chat     o.o. o.o. o.o. o.o.
+cymbal   ..x. .... ..x. .x..
+
+style JERSEY
+kick     X... ..X. ..X. X.x.
+clap     .... X... .... X...
+rim      .x.. ...x .x.. ..x.
+chat     x.x. x.x. x.x. x.x.
+
+style GQOM
+kick     ..x. .... ..x. .x..
+rim      .... x... .... x...
+tom      x... ..x. .... x...
+conga    .x.x ...x .x.. ..x.
+
+style KUDURO
+kick     X... X... X... X..x
+clap     .... X... .... X...
+tom      ..xx .x.x ..xx .xx.
+cowbell  ..x. ..x. ..x. ..xx

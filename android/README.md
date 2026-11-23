@@ -117,6 +117,14 @@ been tried). Version 0.2.0 adds:
 - **The harp run** in LA beats: on the first beat of each phrase the arp part plays a quick 32nd run up two octaves
   of the chord.
 
+**0.4.4** (batch [B], part 1):
+
+- **Four styles** (82 in all): Ballroom / vogue (the Ha-dance clap and off-beat crashes), Jersey club, Gqom (no kick
+  on the 1, no hats, the low tom and congas carry it over a minor drone) and Kuduro (four on the floor, frantic toms,
+  off-beat cowbell, a rave riff).
+- **Jersey club's bounce**: the bar's last three kicks play as 8th-note triplets. The bass locked to the kick keeps
+  the straight steps.
+
 **0.4.3** (batch [A], part 2):
 
 - **Four IDM styles** (78 in all): Aphex acid-electro (a 303 line whose cutoff drifts over 8 bars), Boards of Canada

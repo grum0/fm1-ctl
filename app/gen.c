@@ -533,6 +533,23 @@ static const style_t STYLE[GEN_NSTYLES] = {
     [GS_WARP] = {"Warp ambient techno", GRID_WARP,
         0, 0, 0, 0, 0, 0, FILL_SNARE, {{1, 8, 13, 22}, {0, 7, 8, 9}}, V_WIDE, "9000000000000000", 0, BM_ROOT, LM_CALL,
         "9000000000000000", 76, 0, 1, CP_FREE, 0},
+    /* 0.4.4, batch [B] part 1: drums from app/styles/b1.grid */
+    /* Ballroom / vogue: the Ha-dance clap, off-beat crashes on the cymbal lane, a sparse kick; one stab every 2 bars */
+    [GS_BALLROOM] = {"Ballroom / vogue", GRID_BALLROOM,
+        0, 0, 0, 0, 0, 0, FILL_SNARE, {{21, 0, 21, 2}, {0, 0, 0, 0}}, V_OCT, "9000000000000000", 0, BM_ROOT, LM_CALL,
+        "0000000000000070", 72, 0, 2, CP_LOCK, 0},
+    /* Jersey club: the bouncing kick (its last three kicks as 8th-note triplets, SFX_TRIP), the rim squeaks, claps */
+    [GS_JERSEY] = {"Jersey club", GRID_JERSEY,
+        0, 0, 0, 0, 0, 0, FILL_SNARE, {{21, 6, 21, 2}, {0, 0, 0, 0}}, V_OCT, "9000000000000000", 0, BM_ROOT, LM_HOOK,
+        "9000009000909090", 72, 0, 2, CP_LOCK, 0},
+    /* Gqom: no kick on 1, no hats; the low tom takes the downbeat, congas broken around it; a minor drone */
+    [GS_GQOM] = {"Gqom", GRID_GQOM,
+        0, 0, 0, 0, 1, 0, FILL_TOMS, {{28, 28, 28, 28}, {0, 0, 0, 0}}, V_WIDE, "9000000000000000", 0, BM_LAZY, LM_CALL,
+        "9000000000000000", 72, 0, 2, CP_FREE, 0},
+    /* Kuduro: four on the floor, frantic toms, off-beat cowbell, a rave square riff, the bass locked to the kick */
+    [GS_KUDURO] = {"Kuduro", GRID_KUDURO,
+        0, 0, 0, 0, 0, 0, FILL_TOMS, {{21, 9, 21, 25}, {0, 0, 0, 0}}, V_OCT, "9000000000000000", 0, BM_ROOT, LM_HOOK,
+        "9090009090900090", 72, 0, 2, CP_LOCK, 0},
 };
 
 /* the styles' families, the tempos they sit at (as set on the MPC: half-time styles are counted fast), whether they
@@ -548,6 +565,7 @@ static const style_t STYLE[GEN_NSTYLES] = {
 #define SFX_SECT 256u                    /* 8-bar sections: bass and stabs, then the lead (Grime) */
 #define SFX_WARBLE 512u                  /* the chords' and lead's pitch drifts like worn tape (Boards of Canada) */
 #define SFX_DRIFT 1024u                  /* the drums on the Grids map, its X/Y drifting bar by bar (Autechre) */
+#define SFX_TRIP 2048u                   /* the bar's last three kicks as 8th-note triplets (Jersey club) */
 static const struct { uint8_t cat, lo, hi, tanz; uint16_t fx; const char *ref; } STYLE_META[GEN_NSTYLES] = {
     [GS_DILLA] = {CAT_HIP, 80, 95, 1, 0, "J Dilla, Slum Village"},
     [GS_SOULQ] = {CAT_HIP, 80, 95, 0, 0, "D'Angelo, Questlove"},
@@ -627,6 +645,10 @@ static const struct { uint8_t cat, lo, hi, tanz; uint16_t fx; const char *ref; }
     [GS_BOC] = {CAT_IDM, 85, 100, 1, SFX_WARBLE, "Boards of Canada"},
     [GS_AUTECHRE] = {CAT_IDM, 90, 120, 1, SFX_DRIFT, "Autechre"},
     [GS_WARP] = {CAT_IDM, 120, 135, 1, 0, "Warp, Artificial Intelligence"},
+    [GS_BALLROOM] = {CAT_HSE, 120, 130, 1, 0, "Ha dance, vogue"},
+    [GS_JERSEY] = {CAT_HSE, 130, 140, 1, SFX_TRIP, "Jersey club"},
+    [GS_GQOM] = {CAT_WLD, 120, 127, 1, 0, "Durban, South Africa"},
+    [GS_KUDURO] = {CAT_WLD, 130, 140, 1, 0, "Buraka Som Sistema, Angola"},
 };
 static const char *const CAT_NAME[GEN_NCATS] = {"Hip-hop", "Funk", "R&B and pop", "Electro", "Breaks and beats",
                                                 "House and techno", "UK bass", "IDM", "Caribbean and world"};
@@ -2242,6 +2264,22 @@ static int drift_xy(int axis)
     int a = 16 + (int)(gh(s, k) % 96u), z = 16 + (int)(gh(s, k + 1u) % 96u);
     return a + (z - a) * (int)f / 8;
 }
+/* The bounce (SFX_TRIP, Jersey club): the kicks on steps 11, 13 and 15 (counting from 1) play as 8th-note triplets
+ * across the last beat and a half, so the second lands a third of a 16th late and the third two thirds late. Kick
+ * events only; the parts coupled to the kick keep the straight steps. A pure function of the bar. */
+static void kick_triplets(void)
+{
+    gev_t *e = &wb->ev[GEV_OFF[GP_DRUMS]];
+    int i, S = (int)GEN_STEP, note = g.c->lane_note[L_KICK], ch = lane_ch(L_KICK);
+    if (!(STYLE_META[g.c->style % GEN_NSTYLES].fx & SFX_TRIP))
+        return;
+    for (i = 0; i < wb->n[GP_DRUMS]; i++)
+        if (e[i].kind == EV_NOTE && e[i].a == note && e[i].ch == ch) {
+            int st = ((int)e[i].pos + S / 2) / S;
+            if (st == 12 || st == 14)
+                e[i].pos = (uint16_t)gclamp((int)e[i].pos + (st - 10) * S / 3, 0, (int)GEN_BAR - 1);
+        }
+}
 /* Sections (SFX_SECT, Grime): 16 bars in two halves of 8, counted from the song start: the first half plays the bass
  * and chord stabs with the drums (no lead), the second drops them for the lead; the last beat of each half is a stop,
  * only a kick and a clap on its first 16th. A pure function of the bar. */
@@ -2362,6 +2400,7 @@ void gen_service(void)
         if (p == GP_DRUMS) {
             break_edits();
             polymeter();
+            kick_triplets();
             zap_bars();
         }
         if (p == GP_BASS)

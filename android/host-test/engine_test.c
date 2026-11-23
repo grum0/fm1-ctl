@@ -1566,6 +1566,46 @@ static void test_a2_043(void)
     printf("0.4.3: warble, drift, acid cutoff ok\n");
 }
 
+/* 0.4.4: batch [B] part 1. The four play; Jersey club's last kicks fall on 8th-note triplets (bar positions 304 and
+ * 368 of 384, not 288 and 336); Gqom has no hats; no triplet kicks in the other styles */
+static void test_b1_044(void)
+{
+    static const int ST[4] = {GS_BALLROOM, GS_JERSEY, GS_GQOM, GS_KUDURO};
+    int k, i, trip = 0, straight = 0, hats = 0, other_trip = 0;
+    int64_t t0, bar = 2000 * MS;
+    for (k = 0; k < 4; k++) {
+        int dr = 0;
+        a2_run(ST[k], 8);
+        t0 = -1;
+        for (i = 0; i < nlog; i++)
+            if (log_[i].n == 3 && log_[i].m[0] == 0x99 && log_[i].m[2] && t0 < 0)
+                t0 = log_[i].t;
+        for (i = 0; i < nlog; i++) {
+            const msg_t *m = &log_[i];
+            int64_t at;
+            if (m->n != 3 || m->m[0] != 0x99 || !m->m[2])
+                continue;
+            dr++;
+            at = (m->t - t0) % bar;
+            if (m->m[1] == 36) {
+                int64_t p = at * 384 / bar;                    /* (in 384ths of the bar) */
+                if (ST[k] == GS_JERSEY) {
+                    trip += llabs(p - 304) <= 3 || llabs(p - 368) <= 3;
+                    straight += llabs(p - 288) <= 3 || llabs(p - 336) <= 3;
+                } else
+                    other_trip += llabs(p - 304) <= 3 || llabs(p - 368) <= 3;
+            }
+            if (ST[k] == GS_GQOM)
+                hats += m->m[1] == 43 || m->m[1] == 39;
+        }
+        CHECK(dr > 20, "batch [B] style %d plays %d drum notes", ST[k], dr);
+    }
+    CHECK(trip >= 8 && !straight, "Jersey club: %d triplet kicks, %d straight", trip, straight);
+    CHECK(!other_trip, "triplet kicks outside Jersey club: %d", other_trip);
+    CHECK(!hats, "Gqom: %d hats", hats);
+    printf("0.4.4: batch [B] part 1 ok\n");
+}
+
 int main(void)
 {
     test_ranges();
@@ -1593,6 +1633,7 @@ int main(void)
     test_tanz_ofs_041();
     test_a1_042();
     test_a2_043();
+    test_b1_044();
     test_panic();
     printf(fails ? "FAILED (%d)\n" : "ok\n", fails);
     free(log_);
