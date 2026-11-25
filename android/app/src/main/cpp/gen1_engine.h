@@ -11,6 +11,8 @@
  *                    to LOOKAHEAD ahead of now.
  *   external clock   eng_midi_clock(byte, time) for each F8 FA FB FC received; a tick makes its own four subticks,
  *                    spread over the last tick's length.
+ *   host-driven      eng_render(playing, pos, n, t0, per): the caller's transport, as a plugin host gives it (0.5.0).
+ *                    The internal clock is one caller of the same subtick code, so the two cannot drift apart.
  * Not thread safe: the caller serialises every call. */
 #pragma once
 #include <stdint.h>
@@ -59,7 +61,28 @@ int64_t eng_pump(int64_t now);                   /* the internal clock and the g
 void eng_midi_clock(uint8_t byte, int64_t at);   /* F8 FA FB FC from MIDI in, as received at `at` */
 void eng_midi_spp(int sixteenths, int64_t at);   /* F2 (Song Position Pointer) from MIDI in */
 void eng_play(int on, int64_t now);              /* the transport */
-void eng_bell_table(int cc, const uint8_t tab[12]);   /* the cowbell line's tune CC and values (Tanzbär profile) */
+void eng_bell_table(int cc, const uint8_t tab[12]);   /* the cowbell line's tune CC and values (eng_init sets the
+                                                        * Tanzbär profile's; a caller may set another) */
+
+/* Host-driven render (0.5.0): everything for the subticks [pos, pos + n) of the song (96 a quarter note; song
+ * position 0 is the top), subtick pos sounding at t0 and each next one per_ns later. A pos that is not where the
+ * last call ended (the first call, a jump, a Continue from elsewhere) locates the song there first, as a Song
+ * Position Pointer does: on the next sixteenth, quiet until it. playing 0 stops (the arpeggiator keeps its clock).
+ * No MIDI clock is sent: the host has its own. Not for use with CLK_EXT (that clock comes from MIDI in). */
+void eng_render(int playing, uint32_t pos, uint32_t n, int64_t t0, int64_t per_ns);
+
+/* The Tanzbär's sound per style and key (0.5.0, moved from the app's Kotlin): what to send, for the screen side to
+ * send it (never from the clock). Cowbell pitch: */
+enum { BELL_STYLE, BELL_FIXED, BELL_LINE, NBELLMODE };
+#define ENG_TANZ_MAX 21                          /* the most CCs eng_tanz_sound returns */
+int eng_bell_melodic(int bell_mode);             /* 1 if the cowbell plays a line in the current style */
+int eng_tanz_slot(int cc);                       /* the offset slot of a CC the style sets, else -1 */
+int eng_tanz_base(int slot, int melodic);        /* the current style's own value in that slot */
+int eng_tanz_sound(int kick_key, int melodic, uint8_t *cc, uint8_t *val);   /* the CCs, in order; returns how many */
+int eng_style_tempo(int on);                     /* the tempo a style change moves to ("Picking a style moves the
+                                                  * tempo"); the current one when off, following, or in range */
+int eng_jv_hint(int style, int out[4]);          /* the JV-1010 parts for chords, Marble, arp, lead (0 none); 1 if known */
+const char *eng_jv_part(int part);               /* a part's name in the performance ("" if none) */
 void eng_panic(int64_t now);                     /* every note off; all notes off, all sound off, reset controllers
                                                   * and pitch bend centred on every channel (transport unchanged) */
 void eng_send_now(uint8_t st, uint8_t d1, uint8_t d2, int64_t now);   /* a message from the screen: keys, knobs, wheels */

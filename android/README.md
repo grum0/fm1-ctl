@@ -117,6 +117,18 @@ been tried). Version 0.2.0 adds:
 - **The harp run** in LA beats: on the first beat of each phrase the arp part plays a quick 32nd run up two octaves
   of the chord.
 
+**0.5.0** (the portable core; nothing should sound different):
+
+- **The engine is ready for other homes** (an MPC plugin or a VST later). Everything that decides what is sent now
+  lives in the portable C core: the Tanzbär's sound per style and key (the key fallback, Kick tune, the Control
+  page's offsets, the cowbell's line decay) and "Picking a style moves the tempo". The app only sends what the core
+  returns, from the screen's side as before.
+- **Host-driven render**: one entry point, "the events for these subticks at this song position", as a plugin host
+  drives it; a jump lands on the next sixteenth. The app's own clock now plays through the same code, and a test
+  checks the two give identical output, jumps included.
+- The Tanzbär profile and the JV-1010 hints are generated as C headers (`tanz_data.h`, `jv_data.h`); `TanzData.kt`
+  is gone. The cowbell's tune table is set by the engine itself, so a full reset to defaults no longer loses it.
+
 **0.4.5** (batch [B], part 2, and Latin freestyle; every planned style is now built):
 
 - **Four styles** (86 in all): Tribal guarachero (conga rolls and the 2-3 clave over a steady four on the floor),

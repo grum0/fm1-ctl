@@ -18,10 +18,13 @@ object Native {
     external fun nRange(id: Int, out: IntArray)
     external fun nPlay(on: Int)
     external fun nPanic()
-    external fun nBellTable(cc: Int, tab: ByteArray)
-    external fun nStyleBell(style: Int): Int
-    external fun nTanzMix(slot: Int, base: Int): Int                 // 0.4.1: style value + the player's offset
-    external fun nTanzOffset(slot: Int, base: Int, value: Int): Int  // the offset a knob value means
+    external fun nTanzOffset(slot: Int, base: Int, value: Int): Int  // 0.4.1: the offset a knob value means
+    // 0.5.0: the Tanzbär's sound worked out by the engine (the screen sends what it returns)
+    external fun nBellMelodic(mode: Int): Int                         // 1: the cowbell plays a line in this style
+    external fun nTanzSlot(cc: Int): Int                              // the offset slot of a CC the style sets, or -1
+    external fun nTanzBase(slot: Int, melodic: Int): Int              // the style's own value there
+    external fun nTanzSound(kickKey: Int, melodic: Int, out: IntArray): Int   // (cc, value) pairs; returns how many
+    external fun nStyleTempo(on: Int): Int                            // the tempo after a style change
     external fun nMonOpen(on: Int)
     external fun nMonRead(since: Int, t: LongArray, b: ByteArray, res: IntArray)
     external fun nDefaults()

@@ -315,22 +315,6 @@ JNIEXPORT void JNICALL J(nMidiIn)(JNIEnv *env, jobject self, jbyteArray data, ji
     pthread_mutex_unlock(&mu);
 }
 
-/* the cowbell line's tune CC and its 12 values (the Tanzbär profile's table, from C; 255: not playable) */
-JNIEXPORT void JNICALL J(nBellTable)(JNIEnv *env, jobject self, jint cc, jbyteArray tab)
-{
-    jbyte t[12];
-    uint8_t u[12];
-    int i;
-    (void)self;
-    if ((*env)->GetArrayLength(env, tab) < 12)
-        return;
-    (*env)->GetByteArrayRegion(env, tab, 0, 12, t);
-    for (i = 0; i < 12; i++)
-        u[i] = (uint8_t)t[i];
-    pthread_mutex_lock(&mu);
-    eng_bell_table(cc, u);
-    pthread_mutex_unlock(&mu);
-}
 
 /* the monitor: on while the screen shows it (records are only made then) */
 JNIEXPORT void JNICALL J(nMonOpen)(JNIEnv *env, jobject self, jint on)
@@ -546,31 +530,68 @@ JNIEXPORT jint JNICALL J(nCount)(JNIEnv *env, jobject self, jint kind)
     }
 }
 
-/* a style's family and the tempos it sits at: out[0] CAT_*, [1] lowest BPM, [2] highest, [3] 1 if it suits the
- * Tanzbär Lite */
-/* 0.4.1: the Tanzbär value to send for slot (TanzData.CCS order) over the style's base, with the player's offset */
-JNIEXPORT jint JNICALL J(nTanzMix)(JNIEnv *env, jobject self, jint slot, jint base)
-{
-    int v;
-    (void)env, (void)self;
-    pthread_mutex_lock(&mu);
-    v = eng_tanz_mix(slot, base);
-    pthread_mutex_unlock(&mu);
-    return v;
-}
-/* the offset that a knob at value means over the style's base */
+/* 0.4.1: the offset that a knob at value means over the style's base */
 JNIEXPORT jint JNICALL J(nTanzOffset)(JNIEnv *env, jobject self, jint slot, jint base, jint value)
 {
     (void)env, (void)self;
     return eng_tanz_offset(slot, base, value);
 }
-/* 1 if the style's cowbell plays a line (Cowbell pitch: Style) */
-JNIEXPORT jint JNICALL J(nStyleBell)(JNIEnv *env, jobject self, jint style)
+/* 0.5.0: the Tanzbär's sound, worked out by the engine; the screen sends what these return */
+JNIEXPORT jint JNICALL J(nBellMelodic)(JNIEnv *env, jobject self, jint mode)
+{
+    int v;
+    (void)env, (void)self;
+    pthread_mutex_lock(&mu);
+    v = eng_bell_melodic(mode);
+    pthread_mutex_unlock(&mu);
+    return v;
+}
+JNIEXPORT jint JNICALL J(nTanzSlot)(JNIEnv *env, jobject self, jint cc)
 {
     (void)env, (void)self;
-    return style >= 0 && style < GEN_NSTYLES ? gen_style_bell(style) : 0;
+    return eng_tanz_slot(cc);
+}
+JNIEXPORT jint JNICALL J(nTanzBase)(JNIEnv *env, jobject self, jint slot, jint melodic)
+{
+    int v;
+    (void)env, (void)self;
+    pthread_mutex_lock(&mu);
+    v = eng_tanz_base(slot, melodic);
+    pthread_mutex_unlock(&mu);
+    return v;
+}
+/* the CCs to send, as (cc, value) pairs into out (2 * ENG_TANZ_MAX ints); returns how many pairs */
+JNIEXPORT jint JNICALL J(nTanzSound)(JNIEnv *env, jobject self, jint kick_key, jint melodic, jintArray out)
+{
+    uint8_t cc[ENG_TANZ_MAX], v[ENG_TANZ_MAX];
+    jint r[2 * ENG_TANZ_MAX];
+    int i, n;
+    (void)self;
+    if ((*env)->GetArrayLength(env, out) < 2 * ENG_TANZ_MAX)
+        return 0;
+    pthread_mutex_lock(&mu);
+    n = eng_tanz_sound(kick_key, melodic, cc, v);
+    pthread_mutex_unlock(&mu);
+    for (i = 0; i < n; i++) {
+        r[2 * i] = cc[i];
+        r[2 * i + 1] = v[i];
+    }
+    if (n)
+        (*env)->SetIntArrayRegion(env, out, 0, 2 * n, r);
+    return n;
+}
+JNIEXPORT jint JNICALL J(nStyleTempo)(JNIEnv *env, jobject self, jint on)
+{
+    int v;
+    (void)env, (void)self;
+    pthread_mutex_lock(&mu);
+    v = eng_style_tempo(on);
+    pthread_mutex_unlock(&mu);
+    return v;
 }
 
+/* a style's family and the tempos it sits at: out[0] CAT_*, [1] lowest BPM, [2] highest, [3] 1 if it suits the
+ * Tanzbär Lite */
 JNIEXPORT void JNICALL J(nStyleInfo)(JNIEnv *env, jobject self, jint style, jintArray out)
 {
     jint r[4] = {0, 0, 0, 1};

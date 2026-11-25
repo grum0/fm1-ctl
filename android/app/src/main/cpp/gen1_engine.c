@@ -2,6 +2,8 @@
  * Ported in part from CTL-1's engine.c, Copyright (C) 2026 Charles Vestal. See gen1_engine.h. */
 #include <string.h>
 #include "gen1_engine.h"
+#include "tanz_data.h"                          /* (generated: tools/tanzbar/make_tanz.py) */
+#include "jv_data.h"                            /* (generated: tools/jv1010/make_jv.py) */
 
 static const uint8_t RATE_TICKS[NRATE] = {24, 12, 8, 6, 4, 3};
 #define SEQ_TICKS 6u                     /* a sixteenth */
@@ -10,6 +12,7 @@ static const uint8_t RATE_TICKS[NRATE] = {24, 12, 8, 6, 4, 3};
 #define EXT_LOST_NS (300 * MS)               /* the followed clock counts as gone after this long without a tick */
 #define EXT_OUT_DELAY_DEF 5                  /* ms: following, what a tick makes is stamped this long after it arrived */
 #define EXT_OUT_DELAY_NS ((int64_t)E.c.out_delay * MS)   /* (finding 8; F_OUT_DELAY sets it, by ear against the MPC) */
+#define SONG_NONE 0xFFFFFFFFu
 
 typedef struct { uint8_t steps, hits, rot, note, mute; uint16_t pat; } trk_t;
 typedef struct {
@@ -31,6 +34,8 @@ static struct {
     int64_t next_sub;                    /* internal clock: when the next subtick sounds */
     uint32_t sub_n;                      /* ... and its number (a tick every fourth) */
     int64_t ext_last, ext_per;           /* external clock: when the last tick came, and the length of a tick */
+    uint32_t song_next, song_wait;       /* host-driven and internal clock: the song subtick expected next, and the
+                                          * one a locate waits for (SONG_NONE: not playing) */
     uint32_t ticks, seq_tick, seq_step;
     uint8_t seq_note[NTRACKS], seq_left[NTRACKS];
     uint8_t pool[16], npool;
@@ -411,6 +416,7 @@ static void clock_tick(void)                     /* one 24th of a beat; the gene
 }
 static void seq_start(int from_top)
 {
+    E.song_next = SONG_NONE;                     /* (the subtick code sets it once it plays) */
     if (from_top) {
         E.seq_tick = 0;
         E.seq_step = 0;
@@ -423,6 +429,7 @@ static void seq_start(int from_top)
 static void seq_stop(void)
 {
     E.running = 0;
+    E.song_next = SONG_NONE;
     gen_stop();
     seq_offs();
 }
@@ -438,6 +445,62 @@ static void notes_off(void)
 }
 
 static int64_t sub_ns(void) { return 625000000LL / E.c.tempo; }   /* 96 subticks a quarter note */
+
+/* Locate the song at song subtick pos (0.5.0): on the next sixteenth, as a Song Position Pointer does; the
+ * subticks before it stay quiet. From stopped at the top this is a plain Start. */
+static void song_locate(uint32_t pos)
+{
+    uint32_t s16 = (pos + 23u) / 24u;
+    E.song_wait = s16 * 24u;
+    if (!E.running && s16 == 0u) {
+        seq_start(1);
+        return;
+    }
+    arp_off();
+    seq_offs();
+    E.seq_tick = s16 * SEQ_TICKS;
+    E.seq_step = s16;
+    gen_locate(s16);
+    if (!E.running)
+        seq_start(0);
+    gen_service();                               /* the bar it lands in, ready before it plays */
+}
+
+/* One subtick at time t: the one code path for the internal clock and the host-driven render. pos is the song
+ * subtick while playing (96 a quarter note), else any count that is a multiple of 4 on the clock's ticks. */
+static void subtick_at(int playing, uint32_t pos, int64_t t)
+{
+    E.t_cur = t;
+    if (!playing) {
+        if (E.running)
+            seq_stop();
+        if ((pos & 3u) == 0u)
+            clock_tick();                        /* (the arpeggiator keeps its clock) */
+        return;
+    }
+    if (!E.running || pos != E.song_next)
+        song_locate(pos);
+    E.song_next = pos + 1u;
+    if (pos < E.song_wait)
+        return;
+    if ((pos & 3u) == 0u)
+        clock_tick();
+    else
+        gen_subtick();
+}
+
+void eng_render(int playing, uint32_t pos, uint32_t n, int64_t t0, int64_t per_ns)
+{
+    uint32_t i;
+    E.now = t0;
+    E.t_cur = t0;
+    gen_service();
+    for (i = 0; i < n; i++) {
+        if (i && (pos + i) % 24u == 0u)
+            gen_service();                       /* (a block may hold more than a bar: the next one made in time) */
+        subtick_at(playing, pos + i, t0 + (int64_t)i * per_ns);
+    }
+}
 
 int64_t eng_pump(int64_t now)
 {
@@ -462,23 +525,28 @@ int64_t eng_pump(int64_t now)
         E.next_sub = now + MS;
     }
     while (E.next_sub <= now + ENG_LOOKAHEAD_NS) {
+        int start = 0;
         E.t_cur = E.next_sub;
         if ((E.sub_n & 3u) == 0u) {
             if (E.start_pending) {
                 E.start_pending = 0;
+                start = 1;
                 if (E.c.clock == CLK_INT_OUT) {
                     E.t_cur = E.next_sub - MS;   /* Start just before the tick it starts on */
                     send1(0xFA);
                     E.t_cur = E.next_sub;
                 }
-                seq_start(1);
             }
             if (E.c.clock == CLK_INT_OUT)
                 send1(0xF8);
-            clock_tick();
-        } else if (E.running) {
-            gen_subtick();
         }
+        /* the internal clock is the song's transport: playing from the top on Start, then subtick by subtick */
+        if (start)
+            subtick_at(1, 0u, E.next_sub);
+        else if (E.running && E.song_next != SONG_NONE)
+            subtick_at(1, E.song_next, E.next_sub);
+        else
+            subtick_at(E.running, E.sub_n, E.next_sub);
         E.sub_n++;
         E.next_sub += sub_ns();
     }
@@ -626,6 +694,89 @@ int eng_tanz_offset(int slot, int base, int value)
 {
     (void)slot;
     return clamp127(value) - base;
+}
+
+/* 0.5.0: the rest of the Tanzbär's sound per style and key, moved here from the app (Store.applyTanzSound), so a
+ * plugin shell gets it too. The data is the generated tanz_data.h. */
+static int style_now(void) { return eng_get(F_STYLE); }
+int eng_bell_melodic(int bell_mode)
+{
+    int st = style_now();
+    return bell_mode == BELL_LINE || (bell_mode == BELL_STYLE && st >= 0 && st < GEN_NSTYLES && gen_style_bell(st));
+}
+int eng_tanz_slot(int cc)
+{
+    int i;
+    for (i = 0; i < TANZ_NOFS; i++)
+        if (TANZ_CCS[i] == cc)
+            return i;
+    return -1;
+}
+int eng_tanz_base(int slot, int melodic)
+{
+    int st = style_now();
+    if (slot < 0 || slot >= TANZ_NOFS || st < 0 || st >= GEN_NSTYLES)
+        return -1;
+    if (melodic && TANZ_CCS[slot] == 85)         /* the cowbell's short decay while it plays a line */
+        return TANZ_BELL_DECAY[st];
+    return TANZ_STYLE[st][slot];
+}
+/* the pitch nearest the key that the drum can play: the root, else its fifth, fourth, then the key's third */
+static int key_tune(const int8_t tab[12])
+{
+    int i, r = eng_get(F_ROOT), off[4] = {0, 7, 5, 4};
+    off[3] = eng_get(F_MINOR) ? 3 : 4;
+    for (i = 0; i < 4; i++)
+        if (tab[(r + off[i]) % 12] >= 0)
+            return tab[(r + off[i]) % 12];
+    return -1;
+}
+int eng_tanz_sound(int kick_key, int melodic, uint8_t *cc, uint8_t *val)
+{
+    int i, n = 0, st = style_now(), f;
+#define TANZ_PUT(c, v) do { int v_ = (v); if (v_ >= 0) { cc[n] = (uint8_t)(c); val[n] = (uint8_t)v_; n++; } } while (0)
+    if (st < 0 || st >= GEN_NSTYLES)
+        return 0;
+    for (i = 0; i < TANZ_NOFS; i++)              /* the style's values with the player's offsets */
+        TANZ_PUT(TANZ_CCS[i], eng_tanz_mix(i, eng_tanz_base(i, melodic)));
+    TANZ_PUT(TANZ_KICK_CC, kick_key ? key_tune(TANZ_KICK) : TANZ_KICK_STYLE[st]);
+    f = TANZ_FOLLOW[st];
+    if (f & 1)
+        TANZ_PUT(TANZ_TOM_CC, key_tune(TANZ_TOM));
+    if (f & 2)
+        TANZ_PUT(TANZ_CONGA_CC, key_tune(TANZ_CONGA));
+    if (f & 4)
+        TANZ_PUT(TANZ_CLAVE_CC, key_tune(TANZ_CLAVE));
+    if (!melodic)                                /* (a line tunes it hit by hit) */
+        TANZ_PUT(TANZ_BELL_CC, key_tune(TANZ_BELL));
+#undef TANZ_PUT
+    return n;
+}
+int eng_style_tempo(int on)
+{
+    int st = style_now(), lo, hi, t = E.c.tempo;
+    if (!on || E.c.clock == CLK_EXT || st < 0 || st >= GEN_NSTYLES)
+        return t;
+    gen_style_bpm(st, &lo, &hi);
+    return t < lo ? lo : t > hi ? hi : t;
+}
+int eng_jv_hint(int style, int out[4])
+{
+    int i;
+    for (i = 0; i < 4; i++)
+        out[i] = style >= 0 && style < GEN_NSTYLES ? JV_HINT[style][i] : 0;
+    return style >= 0 && style < GEN_NSTYLES;
+}
+const char *eng_jv_part(int part) { return part >= 0 && part <= 16 ? JV_PART[part] : ""; }
+
+/* the Tanzbär profile's cowbell table, as the line needs it (255: a pitch it cannot play) */
+static void bell_profile(void)
+{
+    uint8_t t[12];
+    int i;
+    for (i = 0; i < 12; i++)
+        t[i] = TANZ_BELL[i] < 0 ? 255u : (uint8_t)TANZ_BELL[i];
+    eng_bell_table(TANZ_BELL_CC, t);
 }
 void eng_set(int id, int v, int64_t now)
 {
@@ -806,6 +957,8 @@ void eng_init(eng_sink_t sink, void *ud)
     E.rnd = 2463534242u;
     ecfg_defaults();
     gen_defaults(&E.g), cv_pads();
+    bell_profile();
+    E.song_next = SONG_NONE;
     gen_init(&E.g, gen_out);
 }
 
@@ -815,6 +968,7 @@ void eng_defaults(int64_t now)
     eng_panic(now);
     ecfg_defaults();
     gen_defaults(&E.g), cv_pads();
+    bell_profile();                              /* (0.5.0: kept after the defaults too) */
 }
 
 void eng_status(int32_t *out, int64_t now)

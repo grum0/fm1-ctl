@@ -1,8 +1,8 @@
 #!/bin/sh
 # Two cheap checks that catch what the Android build cannot: that Kotlin and C agree on the native functions (or the
 # app dies at start with UnsatisfiedLinkError), that Fields.kt is what gen_fields.c makes of the headers now, and that
-# app/style_grids.h is what make_grids.py makes of the style grids, TanzData.kt what make_tanz.py makes of the
-# Tanzbär profile, and JvData.kt and jv1010_user01.syx what make_jv.py makes of the JV-1010 tables.
+# app/style_grids.h is what make_grids.py makes of the style grids, tanz_data.h what make_tanz.py makes of the
+# Tanzbär profile, and JvData.kt, jv_data.h and jv1010_user01.syx what make_jv.py makes of the JV-1010 tables.
 cd "$(dirname "$0")/.." || exit 1
 kt=app/src/main/java/com/grum0/gen1/Native.kt
 c=app/src/main/cpp/gen1_jni.c

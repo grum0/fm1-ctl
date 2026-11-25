@@ -1640,6 +1640,144 @@ static void test_b2_045(void)
     printf("0.4.5: batch [B] part 2 and Latin freestyle ok\n");
 }
 
+/* 0.5.0: the portable core. (1) The internal clock and host-driven eng_render give the same messages at the same
+ * song times (render in uneven blocks); (2) a locate from stopped, mid-sixteenth and while playing plays what the
+ * song plays there; (3) the Tanzbär sound, key fallback and style tempo moved from Store.kt give what it gave */
+static void core_setup(int style)
+{
+    int p;
+    fresh();
+    eng_set(F_TEMPO, 120, vnow);
+    eng_set(F_STYLE, style, vnow);
+    for (p = 0; p < GEN_NPARTS; p++) {
+        eng_set(F_PART(p, PF_ON), 1, vnow);
+        eng_set(F_PART(p, PF_CHAN), p + 1, vnow);
+    }
+}
+static int core_notes_only;
+static int core_ons(int64_t from, int64_t to, msg_t *out, int max)   /* note-ons, CCs and bends in [from, to) */
+{
+    int i, n = 0;
+    for (i = 0; i < nlog && n < max; i++) {
+        int st = log_[i].m[0] & 0xF0;
+        if (log_[i].n == 3 && log_[i].t >= from && log_[i].t < to &&
+            ((st == 0x90 && log_[i].m[2]) || (!core_notes_only && (st == 0xB0 || st == 0xE0))))
+            out[n++] = log_[i];
+    }
+    return n;
+}
+static int core_same(const msg_t *a, int na, int64_t ta, const msg_t *b, int nb, int64_t tb)
+{
+    int i, bad = na != nb;
+    for (i = 0; i < na && i < nb; i++)
+        bad += a[i].t - ta != b[i].t - tb || memcmp(a[i].m, b[i].m, 3) != 0;
+    return bad;
+}
+static void test_core_050(void)
+{
+    static const int ST[3] = {GS_DILLA, GS_FRENCH, GS_FREESTYLE};
+    static msg_t pa[20000], ra[20000], rb[20000];
+    const int64_t per = 625000000LL / 120;
+    const uint32_t N = 96u * 4u * 12u;           /* twelve bars */
+    int k, i, n1, n2, start, bad = 0;
+    for (k = 0; k < 3; k++) {
+        int64_t t_start = -1, t0 = 5000 * MS;
+        uint32_t pos;
+        /* (1) the clock thread */
+        core_setup(ST[k]);
+        eng_set(F_CLOCK, CLK_INT_OUT, vnow);
+        eng_play(1, vnow);
+        run_internal(25000);
+        for (i = 0; i < nlog; i++)
+            if (log_[i].n == 1 && log_[i].m[0] == 0xFA)
+                t_start = log_[i].t + MS;
+        CHECK(t_start > 0, "no Start");
+        n1 = core_ons(t_start, t_start + (int64_t)N * per, pa, 20000);
+        /* ... and the host, in uneven blocks */
+        core_setup(ST[k]);
+        eng_set(F_CLOCK, CLK_INT, vnow);
+        for (pos = 0; pos < N; ) {
+            uint32_t blk = 1u + (pos * 7u + 13u) % 61u;
+            if (pos + blk > N)
+                blk = N - pos;
+            eng_render(1, pos, blk, t0 + (int64_t)pos * per, per);
+            pos += blk;
+        }
+        for (i = 0; i < nlog; i++)
+            bad += log_[i].n == 1 && (log_[i].m[0] == 0xF8 || log_[i].m[0] == 0xFA);
+        n2 = core_ons(t0, t0 + (int64_t)N * per, ra, 20000);
+        CHECK(n1 > 100 && !core_same(pa, n1, t_start, ra, n2, t0), "style %d: clock %d messages, host %d differ",
+              ST[k], n1, n2);
+        /* (2) a straight render, then from stopped at bar 6 beat 2, from 19 subticks before it (lands on it),
+         * and back to it while playing: the song's own notes from there (a locate also centres bends and resets
+         * controllers on the parts' channels, as a Song Position Pointer does: notes only here) */
+        core_notes_only = 1;
+        {
+            uint32_t P = 96u * 4u * 5u + 96u;
+            core_setup(ST[k]);
+            eng_set(F_CLOCK, CLK_INT, vnow);
+            eng_render(1, 0, N, t0, per);
+            n1 = core_ons(t0 + (int64_t)P * per, t0 + (int64_t)N * per, ra, 20000);
+            for (start = 0; start < 3; start++) {
+                uint32_t S = start == 1 ? P - 19u : P;   /* mid-sixteenth: lands on P */
+                core_setup(ST[k]);
+                eng_set(F_CLOCK, CLK_INT, vnow);
+                if (start == 2) {                        /* (while playing: bars 1-8, then back to P) */
+                    eng_render(1, 0, 96u * 4u * 8u, t0 - (int64_t)(96u * 4u * 8u) * per, per);
+                    nlog = 0;
+                }
+                eng_render(1, S, N - S, t0 + (int64_t)S * per, per);
+                n2 = core_ons(t0 + (int64_t)P * per, t0 + (int64_t)N * per, rb, 20000);
+                CHECK(n1 > 50 && !core_same(ra, n1, t0, rb, n2, t0), "style %d locate %d: %d vs %d messages differ",
+                      ST[k], start, n1, n2);
+                if (start == 1)                          /* nothing before the sixteenth it lands on */
+                    CHECK(core_ons(0, t0 + (int64_t)P * per, rb, 20000) == 0, "notes before the located sixteenth");
+            }
+        }
+        core_notes_only = 0;
+    }
+    CHECK(!bad, "host-driven render sent MIDI clock");
+    /* (3) the Tanzbär sound (Store.applyTanzSound until 0.4.5): the style's 16 values with the offsets, the kick,
+     * the voices the style tunes, then the cowbell in the key unless it plays a line */
+    {
+        uint8_t cc[ENG_TANZ_MAX], v[ENG_TANZ_MAX];
+        int n;
+        fresh();
+        eng_set(F_STYLE, GS_DILLA, vnow);
+        eng_set(F_ROOT, 0, vnow);
+        eng_set(F_MINOR, 1, vnow);
+        n = eng_tanz_sound(0, 0, cc, v);
+        CHECK(n == 18 && cc[0] == 64 && v[0] == 62 && cc[15] == 90 && v[15] == 89 && cc[16] == 3 &&
+              v[16] == TANZ_KICK_STYLE[GS_DILLA] && cc[17] == 84 && v[17] == 42, "Dilla in C minor: %d CCs", n);
+        n = eng_tanz_sound(1, 0, cc, v);                 /* Kick tune: Key; C is out of its range: the fifth, G */
+        CHECK(cc[16] == 3 && v[16] == 38, "kick in C: %d", v[16]);
+        eng_set(F_ROOT, 5, vnow);                        /* F: the kick plays F, the cowbell can't (its fifth, C) */
+        n = eng_tanz_sound(1, 0, cc, v);
+        CHECK(v[16] == 21 && cc[17] == 84 && v[17] == 42, "F: kick %d, bell %d", v[16], v[17]);
+        eng_set(F_ROOT, 1, vnow);                        /* C#: the kick's fifth, G# */
+        eng_tanz_sound(1, 0, cc, v);
+        CHECK(v[16] == 47, "kick in C#: %d", v[16]);
+        eng_set(F_TANZ_OFS0 + 0, 21, vnow);              /* an offset on the kick decay; the cowbell decay in a line */
+        n = eng_tanz_sound(0, 1, cc, v);
+        CHECK(v[0] == 83 && v[10] == TANZ_BELL_DECAY[GS_DILLA] && n == 17 && cc[16] == 3, "offset %d, line %d, n %d",
+              v[0], v[10], n);
+        eng_set(F_STYLE, GS_BAILE, vnow);                /* tom and conga follow the key (Baile funk) */
+        eng_set(F_ROOT, 0, vnow);
+        n = eng_tanz_sound(0, 0, cc, v);
+        CHECK(n == 20 && cc[17] == 19 && v[17] == 33 && cc[18] == 79 && v[18] == 56, "Baile: %d", n);
+        CHECK(eng_tanz_slot(85) == 10 && eng_tanz_slot(3) == -1 && eng_tanz_base(10, 1) == TANZ_BELL_DECAY[GS_BAILE],
+              "slots");
+        CHECK(eng_bell_melodic(BELL_LINE) && !eng_bell_melodic(BELL_FIXED) && !eng_bell_melodic(BELL_STYLE), "bell");
+        eng_set(F_STYLE, GS_BELLFUNK, vnow);
+        CHECK(eng_bell_melodic(BELL_STYLE), "a bell style's line");
+        eng_set(F_STYLE, GS_MEMPHIS, vnow);              /* 130-150 */
+        CHECK(eng_style_tempo(1) == 130 && eng_style_tempo(0) == 120, "tempo %d", eng_style_tempo(1));
+        eng_set(F_CLOCK, CLK_EXT, vnow);
+        CHECK(eng_style_tempo(1) == 120, "following: tempo moved");
+    }
+    printf("0.5.0: portable core (clock = host render, locate, Tanzbär sound, style tempo) ok\n");
+}
+
 int main(void)
 {
     test_ranges();
@@ -1669,6 +1807,7 @@ int main(void)
     test_a2_043();
     test_b1_044();
     test_b2_045();
+    test_core_050();
     test_panic();
     printf(fails ? "FAILED (%d)\n" : "ok\n", fails);
     free(log_);
