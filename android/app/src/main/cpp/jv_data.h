@@ -6,7 +6,7 @@
 #include <stdint.h>
 #include "gen.h"
 
-#define JV_NSTYLES 86
+#define JV_NSTYLES 89
 _Static_assert(JV_NSTYLES == GEN_NSTYLES, "jv_data.h: run make_jv.py");
 /* the performance's part names by part number (1-16; 10, the rhythm part, is off) */
 static const char *const JV_PART[17] = {"", "Jazz Rhodes", "Vinyl Rhodes", "Grungy Wurly", "Clav1", "WahWah Clav1", "B3 Sermon", "House Organ", "Moody Tron", "Space Tron", "", "Tron Choir", "Old Lead", "MKS-80 Brass", "OrchestraHit", "Harp", "House Chord"};
@@ -98,4 +98,7 @@ static const uint8_t JV_HINT[JV_NSTYLES][4] = {
     {14, 16, 0, 0}, /* GHETTOTECH */
     {16, 15, 0, 0}, /* CUMBIA */
     {9, 14, 0, 0}, /* FREESTYLE */
+    {4, 3, 0, 0}, /* PUNKFUNK */
+    {16, 9, 0, 0}, /* ACIDTECH */
+    {4, 8, 15, 13}, /* DISCO */
 };

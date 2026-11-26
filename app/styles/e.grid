@@ -1,0 +1,24 @@
+# Batch [E] (0.5.2): from gen1-style-batch-e.md. Punk-funk's and Acid techno's bass riffs are held for 8 bars
+# (SFX_HOLD in gen.c); Classic disco opens each phrase with the harp run (SFX_HARP).
+
+style PUNKFUNK
+kick     X... ..x. X... .x..
+snare    .... X... .... X..o
+chat     x... x... x... x...
+ohat     ..x. ..x. ..x. ..x.
+cowbell  x.xx .x.x x.xx .x.x
+conga    .... ..x. .x.. ..x.
+
+style ACIDTECH
+kick     X... X... X... X...
+clap     .... X... .... X...
+rim      .... ...x .... .x..
+chat     xx.x xx.x xx.x xx.x
+ohat     ..X. ..X. ..X. ..X.
+
+style DISCO
+kick     X... X... X... X...
+snare    .... X... .... X...
+chat     x..x x..x x..x x..x
+ohat     ..x. ..x. ..x. ..x.
+conga    .x.. ...x .x.. ..x.

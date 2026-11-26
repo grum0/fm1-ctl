@@ -117,6 +117,14 @@ been tried). Version 0.2.0 adds:
 - **The harp run** in LA beats: on the first beat of each phrase the arp part plays a quick 32nd run up two octaves
   of the chord.
 
+**0.5.2** (batch [E]):
+
+- **Three styles** (89 in all): Punk-funk (a stiff kit under cowbell and conga, the bass riff held for 8 bars,
+  thin scratchy stabs), Acid techno (a hard four on the floor and a 303 line held for 8 bars so your hands on the
+  MB-33 make the changes; the cutoff drifts over 4 bars on a bass synth with a filter CC, the Monologue or the Hades)
+  and Classic disco (a swung four on the floor, off-beat open hats, chicken-scratch on i9–iv9, the harp run as the
+  strings going up at each phrase).
+
 **0.5.1** (sound locks, Cumbia's bass):
 
 - **Sound locks** (Play → Groove, off by default): with the drums on the Tanzbär, single hits get their own sound,

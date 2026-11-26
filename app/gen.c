@@ -83,6 +83,8 @@ static const prog_t PROG_MIN[] = {
     /* 29 */ {SC_AEO, 4, {{0, Q_MIN, 2}, {8, Q_MAJ, 2}, {10, Q_MAJ, 2}, {0, Q_MIN, 2}}},  /* i-VI-VII-i (Reggaeton) */
     /* 30 */ {SC_AEO, 4, {{0, Q_MIN7, 2}, {8, Q_MAJ7, 2}, {3, Q_MAJ7, 2}, {10, Q_7, 2}}}, /* i-VI-III-VII */
     /* 31 */ {SC_AEO, 3, {{0, Q_MIN, 4}, {5, Q_MIN, 2}, {7, Q_7, 2}}},     /* i-iv-V7, the harmonic minor's (Cumbia) */
+    /* 32 */ {SC_PHR, 2, {{0, Q_MIN7, 4}, {1, Q_MAJ7, 4}}},                  /* i7 rubbing on bII maj7, 2 bars each (Punk-funk) */
+    /* 33 */ {SC_DOR, 2, {{0, Q_MIN9, 4}, {5, Q_MIN9, 4}}},                  /* i9-iv9, 2 bars each (Classic disco) */
 };
 /* "major": where a style has no use for a bright key, its dominant side (mixolydian vamps) */
 static const prog_t PROG_MAJ[] = {
@@ -569,6 +571,22 @@ static const style_t STYLE[GEN_NSTYLES] = {
     [GS_FREESTYLE] = {"Latin freestyle", GRID_FREESTYLE,
         0, 0, 0, 0, 0, 0, FILL_ELECTRO, {{4, 10, 4, 17}, {0, 0, 0, 0}}, V_WIDE, "0700070007000700", 1, BM_OCTAVE, LM_SOLO,
         "9000007000900070", 76, 0, 1, CP_FOLLOW, 0},
+    /* 0.5.2, batch [E]: drums from app/styles/e.grid */
+    /* Punk-funk (ESG, Liquid Liquid): a stiff kit under cowbell and conga, the bass ostinato held 8 bars (SFX_HOLD),
+     * thin scratchy stabs on i7 against bII, the lead almost silent */
+    [GS_PUNKFUNK] = {"Punk-funk", GRID_PUNKFUNK,
+        0, 0, 0, 0, 1, 0, FILL_DROP, {{32, 32, 32, 32}, {0, 0, 0, 0}}, V_OCT, "0707000707000700", 1, BM_OCTAVE, LM_CALL,
+        "0000000000000070", 76, 0, 2, CP_FREE, 0},
+    /* Acid techno (Liberator, Hardfloor): a hard four on the floor, the 303 line held 8 bars for the hands on the
+     * MB-33, its cutoff drifting over 4 bars on a synth with a filter CC (SFX_WOBBLE's acid rate) */
+    [GS_ACIDTECH] = {"Acid techno", GRID_ACIDTECH,
+        0, 0, 0, 0, 0, 0, FILL_DROP, {{28, 28, 28, 28}, {0, 0, 0, 0}}, V_OCT, "9000000000000000", 0, BM_ACID, LM_CALL,
+        "0000000000000070", 72, 0, 2, CP_FREE, 0},
+    /* Classic disco (Chic): a swung live four on the floor, off-beat open hats, chicken-scratch on i9-iv9, the harp
+     * run as the strings going up, a free bass with octave jumps */
+    [GS_DISCO] = {"Classic disco", GRID_DISCO,
+        2, 0, 1, 0, 1, 0, FILL_DROP, {{33, 33, 33, 33}, {0, 0, 0, 0}}, V_TIGHT, "0707070707070707", 1, BM_LIVE, LM_CALL,
+        "0000000000000070", 76, 0, 1, CP_FREE, 0},
 };
 
 /* the styles' families, the tempos they sit at (as set on the MPC: half-time styles are counted fast), whether they
@@ -585,6 +603,7 @@ static const style_t STYLE[GEN_NSTYLES] = {
 #define SFX_WARBLE 512u                  /* the chords' and lead's pitch drifts like worn tape (Boards of Canada) */
 #define SFX_DRIFT 1024u                  /* the drums on the Grids map, its X/Y drifting bar by bar (Autechre) */
 #define SFX_TRIP 2048u                   /* the bar's last three kicks as 8th-note triplets (Jersey club) */
+#define SFX_HOLD 4096u                   /* the bass riff held unchanged for 8 bars, Mutate only at 8-bar lines (0.5.2) */
 static const struct { uint8_t cat, lo, hi, tanz; uint16_t fx; const char *ref; } STYLE_META[GEN_NSTYLES] = {
     [GS_DILLA] = {CAT_HIP, 80, 95, 1, 0, "J Dilla, Slum Village"},
     [GS_SOULQ] = {CAT_HIP, 80, 95, 0, 0, "D'Angelo, Questlove"},
@@ -672,6 +691,9 @@ static const struct { uint8_t cat, lo, hi, tanz; uint16_t fx; const char *ref; }
     [GS_GHETTOTECH] = {CAT_ELC, 145, 160, 1, 0, "DJ Assault, DJ Godfather"},
     [GS_CUMBIA] = {CAT_WLD, 85, 110, 1, 0, "Colombia, digital cumbia"},
     [GS_FREESTYLE] = {CAT_ELC, 112, 128, 1, 0, "Shannon, Lisa Lisa, Stevie B"},
+    [GS_PUNKFUNK] = {CAT_FNK, 105, 125, 1, SFX_HOLD, "ESG, Liquid Liquid, A Certain Ratio"},
+    [GS_ACIDTECH] = {CAT_HSE, 135, 150, 1, SFX_HOLD | SFX_WOBBLE, "Liberator, Hardfloor"},
+    [GS_DISCO] = {CAT_RNB, 110, 125, 1, SFX_HARP, "Chic, Philadelphia"},
 };
 static const char *const CAT_NAME[GEN_NCATS] = {"Hip-hop", "Funk", "R&B and pop", "Electro", "Breaks and beats",
                                                 "House and techno", "UK bass", "IDM", "Caribbean and world"};
@@ -1628,7 +1650,13 @@ static void build_bass(void)
     bstep_t rf[16], alt[16];
     mnote_t m[16];
     rng_t r;
-    r.s = gh(pseed(GP_BASS, 1), (uint32_t)pb + epoch() * 64u);
+    uint32_t ep = epoch();
+    if (STYLE_META[g.c->style % GEN_NSTYLES].fx & SFX_HOLD) {   /* (0.5.2) one riff for each 8 bars, its own Mutate */
+        pb = 0;
+        last = 0;
+        ep = g.c->mutate ? bb / 8u / (uint32_t)(9 - gclamp(g.c->mutate, 1, 8)) : 0u;
+    }
+    r.s = gh(pseed(GP_BASS, 1), (uint32_t)pb + ep * 64u);
     if (mode == BM_TURING) {                             /* a register of scale steps, turned as the phrase goes */
         for (s = 0; s < 16; s++) {
             uint32_t h = gh(pseed(GP_BASS, 0x600u), (uint32_t)((s + pb * (1 + g.c->mutate / 2)) & 15));
@@ -2418,9 +2446,12 @@ static void wobble(void)
         if (!(e[i].kind == EV_CC && e[i].a == cc && e[i].ch == ch))
             e[n++] = e[i];
     wb->n[GP_BASS] = (uint16_t)n;
-    if (g.c->style == GS_APHEX) {                       /* the 303's cutoff drifting over 8 bars, 40..110 */
+    if (g.c->style == GS_APHEX || g.c->style == GS_ACIDTECH) {   /* the 303's cutoff drifting over 8 bars (Acid
+                                                                    * techno: 4), 40..110 */
+        int nb = g.c->style == GS_ACIDTECH ? 4 : 8;
         for (t = 0; t < (int)GEN_BAR; t += 48) {
-            int a = (int)(bb % 8u) * (int)GEN_BAR + t, x = a * 254 / (8 * (int)GEN_BAR), v = x <= 127 ? x : 254 - x;
+            int a = (int)(bb % (uint32_t)nb) * (int)GEN_BAR + t, x = a * 254 / (nb * (int)GEN_BAR);
+            int v = x <= 127 ? x : 254 - x;
             gput_ev(GP_BASS, t, EV_CC, (uint8_t)cc, (uint8_t)(40 + v * 70 / 127), 1, (uint8_t)ch);
         }
         return;

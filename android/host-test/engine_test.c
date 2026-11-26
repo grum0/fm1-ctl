@@ -1861,6 +1861,90 @@ static void test_locks_051(void)
     printf("0.5.1: sound locks, Cumbia bass ok\n");
 }
 
+/* 0.5.2: batch [E]. The three play; Acid techno's 303 line is the same in each bar of an 8-bar block and its cutoff
+ * drifts over 4 bars (bar 0 and 4 alike, bar 2 apart); Punk-funk's bass repeats every 4 bars within its 8 (two
+ * chords of 2 bars); Classic disco's harp run opens the phrase (8 rising 32nds) and only there */
+static uint32_t e_bar_sig(int ch, int64_t t0, int b, int *cut)   /* the bass notes of bar b; cut: its first CC */
+{
+    int i;
+    uint32_t h = 2166136261u;
+    int64_t bar = 2000 * MS;
+    *cut = -1;
+    for (i = 0; i < nlog; i++) {
+        const msg_t *m = &log_[i];
+        int64_t at = m->t - t0 + 5 * MS;
+        if (m->n != 3 || (m->m[0] & 15) != ch || at < b * bar || at >= (b + 1) * bar)
+            continue;
+        if ((m->m[0] & 0xF0) == 0xB0 && *cut < 0)
+            *cut = m->m[2];
+        if ((m->m[0] & 0xF0) == 0x90 && m->m[2])
+            h = (h ^ (uint32_t)((at - b * bar) * 32 / bar * 131 + m->m[1] * 7 + m->m[2])) * 16777619u;   /* (on 32nds) */
+    }
+    return h;
+}
+static void test_e_052(void)
+{
+    static const int ST[3] = {GS_PUNKFUNK, GS_ACIDTECH, GS_DISCO};
+    uint32_t sig[16];
+    int cut[16], k, i, b, bad = 0;
+    int64_t t0;
+    for (k = 0; k < 3; k++) {
+        int dr = 0, bs = 0;
+        a2_run(ST[k], 32);                               /* sixteen bars */
+        t0 = -1;
+        for (i = 0; i < nlog; i++) {
+            if (log_[i].n == 3 && log_[i].m[0] == 0x99 && log_[i].m[2]) {
+                dr++;
+                if (t0 < 0)
+                    t0 = log_[i].t;
+            }
+            bs += log_[i].n == 3 && log_[i].m[0] == 0x93 && log_[i].m[2];
+        }
+        CHECK(dr > 100 && bs > 16, "style %d: %d drum and %d bass notes", ST[k], dr, bs);
+        for (b = 0; b < 16; b++)
+            sig[b] = e_bar_sig(3, t0, b, &cut[b]);
+        if (ST[k] == GS_ACIDTECH) {
+            for (b = 1; b < 16; b++)
+                bad += b % 8 && sig[b] != sig[b - 1];
+            CHECK(!bad, "Acid techno: the 303 line changed %d times inside its 8 bars", bad);
+            CHECK(cut[0] >= 0 && cut[0] == cut[4] && cut[2] > cut[0] + 30, "Acid techno drift: %d %d %d %d", cut[0],
+                  cut[1], cut[2], cut[4]);
+        }
+        if (ST[k] == GS_PUNKFUNK) {
+            for (b = 0; b < 4; b++)
+                bad += sig[b] != sig[b + 4] || sig[b + 8] != sig[b + 12];
+            CHECK(!bad, "Punk-funk: the ostinato changed inside its 8 bars %d times", bad);
+        }
+    }
+    {                                                    /* the harp run in Classic disco, as in test_brk_036 */
+        int run[8] = {0}, last[8] = {-1, -1, -1, -1, -1, -1, -1, -1}, ach;
+        int64_t bar = 2000 * MS;
+        brk_run(GS_DISCO);
+        ach = E.g.part[GP_ARP].chan;
+        t0 = -1;
+        for (i = 0; i < nlog; i++)
+            if (log_[i].n == 3 && (log_[i].m[0] & 0xF0) == 0x90 && log_[i].m[2] && t0 < 0)
+                t0 = log_[i].t;
+        bad = 0;
+        for (i = 0; i < nlog; i++) {
+            const msg_t *m = &log_[i];
+            int64_t at;
+            if (m->n != 3 || (m->m[0] & 0xF0) != 0x90 || !m->m[2] || (m->m[0] & 15) != ach)
+                continue;
+            at = m->t - t0 + 5 * MS;
+            b = (int)(at / bar);
+            if (b >= 8 || at % bar >= bar / 4)
+                continue;
+            bad += b % 4 == 0 && last[b] >= 0 && m->m[1] <= last[b];
+            last[b] = m->m[1];
+            run[b]++;
+        }
+        CHECK(run[0] == 8 && run[4] == 8 && run[1] <= 4 && !bad, "disco harp runs: %d %d %d, %d not rising", run[0],
+              run[1], run[4], bad);
+    }
+    printf("0.5.2: batch [E] ok\n");
+}
+
 int main(void)
 {
     test_ranges();
@@ -1892,6 +1976,7 @@ int main(void)
     test_b2_045();
     test_core_050();
     test_locks_051();
+    test_e_052();
     test_panic();
     printf(fails ? "FAILED (%d)\n" : "ok\n", fails);
     free(log_);

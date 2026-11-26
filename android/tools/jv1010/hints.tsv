@@ -87,3 +87,6 @@ GS_TRIBAL	16	13	-	-	# Tribal guarachero
 GS_GHETTOTECH	14	16	-	-	# Detroit ghettotech
 GS_CUMBIA	16	15	-	-	# Cumbia
 GS_FREESTYLE	9	14	-	-	# Latin freestyle
+GS_PUNKFUNK	4	3	-	-	# Punk-funk
+GS_ACIDTECH	16	9	-	-	# Acid techno
+GS_DISCO	4	8	15	13	# Classic disco
