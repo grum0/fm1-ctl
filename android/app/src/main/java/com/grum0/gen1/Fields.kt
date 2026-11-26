@@ -50,7 +50,8 @@ object F {
     const val POCKET = 132
     const val TANZ_OFS0 = 133
     const val TANZ_NOFS = 16
-    const val COUNT = 149
+    const val LOCKS = 149
+    const val COUNT = 150
 
     const val PF_ON = 0
     const val PF_CHAN = 1

@@ -1778,6 +1778,89 @@ static void test_core_050(void)
     printf("0.5.0: portable core (clock = host render, locate, Tanzbär sound, style tempo) ok\n");
 }
 
+/* 0.5.1: sound locks and Cumbia's bass. Locks off: no lock CCs (and the goldens are unchanged). On: Memphis's kick
+ * decay goes up before the bar's last kick and back after; Dilla's snare tone moves only before soft snares; French
+ * touch's open hat is choked only in fill bars; nothing in a style without locks or with the drums off the Tanzbär.
+ * Cumbia: the bass plays the root on 1, a pickup on the "and" of 2 and the fifth on 3 */
+static int lk_run(int style, int locks, int dev, int fills)
+{
+    int i, n = 0;
+    fresh();
+    eng_set(F_TEMPO, 120, vnow);
+    eng_set(F_STYLE, style, vnow);
+    eng_set(F_FILL_EVERY, fills ? 4 : 1, vnow);          /* (fills every 2 bars, or none) */
+    eng_set(F_CLOCK, CLK_INT, vnow);
+    eng_set(F_PART(GP_DRUMS, PF_ON), 1, vnow);
+    eng_set(F_PART(GP_DRUMS, PF_CHAN), 9, vnow);
+    eng_set(F_PART(GP_DRUMS, PF_DEV), dev, vnow);
+    eng_set(F_LOCKS, locks, vnow);
+    eng_play(1, vnow);
+    run_internal(16000);                                 /* eight bars */
+    eng_play(0, vnow);
+    for (i = 0; i < nlog; i++)
+        n += log_[i].n == 3 && log_[i].m[0] == 0xB9 && (log_[i].m[1] == 64 || log_[i].m[1] == 11 ||
+                                                       log_[i].m[1] == 90 || log_[i].m[1] == 75);
+    return n;
+}
+static void test_locks_051(void)
+{
+    int i, j, up = 0, bad = 0, base = TANZ_STYLE[GS_MEMPHIS][eng_tanz_slot(64)];
+    CHECK(lk_run(GS_MEMPHIS, 0, DV_TANZBAR, 0) == 0, "locks off: lock CCs sent");
+    CHECK(lk_run(GS_KRAFTWERK, 1, DV_TANZBAR, 0) == 0, "a style without locks sent lock CCs");
+    CHECK(lk_run(GS_MEMPHIS, 1, DV_GENERIC, 0) == 0, "drums off the Tanzbär: lock CCs sent");
+    CHECK(lk_run(GS_MEMPHIS, 1, DV_TANZBAR, 0) > 0, "Memphis: no kick locks");
+    for (i = 0; i < nlog; i++) {                         /* each raised decay comes just before a kick, then back */
+        const msg_t *m = &log_[i];
+        if (m->n != 3 || m->m[0] != 0xB9 || m->m[1] != 64)
+            continue;
+        if (m->m[2] == base + 30) {
+            int hit = 0, back = 0;
+            up++;
+            for (j = i + 1; j < nlog; j++) {
+                if (!hit && log_[j].n == 3 && log_[j].m[0] == 0x99 && log_[j].m[1] == 36 && log_[j].m[2])
+                    hit = log_[j].t - m->t <= 70 * MS;   /* (half a sixteenth: 62 ms at 120) */
+                if (log_[j].n == 3 && log_[j].m[0] == 0xB9 && log_[j].m[1] == 64) {
+                    back = log_[j].m[2] == base;
+                    break;
+                }
+            }
+            bad += !hit || (!back && j < nlog);
+        } else {
+            bad += m->m[2] != base;
+        }
+    }
+    CHECK(up >= 6 && !bad, "Memphis kick locks: %d raised, %d wrong", up, bad);
+    lk_run(GS_DILLA, 1, DV_TANZBAR, 0);                  /* the snare tone moves only before soft snares */
+    base = TANZ_STYLE[GS_DILLA][eng_tanz_slot(11)];
+    up = bad = 0;
+    for (i = 0; i < nlog; i++) {
+        const msg_t *m = &log_[i];
+        if (m->n == 3 && m->m[0] == 0xB9 && m->m[1] == 11 && m->m[2] != base) {
+            up++;
+            for (j = i + 1; j < nlog; j++)
+                if (log_[j].n == 3 && log_[j].m[0] == 0x99 && log_[j].m[1] == 37 && log_[j].m[2]) {
+                    bad += log_[j].m[2] >= 80;
+                    break;
+                }
+        }
+    }
+    CHECK(up > 0 && !bad, "Dilla snare locks: %d, %d on loud hits", up, bad);
+    CHECK(lk_run(GS_FRENCH, 1, DV_TANZBAR, 0) == 0, "French touch: hat locks without fills");
+    CHECK(lk_run(GS_FRENCH, 1, DV_TANZBAR, 1) > 0, "French touch: no hat locks in fill bars");
+    {                                                    /* Cumbia's bass: root on 1, pickup on step 7, fifth on 3 */
+        int on[16] = {0};
+        a2_run(GS_CUMBIA, 8);
+        for (i = 0; i < nlog; i++)
+            if (log_[i].n == 3 && log_[i].m[0] == 0x93 && log_[i].m[2]) {
+                int64_t at = (log_[i].t - 1001 * MS) % (2000 * MS);
+                int st = (int)((at + 62 * MS) / (125 * MS)) & 15;
+                on[st]++;
+            }
+        CHECK(on[0] >= 4 && on[6] >= 4 && on[8] >= 4, "Cumbia bass: %d on 1, %d pickups, %d on 3", on[0], on[6], on[8]);
+    }
+    printf("0.5.1: sound locks, Cumbia bass ok\n");
+}
+
 int main(void)
 {
     test_ranges();
@@ -1808,6 +1891,7 @@ int main(void)
     test_b1_044();
     test_b2_045();
     test_core_050();
+    test_locks_051();
     test_panic();
     printf(fails ? "FAILED (%d)\n" : "ok\n", fails);
     free(log_);

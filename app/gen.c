@@ -126,7 +126,7 @@ enum { CP_FREE, CP_FOLLOW, CP_LOCK };    /* the bass and the kick */
 enum { CM_STYLE, CM_PAD, CM_STABS, NCM };
 enum { AM_UP, AM_DOWN, AM_UPDOWN, AM_RANDOM, AM_CONVERGE, AM_PLAYED, NAM };
 enum { BM_STYLE, BM_ROOT, BM_ACID, BM_BOOTSY, BM_WORRELL, BM_HERBIE, BM_QUINCY, BM_GLIDE, BM_ROBOT, BM_LAZY, BM_LIVE,
-       BM_OCTAVE, BM_WOBBLE, BM_TURING, BM_DUB, NBM };
+       BM_OCTAVE, BM_WOBBLE, BM_TURING, BM_DUB, BM_CUMBIA, NBM };
 enum { LM_STYLE, LM_HOOK, LM_CALL, LM_SOLO, LM_WHINE, LM_TURING, NLM };
 enum { KK_STYLE, KK_FOUR, KK_808, NKK };
 enum { RM_CHORD, RM_PENT, RM_SCALE, NRM };
@@ -560,10 +560,11 @@ static const style_t STYLE[GEN_NSTYLES] = {
     [GS_GHETTOTECH] = {"Detroit ghettotech", GRID_GHETTOTECH,
         0, 0, 0, 0, 0, 0, FILL_ELECTRO, {{21, 11, 21, 9}, {0, 0, 0, 0}}, V_OCT, "9000000000000000", 0, BM_ROOT, LM_HOOK,
         "9070907000000000", 72, 0, 2, CP_FOLLOW, 0},
-    /* Cumbia: the guira scrape on the closed hat, the bass on 1 and 3, accordion off-beats in i-iv-V7 */
+    /* Cumbia: the guira scrape on the closed hat, the bass on 1 and 3 (root, pickup, fifth: 0.5.1), accordion
+     * off-beats in i-iv-V7 */
     [GS_CUMBIA] = {"Cumbia", GRID_CUMBIA,
-        1, 0, 0, 0, 1, 0, FILL_LIVE, {{31, 31, 31, 31}, {0, 0, 0, 0}}, V_TIGHT, "0090009000900090", 1, BM_ROOT, LM_SOLO,
-        "9090909090909090", 76, 0, 2, CP_LOCK, 0},
+        1, 0, 0, 0, 1, 0, FILL_LIVE, {{31, 31, 31, 31}, {0, 0, 0, 0}}, V_TIGHT, "0090009000900090", 1, BM_CUMBIA, LM_SOLO,
+        "9090909090909090", 76, 0, 2, CP_FREE, 0},
     /* Latin freestyle: the syncopated kick, gated snares, zaps, brass stabs on off-16ths, a sad lead over a 16th arp */
     [GS_FREESTYLE] = {"Latin freestyle", GRID_FREESTYLE,
         0, 0, 0, 0, 0, 0, FILL_ELECTRO, {{4, 10, 4, 17}, {0, 0, 0, 0}}, V_WIDE, "0700070007000700", 1, BM_OCTAVE, LM_SOLO,
@@ -695,6 +696,8 @@ static const bass_t BASS[NBM] = {
     [BM_WOBBLE] = {"9000000090000030", 2, 10, 20, 10, 0, 10, 30, 0, 0, 2, 2, 0},
     [BM_TURING] = {"9797979797979797", 1, 0, 0, 0, 0, 0, 15, 20, 0, 1, 0, 0},
     [BM_DUB] = {"9009000000907050", 2, 5, 30, 20, 15, 10, 10, 5, 0, 1, 1, 20},   /* low, few notes, its own tune */
+    /* 0.5.1: the root on 1, an 8th-note pickup on the "and" of 2, the fifth on 3 (bass_riff forces the three) */
+    [BM_CUMBIA] = {"9000007090000000", 1, 0, 0, 0, 0, 10, 0, 20, 0, 1, 0, 15},
 };
 
 static const char *const PART_NAME[GEN_NPARTS] = {"Drums", "Chords", "Arp", "Bass", "Lead", "Kick", "Marble"};
@@ -707,7 +710,8 @@ static const char *const DM_NAME[DM_CAD0] = {"Style", "Grids", "Turing"};   /* (
 static const char *const CM_NAME[NCM] = {"Style", "Pad", "Stabs"};
 static const char *const AM_NAME[NAM] = {"Up", "Down", "Up-down", "Random", "Converge", "Played"};
 static const char *const BM_NAME[NBM] = {"Style", "Root", "Acid", "Bootsy", "Worrell", "Herbie", "Quincy", "Glide",
-                                         "Robot", "Lazy", "Live", "Octave", "Wobble", "Turing", "Dub"};
+                                         "Robot", "Lazy", "Live", "Octave", "Wobble", "Turing", "Dub",
+                                         "Cumbia"};
 static const char *const LM_NAME[NLM] = {"Style", "Hook", "Call+resp", "Solo", "Whine", "Turing"};
 static const char *const KK_NAME[NKK] = {"Style", "4 floor", "808"};
 static const uint8_t NMODES[GEN_NPARTS] = {NDM, NCM, NAM, NBM, NLM, NKK, NRM};
@@ -1603,6 +1607,8 @@ static void bass_riff(int mode, uint32_t seed, int dens, bstep_t *o)
                     : x < b->oct + b->fifth + b->color + b->pass ? (chance(&r, 50) ? BK_UP : BK_DOWN) : BK_ROOT;
         if (mode == BM_OCTAVE && (s & 3) == 2)
             o[s].kind = BK_OCT;
+        if (mode == BM_CUMBIA)                           /* the pickup steps up from the root; beat 3 is the fifth */
+            o[s].kind = s == 6 ? BK_UP : s == 8 ? BK_FIFTH : BK_ROOT;
         if (chance(&r, b->acc) || (s == 0 && mode == BM_BOOTSY))
             o[s].fl |= MF_ACC;
         if (chance(&r, b->slide))
@@ -2066,6 +2072,78 @@ static void bell_line(void)
     if (v >= 0)                                          /* the next bar's first hit */
         gput_ev(GP_DRUMS, (int)GEN_BAR - BELL_LEAD, EV_CC, g.c->bell_cc, v, 1, ch);
 }
+/* Sound locks (0.5.1), like an Elektron's parameter locks: in the styles below, single drum hits get their own
+ * sound, a CC half a sixteenth before the hit, and the style's value back before the next hit of that voice (or at the
+ * bar's end): the kick's decay longer on the bar's last kick (the 808 boom), the snare's tone looser on ghost notes,
+ * the open hat choked in fill bars, the clap's decay a little different in each bar. Bar events, a pure function of
+ * the bar; off (gen_cfg_t.locks 0) changes nothing. The CCs and the style's values come from the engine (the Tanzbär
+ * profile); a voice without a CC is left alone. */
+#define LOCK_LEAD ((int)GEN_STEP / 2)
+#define LK(v) (1u << (v))
+static const struct { uint8_t style, mask; } LOCK_STYLES[] = {
+    {GS_MEMPHIS, LK(GEN_LOCK_KICK)},
+    {GS_MIAMI, LK(GEN_LOCK_KICK) | LK(GEN_LOCK_CLAP)},
+    {GS_JERSEY, LK(GEN_LOCK_KICK) | LK(GEN_LOCK_CLAP)},
+    {GS_DILLA, LK(GEN_LOCK_SNARE)},
+    {GS_NATIVE, LK(GEN_LOCK_SNARE)},
+    {GS_BROKEN, LK(GEN_LOCK_SNARE)},
+    {GS_FRENCH, LK(GEN_LOCK_OHAT)},
+    {GS_ITALO, LK(GEN_LOCK_OHAT)},
+    {GS_JACK, LK(GEN_LOCK_CLAP)},
+    {GS_BALLROOM, LK(GEN_LOCK_CLAP)},
+};
+static const uint8_t LOCK_LANE[GEN_NLOCK] = {L_KICK, L_SNARE, L_OHH, L_CLAP};
+static int lock_mask(int style)
+{
+    int i;
+    for (i = 0; i < (int)(sizeof LOCK_STYLES / sizeof LOCK_STYLES[0]); i++)
+        if (LOCK_STYLES[i].style == style)
+            return LOCK_STYLES[i].mask;
+    return 0;
+}
+/* the voice's value on a hit (its base when the hit keeps the style's sound) */
+static int lock_val(int k, const gev_t *e, int last_kick, int clap_ofs)
+{
+    int b = g.c->lock_base[k];
+    switch (k) {
+    case GEN_LOCK_KICK: return e->pos == last_kick ? gclamp(b + 30, 0, 127) : b;
+    case GEN_LOCK_SNARE: return e->b < 80 ? gclamp(b - 25, 0, 127) : b;
+    case GEN_LOCK_OHAT: return fill_bar(bb) ? gclamp(b - 35, 0, 127) : b;
+    default: return gclamp(b + clap_ofs, 0, 127);
+    }
+}
+static void sound_locks(void)
+{
+    const gev_t *e = &wb->ev[GEV_OFF[GP_DRUMS]];
+    int n = wb->n[GP_DRUMS], mask = lock_mask(g.c->style), k, i, j;
+    int clap_ofs = (int)(gh(g.c->seed, 0xC1A9u + bb) % 25u) - 12;
+    if (!g.c->locks || !mask)
+        return;
+    for (k = 0; k < GEN_NLOCK; k++) {
+        int note = g.c->lane_note[LOCK_LANE[k]], ch = lane_ch(LOCK_LANE[k]), cc = g.c->lock_cc[k], base, last = -1;
+        if (!(mask >> k & 1) || !cc || cc > 127)
+            continue;
+        base = g.c->lock_base[k];
+        for (i = 0; i < n; i++)                          /* (events aren't in time order yet) */
+            if (e[i].kind == EV_NOTE && e[i].a == note && e[i].ch == ch && e[i].pos > last)
+                last = e[i].pos;
+        for (i = 0; i < n; i++) {
+            int v, next = (int)GEN_BAR, nv = base;
+            if (e[i].kind != EV_NOTE || e[i].a != note || e[i].ch != ch || (v = lock_val(k, &e[i], last, clap_ofs)) == base)
+                continue;
+            gput_ev(GP_DRUMS, e[i].pos > LOCK_LEAD ? e[i].pos - LOCK_LEAD : 0, EV_CC, cc, v, 1, ch);
+            for (j = 0; j < n; j++)                      /* the voice's next hit: back to the style's value before it */
+                if (e[j].kind == EV_NOTE && e[j].a == note && e[j].ch == ch && e[j].pos > e[i].pos && e[j].pos < next) {
+                    next = e[j].pos;
+                    nv = lock_val(k, &e[j], last, clap_ofs);
+                }
+            if (nv == base)
+                gput_ev(GP_DRUMS, next - LOCK_LEAD > e[i].pos ? next - LOCK_LEAD : e[i].pos + 1, EV_CC, cc, base, 1, ch);
+        }
+    }
+}
+#undef LK
+
 /* The Simmons lanes only in some bars: a grid is one bar, these designs want it rarer. bars: bit n = the bar n+1 of
  * every 4 keeps the grid's hits; answer: in the bars not kept, another pattern instead (Electro's laser answer). */
 static const struct { uint8_t style, lane, bars; const char *answer; } ZAP_RULES[] = {
@@ -2431,6 +2509,8 @@ void gen_service(void)
             wobble();
         if (p == GP_DRUMS && g.c->bell && g.c->bell_cc)
             bell_line();
+        if (p == GP_DRUMS)
+            sound_locks();
         if (p == GP_CHORD) {
             pump();
             sweep();
@@ -2586,7 +2666,7 @@ int gen_valid(const gen_cfg_t *c)
         c->sim_chan > 16u || c->bend < 1u || c->bend > 12u || c->mb_xpose < -24 || c->mb_xpose > 24 || c->mb_tune > 127u ||
         c->mb_lo < 12u || c->mb_lo > 96u || c->hat_dens > 3u || c->flam > 127u || c->fill_every > 6u ||
         c->hat_straight > 100u || c->space > 100u || c->spread > 24u || c->couple > 3u || c->voice > 3u || c->ratchet > 127u ||
-        c->bell > 1u || c->bell_cc > 127u || c->pocket > 1u)
+        c->bell > 1u || c->bell_cc > 127u || c->pocket > 1u || c->locks > 1u)
         return 0;
     for (i = 0; i < GEN_NLANES; i++)
         if (c->lane_note[i] > 127u)

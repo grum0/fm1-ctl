@@ -11,6 +11,8 @@
 enum { GP_DRUMS, GP_CHORD, GP_ARP, GP_BASS, GP_LEAD, GP_KICK, GP_RAND, GEN_NPARTS };
 enum { L_KICK, L_SNARE, L_RIM, L_CLAP, L_CHH, L_OHH, L_TOML, L_TOMH, L_CONGL, L_CONGH, L_COWB, L_CLAVE, L_CYM,
        L_SIM1, L_SIM2, GEN_NLANES };
+/* sound locks' voices (0.5.1): kick decay, snare tone, open-hat decay, clap decay */
+enum { GEN_LOCK_KICK, GEN_LOCK_SNARE, GEN_LOCK_OHAT, GEN_LOCK_CLAP, GEN_NLOCK };
 enum { DV_GENERIC, DV_MB33, DV_HADES, DV_MONOLOGUE, DV_JV1010, DV_VOLCAFM, DV_MBASE, DV_TANZBAR, GEN_NDEV };
 enum { GS_DILLA, GS_SOULQ, GS_GFUNK, GS_BOMB, GS_QUINCY, GS_JUSTIFIED, GS_MPLS, GS_NPG, GS_NJS, GS_BOOGIE, GS_PFUNK,
        GS_JAZZFUNK, GS_ELECTRO, GS_ELECTRO2, GS_WONKY, GS_BIGBEAT, GS_BRAINDANCE, GS_DETROIT, GS_808, GS_GLITCH,
@@ -80,6 +82,10 @@ typedef struct {
     uint8_t bell_cc;                     /* that CC (the Tanzbär's cowbell tune: 84); 0: none */
     uint8_t bell_tab[12];                /* its value for each pitch class, from C; above 127: the drum can't play it */
     uint8_t pocket;                      /* 1: Cut-A-Dor's pocket on the styles' drums (Style mode), by Feel */
+    /* 0.5.1, sound locks: per-hit CCs on the drum machine, written by the style as bar events (GEN_LOCK_*) */
+    uint8_t locks;                       /* 1: on (the styles in LOCK_STYLES) */
+    uint8_t lock_cc[GEN_NLOCK];          /* each lock voice's CC on the drums' device (0: it has none) */
+    uint8_t lock_base[GEN_NLOCK];        /* its value as the style's sound sets it (the engine's Tanzbär profile) */
 } gen_cfg_t;
 
 typedef void (*gen_out_t)(uint32_t status, uint32_t d1, uint32_t d2);

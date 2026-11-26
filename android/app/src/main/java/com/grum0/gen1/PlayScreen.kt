@@ -75,6 +75,15 @@ fun PlayScreen(s: Store) {
             SwitchRow("Cut-A-Dor's pocket on the styles' drums (by Feel)", s.vals[F.POCKET] == 1) {
                 s.set(F.POCKET, if (it) 1 else 0)
             }
+            SwitchRow("Sound locks on the Tanzbär (some styles)", s.vals[F.LOCKS] == 1) {
+                s.set(F.LOCKS, if (it) 1 else 0)
+            }
+            Text(
+                "Single hits get their own sound: the 808 boom on the bar's last kick (Memphis, Miami bass, Jersey club), " +
+                    "looser ghost snares (Dilla, Native Tongues, Broken beat), the open hat choked in fills (French touch, " +
+                    "Italo disco), the clap a little different each bar (Miami bass, Jersey club, Chicago jack, Ballroom).",
+                style = MaterialTheme.typography.bodySmall,
+            )
             SliderRow(s, "Mutate", F.MUTATE)
             Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                 Text("Phrase", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)

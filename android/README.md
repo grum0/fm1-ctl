@@ -117,6 +117,16 @@ been tried). Version 0.2.0 adds:
 - **The harp run** in LA beats: on the first beat of each phrase the arp part plays a quick 32nd run up two octaves
   of the chord.
 
+**0.5.1** (sound locks, Cumbia's bass):
+
+- **Sound locks** (Play → Groove, off by default): with the drums on the Tanzbär, single hits get their own sound,
+  sent as timestamped CCs just before the hit and set back before the next one: the 808 boom on the bar's last kick
+  (Memphis, Miami bass, Jersey club), looser ghost snares (Dilla, Native Tongues, Broken beat), the open hat choked in
+  fill bars (French touch, Italo disco), the clap's decay a little different each bar (Miami bass, Jersey club,
+  Chicago jack, Ballroom / vogue). They follow the style's sound and your Control-page offsets.
+- **Cumbia's bass** as designed: the root on 1, a pickup on the "and" of 2, the fifth on 3 (a new bass mode,
+  "Cumbia", free of the kick). Cumbia's preview and fingerprints change on purpose; nothing else does.
+
 **0.5.0** (the portable core; nothing should sound different):
 
 - **The engine is ready for other homes** (an MPC plugin or a VST later). Everything that decides what is sent now

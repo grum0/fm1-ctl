@@ -115,6 +115,7 @@ void eng_range(int id, int *lo, int *hi)
         case F_OUT_DELAY: h = 40; break;
         case F_BELL: h = 1; break;
         case F_POCKET: h = 1; break;
+        case F_LOCKS: h = 1; break;
         default:
             if (id >= F_TANZ_OFS0)       /* the Tanzbär offsets */
                 l = -127;
@@ -187,6 +188,7 @@ int eng_get(int id)
         case F_OUT_DELAY: return E.c.out_delay;
         case F_BELL: return E.g.bell;
         case F_POCKET: return E.g.pocket;
+        case F_LOCKS: return E.g.locks;
         default: return id >= F_TANZ_OFS0 ? E.c.tanz_ofs[id - F_TANZ_OFS0] : E.g.ratchet;
         }
     }
@@ -769,6 +771,19 @@ int eng_jv_hint(int style, int out[4])
 }
 const char *eng_jv_part(int part) { return part >= 0 && part <= 16 ? JV_PART[part] : ""; }
 
+/* 0.5.1, sound locks: the CC of each lock voice and the style's value for it (with the player's offset), when the
+ * drums play on the Tanzbär; no CCs otherwise (other devices once their profiles exist) */
+static void locks_profile(void)
+{
+    static const uint8_t CC[GEN_NLOCK] = {64, 11, 90, 75};   /* kick decay, snare tone, open hat decay, clap decay */
+    int k, st = eng_get(F_STYLE), on = E.g.part[GP_DRUMS].dev == DV_TANZBAR && st >= 0 && st < GEN_NSTYLES;
+    for (k = 0; k < GEN_NLOCK; k++) {
+        int slot = eng_tanz_slot(CC[k]);
+        E.g.lock_cc[k] = (uint8_t)(on && slot >= 0 ? CC[k] : 0);
+        E.g.lock_base[k] = (uint8_t)(on && slot >= 0 ? eng_tanz_mix(slot, TANZ_STYLE[st][slot]) : 0);
+    }
+}
+
 /* the Tanzbär profile's cowbell table, as the line needs it (255: a pitch it cannot play) */
 static void bell_profile(void)
 {
@@ -778,7 +793,14 @@ static void bell_profile(void)
         t[i] = TANZ_BELL[i] < 0 ? 255u : (uint8_t)TANZ_BELL[i];
     eng_bell_table(TANZ_BELL_CC, t);
 }
+static void set_one(int id, int v, int64_t now);
+static void locks_profile(void);
 void eng_set(int id, int v, int64_t now)
+{
+    set_one(id, v, now);
+    locks_profile();                             /* (the style, its offsets or the drums' device may have changed) */
+}
+static void set_one(int id, int v, int64_t now)
 {
     int lo, hi;
     if (id < 0 || id >= F_COUNT)
@@ -808,6 +830,7 @@ void eng_set(int id, int v, int64_t now)
         case F_OUT_DELAY: E.c.out_delay = (uint8_t)v; break;
         case F_BELL: E.g.bell = (uint8_t)v; break;
         case F_POCKET: E.g.pocket = (uint8_t)v; break;
+        case F_LOCKS: E.g.locks = (uint8_t)v; break;
         default:
             if (id >= F_TANZ_OFS0)
                 E.c.tanz_ofs[id - F_TANZ_OFS0] = (int8_t)v;
@@ -958,6 +981,7 @@ void eng_init(eng_sink_t sink, void *ud)
     ecfg_defaults();
     gen_defaults(&E.g), cv_pads();
     bell_profile();
+    locks_profile();
     E.song_next = SONG_NONE;
     gen_init(&E.g, gen_out);
 }
@@ -969,6 +993,7 @@ void eng_defaults(int64_t now)
     ecfg_defaults();
     gen_defaults(&E.g), cv_pads();
     bell_profile();                              /* (0.5.0: kept after the defaults too) */
+    locks_profile();
 }
 
 void eng_status(int32_t *out, int64_t now)

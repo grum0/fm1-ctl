@@ -38,8 +38,9 @@ enum {
     F_OUT_DELAY,                         /* 0.3.1: following, ms from a tick's arrival to what it plays (default 5) */
     F_BELL,                              /* 0.3.2: the cowbell plays a line (the app sets it from Cowbell pitch) */
     F_POCKET,                            /* 0.3.4: Cut-A-Dor's pocket on the styles' drums (Style mode), by Feel */
-    F_TANZ_OFS0,                         /* 0.4.1: TANZ_NOFS offsets on the Tanzbär's style sound (TanzData.CCS order) */
-    F_COUNT = F_TANZ_OFS0 + TANZ_NOFS
+    F_TANZ_OFS0,                         /* 0.4.1: TANZ_NOFS offsets on the Tanzbär's style sound (TANZ_CCS order) */
+    F_LOCKS = F_TANZ_OFS0 + TANZ_NOFS,   /* 0.5.1: sound locks (per-hit CCs on the Tanzbär in some styles), 0 off */
+    F_COUNT
 };
 enum { PF_ON, PF_CHAN, PF_DEV, PF_VAR, PF_DENS, PF_FLAIR, PF_MODE, PF_OCT };
 enum { TF_STEPS, TF_HITS, TF_ROT, TF_NOTE, TF_MUTE };

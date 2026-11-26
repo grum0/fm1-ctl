@@ -179,7 +179,7 @@ class Store(ctx: Context) {
         if (id == F.STYLE && styleTempo) Native.nSet(F.TEMPO, Native.nStyleTempo(1))   // (the rule is the engine's)
         refreshAll()
         touch()
-        if (id == F.STYLE || id == F.ROOT || id == F.MINOR || id == F.part(F.GP_DRUMS, F.PF_ON)) applyTanzSound()
+        if (id == F.STYLE || id == F.ROOT || id == F.MINOR || id == F.LOCKS || id == F.part(F.GP_DRUMS, F.PF_ON)) applyTanzSound()   // (locks off: the style's sound back)
     }
 
     // ------------------------------------------------------------------ the Tanzbär's sound per style and key --
