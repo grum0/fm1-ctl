@@ -1945,6 +1945,145 @@ static void test_e_052(void)
     printf("0.5.2: batch [E] ok\n");
 }
 
+/* 0.5.3: the lane groups' densities, the Grids controls, Ghosts. Defaults are the golden fingerprints (unchanged);
+ * here each control does what it says */
+static void gr_begin(int style, int mode)
+{
+    fresh();
+    eng_set(F_TEMPO, 120, vnow);
+    eng_set(F_STYLE, style, vnow);
+    eng_set(F_FILL_EVERY, 1, vnow);                      /* (no fills) */
+    eng_set(F_CLOCK, CLK_INT, vnow);
+    eng_set(F_PART(GP_DRUMS, PF_ON), 1, vnow);
+    eng_set(F_PART(GP_DRUMS, PF_CHAN), 9, vnow);
+    eng_set(F_PART(GP_DRUMS, PF_MODE), mode, vnow);
+}
+static void gr_go(int ms)
+{
+    eng_play(1, vnow);
+    run_internal(ms);
+    eng_play(0, vnow);
+}
+static int64_t gr_t0(void)
+{
+    int i;
+    for (i = 0; i < nlog; i++)
+        if (log_[i].n == 3 && log_[i].m[0] == 0x99 && log_[i].m[2])
+            return log_[i].t;
+    return 0;
+}
+static int gr_count(int note, int vlo, int vhi)          /* drum note-ons of that note and velocity */
+{
+    int i, n = 0;
+    for (i = 0; i < nlog; i++)
+        n += log_[i].n == 3 && log_[i].m[0] == 0x99 && log_[i].m[1] == note && log_[i].m[2] >= vlo && log_[i].m[2] <= vhi;
+    return n;
+}
+static uint32_t gr_bar(int note, int64_t t0, int b)      /* which sixteenths of bar b the note plays (bit mask) */
+{
+    int i;
+    uint32_t m = 0;
+    int64_t bar = 2000 * MS, six = bar / 16;
+    for (i = 0; i < nlog; i++) {
+        int64_t at = log_[i].t - t0 + six / 3;
+        if (log_[i].n == 3 && log_[i].m[0] == 0x99 && log_[i].m[1] == note && log_[i].m[2] && at >= b * bar &&
+            at < (b + 1) * bar)
+            m |= 1u << (int)((at - b * bar) / six);
+    }
+    return m;
+}
+static void test_grids_053(void)
+{
+    int k, sn, rim, base, lo, hi, i, j, bad = 0;
+    int64_t t0;
+    uint32_t b0;
+    fresh();
+    k = E.g.lane_note[L_KICK], sn = E.g.lane_note[L_SNARE];
+    /* group densities, Style mode: the kick group down leaves fewer kicks and the snares as they were */
+    gr_begin(GS_DILLA, DM_STYLE);
+    gr_go(16000);
+    base = gr_count(k, 1, 127), i = gr_count(sn, 1, 127);
+    gr_begin(GS_DILLA, DM_STYLE);
+    eng_set(F_DENS_GRP0 + GEN_GRP_KICK, -64, vnow);
+    gr_go(16000);
+    CHECK(gr_count(k, 1, 127) < base && gr_count(sn, 1, 127) == i, "kick group: %d kicks (was %d), %d snares (was %d)",
+          gr_count(k, 1, 127), base, gr_count(sn, 1, 127), i);
+    gr_begin(GS_DILLA, DM_TURING);                       /* ... and in Turing, up */
+    gr_go(16000);
+    base = gr_count(k, 1, 127);
+    gr_begin(GS_DILLA, DM_TURING);
+    eng_set(F_DENS_GRP0 + GEN_GRP_KICK, 63, vnow);
+    gr_go(16000);
+    CHECK(gr_count(k, 1, 127) > base, "Turing kick group up: %d (was %d)", gr_count(k, 1, 127), base);
+    /* Grids accents per voice: BD accent 0 never louder than 84; 43 gives 127 */
+    gr_begin(GS_DILLA, DM_GRIDS);
+    eng_set(F_G_ACC0, 0, vnow);
+    eng_set(F_G_ACC0 + 1, 43, vnow);
+    gr_go(16000);
+    CHECK(gr_count(k, 85, 127) == 0 && gr_count(k, 84, 84) > 0 && gr_count(sn, 127, 127) > 0,
+          "accents: %d loud kicks, %d full snares", gr_count(k, 85, 127), gr_count(sn, 127, 127));
+    /* Euclidean mode: BD over 5 steps with 3 hits (Density 64): 3 kicks in every 5 sixteenths, the loop's first
+     * accented; and Reset restarts the loop on the next bar */
+    gr_begin(GS_DILLA, DM_GRIDS);
+    eng_set(F_PART(GP_DRUMS, PF_DENS), 64, vnow);
+    eng_set(F_G_EUCLID, 1, vnow);
+    eng_set(F_G_LEN0, 5, vnow);
+    gr_go(20500);                                        /* ten bars: 160 sixteenths, 32 loops */
+    t0 = gr_t0();
+    for (i = 0, j = 0; i < 10; i++)
+        j += __builtin_popcount(gr_bar(k, t0, i));
+    CHECK(j == 96, "Euclidean kicks: %d of 96 in ten bars", j);
+    b0 = gr_bar(k, t0, 0);
+    for (i = 1; i < 5; i++)                              /* (16 and 5: the bars differ until bar 5) */
+        bad += gr_bar(k, t0, i) == b0;
+    CHECK(!bad && gr_bar(k, t0, 5) == b0, "Euclidean loop across bars: %d bars like the first", bad);
+    gr_begin(GS_DILLA, DM_GRIDS);
+    eng_set(F_PART(GP_DRUMS, PF_DENS), 64, vnow);
+    eng_set(F_G_EUCLID, 1, vnow);
+    eng_set(F_G_LEN0, 5, vnow);
+    eng_play(1, vnow);
+    run_internal(5000);                                  /* into bar 2 (from 0) */
+    eng_grids_reset();
+    run_internal(5000);
+    eng_play(0, vnow);
+    t0 = gr_t0();
+    CHECK(gr_bar(k, t0, 3) == b0 && gr_bar(k, t0, 2) != b0, "Reset: bars %04x %04x, the first bar %04x",
+          gr_bar(k, t0, 2), gr_bar(k, t0, 3), b0);
+    /* the clock at half speed: the map's two halves in turn, bars 0 and 2 alike, 0 and 1 not */
+    gr_begin(GS_DILLA, DM_GRIDS);
+    eng_set(F_CHAOS, 0, vnow);
+    eng_set(F_G_RES, 0, vnow);
+    gr_go(10500);
+    t0 = gr_t0();
+    rim = E.g.lane_note[L_CHH];
+    CHECK(gr_bar(rim, t0, 0) == gr_bar(rim, t0, 2) && (gr_bar(k, t0, 0) != gr_bar(k, t0, 1) ||
+          gr_bar(rim, t0, 0) != gr_bar(rim, t0, 1)), "half speed: bars %04x %04x %04x", gr_bar(rim, t0, 0),
+          gr_bar(rim, t0, 1), gr_bar(rim, t0, 2));
+    /* Ghosts (Grids, whose own hits are 84 or louder): soft snares and rims appear, never next to a kick or snare */
+    gr_begin(GS_DILLA, DM_GRIDS);
+    gr_go(16000);
+    rim = E.g.lane_note[L_RIM];
+    CHECK(gr_count(sn, 1, 50) + gr_count(rim, 1, 50) == 0, "ghosts off: soft hits");
+    gr_begin(GS_DILLA, DM_GRIDS);
+    eng_set(F_PART(GP_DRUMS, PF_DENS), 30, vnow);       /* (sparse, so there are gaps to fill) */
+    eng_set(F_GHOSTS, 127, vnow);
+    gr_go(16000);
+    k = E.g.lane_note[L_KICK], sn = E.g.lane_note[L_SNARE];
+    lo = gr_count(sn, 1, 50), hi = gr_count(rim, 1, 50);
+    bad = 0;
+    for (i = 0; i < nlog; i++) {
+        const msg_t *m = &log_[i];
+        if (m->n != 3 || m->m[0] != 0x99 || !m->m[2] || m->m[2] > 50 || (m->m[1] != sn && m->m[1] != rim))
+            continue;
+        for (j = 0; j < nlog; j++)
+            if (log_[j].n == 3 && log_[j].m[0] == 0x99 && log_[j].m[2] > 50 &&
+                (log_[j].m[1] == k || log_[j].m[1] == sn) && llabs(log_[j].t - m->t) < 125 * MS * 3 / 2 - 5 * MS)
+                bad++;
+    }
+    CHECK(lo > 8 && hi > 0 && !bad, "ghosts: %d snares, %d rims, %d next to a kick or snare", lo, hi, bad);
+    printf("0.5.3: group densities, Grids controls, Ghosts ok\n");
+}
+
 int main(void)
 {
     test_ranges();
@@ -1977,6 +2116,7 @@ int main(void)
     test_core_050();
     test_locks_051();
     test_e_052();
+    test_grids_053();
     test_panic();
     printf(fails ? "FAILED (%d)\n" : "ok\n", fails);
     free(log_);

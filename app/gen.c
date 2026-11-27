@@ -1132,16 +1132,54 @@ static uint16_t turing_reg(int k, int dens)
     }
     return reg;
 }
+static int euclid_hit(int len, int hits, int i);
+/* 0.5.3: a lane's density group, and the drums' Density for it (the global one plus the group's offset) */
+static int lane_grp(int l)
+{
+    return l == L_KICK ? GEN_GRP_KICK : l == L_SNARE || l == L_CLAP || l == L_RIM ? GEN_GRP_SNARE : GEN_GRP_PERC;
+}
+static int grp_dens(int l, int dens) { return gclamp(dens + g.c->dens_grp[lane_grp(l)], 0, 127); }
+/* Grids (0.5.3, the module's controls): how many slots a bar holds at this clock, and their length in subticks;
+ * the map's 32 steps are 32nds at the normal clock; Euclidean mode counts sixteenths (eighths at half speed, 32nds
+ * at double) */
+static int grids_slots(int *len)
+{
+    int r = g.c->g_res > 2 ? 1 : g.c->g_res, u = g.c->g_euclid ? (r == 0 ? 48 : r == 1 ? 24 : 12) : (r == 0 ? 24 : r == 1 ? 12 : 6);
+    *len = u;
+    return (int)GEN_BAR / u;
+}
+/* a Grids voice (0 BD, 1 SD, 2 HH) on slot u of this bar: 0, or its velocity; *open: a hat for the open hat */
+static int grids_at(int ch, int u, uint32_t pert, int dens, int *open)
+{
+    uint32_t x = (uint32_t)gclamp(g.c->gx, 0, 127) * 2u, y = (uint32_t)gclamp(g.c->gy, 0, 127) * 2u, lev, idx;
+    int len, n = grids_slots(&len), acc = 84 + g.c->g_acc[ch];
+    uint32_t rb = bb - (bb >= g.c->g_origin ? g.c->g_origin : 0u);    /* (bars since Reset) */
+    *open = 0;
+    if (g.c->g_euclid) {
+        int L = gclamp(g.c->g_len[ch], 1, 32), hits = (dens * L + 63) / 127, a = (int)((rb * (uint32_t)n + (uint32_t)u) % (uint32_t)L);
+        if (!euclid_hit(L, hits, a))
+            return 0;
+        return a == 0 ? gclamp(acc, 1, 127) : 84;
+    }
+    idx = g.c->g_res == 0 ? (rb & 1u) * 16u + (uint32_t)u : (uint32_t)u & 31u;
+    lev = grids_level(idx, (uint32_t)ch, x, y);
+    lev = lev + pert > 255u ? 255u : lev + pert;
+    if (lev <= (uint32_t)(255 - dens * 2))
+        return 0;
+    *open = ch == 2 && g.c->g_ohat && lev > 235u;
+    return lev > 192u ? gclamp(acc, 1, 127) : 84;
+}
 /* Grids mode's kick on a sixteenth this bar (0, or its velocity): the drum part's first draw and map level */
 static int grids_kick(int step, int dens)
 {
-    uint32_t x = (uint32_t)gclamp(g.c->gx, 0, 127) * 2u, y = (uint32_t)gclamp(g.c->gy, 0, 127) * 2u, lev, pert;
+    uint32_t pert;
+    int len, n = grids_slots(&len), u = step * (int)GEN_STEP / len, o;
     rng_t r;
     r.s = gh(pseed(GP_DRUMS, 1), bb % (uint32_t)phrase_len() + epoch() * 64u);
     pert = rnd(&r, (uint32_t)g.c->chaos / 2u + 1u);
-    lev = grids_level((uint32_t)step * 2u, 0u, x, y);
-    lev = lev + pert > 255u ? 255u : lev + pert;
-    return lev > (uint32_t)(255 - dens * 2) ? (lev > 192u ? 112 : 84) : 0;
+    if (step * (int)GEN_STEP % len || u >= n)
+        return 0;                                        /* (at half speed: only on its eighths) */
+    return grids_at(0, u, pert, grp_dens(L_KICK, dens), &o);
 }
 /* the kick this bar, step by step (0, or its velocity), for the parts that go with it (the bass's coupling, the
  * melodic kick): the kick the drum part's mode plays (Cut-A-Dor, Grids, Turing), else the style's lane, at this
@@ -1154,8 +1192,8 @@ static int kick_src(int step, int dens)
     if (m == DM_GRIDS)
         return grids_kick(step, dens);
     if (m == DM_TURING)
-        return (turing_reg(0, dens) >> step & 1u) ? ((step & 3) == 0 ? 105 : 80) : 0;
-    return style_hit(L_KICK, step, dens);
+        return (turing_reg(0, grp_dens(L_KICK, dens)) >> step & 1u) ? ((step & 3) == 0 ? 105 : 80) : 0;
+    return style_hit(L_KICK, step, grp_dens(L_KICK, dens));
 }
 
 static void drums_fill(int f, int from, rng_t *r)
@@ -1235,6 +1273,28 @@ static uint32_t grids_level(uint32_t step, uint32_t ch, uint32_t x, uint32_t y)
     return grids_mix(grids_mix(a[off], b[off], xb), grids_mix(c[off], d[off], xb), yb);
 }
 
+/* Ghosts (0.5.3): soft snare hits, now and then the rim, in the sixteenths this bar left empty that are not next to a
+ * kick or a snare, up to step `to`; how many by the knob. A pure function of seed and bar; in every drum mode, after
+ * the pattern is made */
+static void drum_ghosts(int to)
+{
+    const gev_t *e = &wb->ev[GEV_OFF[GP_DRUMS]];
+    uint32_t busy = 0, seed = pseed(GP_DRUMS, 0x6057u);
+    int i, s, n = wb->n[GP_DRUMS];
+    int kn = g.c->lane_note[L_KICK], sn = g.c->lane_note[L_SNARE], kc = lane_ch(L_KICK), sc = lane_ch(L_SNARE);
+    for (i = 0; i < n; i++)
+        if (e[i].kind == EV_NOTE && ((e[i].a == kn && e[i].ch == kc) || (e[i].a == sn && e[i].ch == sc))) {
+            int st16 = ((int)e[i].pos + (int)GEN_STEP / 2) / (int)GEN_STEP;   /* the step and its neighbours */
+            busy |= (1u << (st16 + 1)) | (1u << st16) | (st16 ? 1u << (st16 - 1) : 0u);
+        }
+    for (s = 0; s < to && s < 15; s++) {             /* (not on the last sixteenth: the next downbeat's neighbour) */
+        uint32_t hsh = gh(seed, bb * 16u + (uint32_t)s);
+        if (busy >> s & 1u || (int)(hsh % 127u) >= g.c->ghosts)   /* (127: every free gap) */
+            continue;
+        drum_put((hsh >> 8) % 3u ? L_SNARE : L_RIM, s * (int)GEN_STEP + ((s & 1) ? swing_sub() : 0), 28 + (int)(hsh >> 12) % 18);
+    }
+}
+
 static void build_drums(void)
 {
     const gen_part_t *pt = &g.c->part[GP_DRUMS];
@@ -1260,9 +1320,11 @@ static void build_drums(void)
         for (t = 0; t < CAD_TRACKS; t++) {
             l = CL[t];
             for (s = 0; s < 16; s++) {
-                int v = q->vel[t][half + s], pos;
+                int v = q->vel[t][half + s], pos, gd = g.c->dens_grp[lane_grp(l)];
                 if (!v || (t == C_HAT && !hat_keep(s)))
                     continue;
+                if (gd < 0 && (int)(gh(seed ^ 0xD5u, bb * 256u + (uint32_t)(t * 32 + s)) % 64u) >= 64 + gd)
+                    continue;                            /* (0.5.3: the group thinner; Cut-A-Dor's patterns are fixed) */
                 if (g.c->space > 60 && bb % 8u >= 4u && t >= C_HAT && s >= 8)
                     continue;                            /* Space, further: the second half of every other four bars */
                 pos = s * (int)GEN_STEP + ((s & 1) ? (is_hat(l) ? hat_sw(sw0) : sw0) : 0) +
@@ -1284,23 +1346,27 @@ static void build_drums(void)
                              (s & 3) == 0 ? 78 : (s & 3) == 2 ? 51 : 35);
     } else if (pt->mode == DM_GRIDS) {
         static const uint8_t GL[3] = {L_KICK, L_SNARE, L_CHH};
-        uint32_t x = (uint32_t)gclamp(g.c->gx, 0, 127) * 2u, y = (uint32_t)gclamp(g.c->gy, 0, 127) * 2u, ch;
-        for (ch = 0; ch < 3u; ch++) {
+        int ch, ulen, n = grids_slots(&ulen);
+        int own = g.c->g_swing ? gclamp(g.c->g_swing, 1, 25) * 2 * (int)GEN_STEP / 100 : -1;   /* its own swing */
+        for (ch = 0; ch < 3; ch++) {
             uint32_t pert = rnd(&r, (uint32_t)g.c->chaos / 2u + 1u);
-            for (s = 0; s < 32; s++) {
-                uint32_t lev = grids_level((uint32_t)s, ch, x, y);
-                lev = lev + pert > 255u ? 255u : lev + pert;
-                if (lev > (uint32_t)(255 - pt->dens * 2)) {
-                    int hl = ch == 2 && lev > 235u ? L_OHH : GL[ch];
-                    int pos = dpos(hl, s / 2, lane_late(GL[ch]), st->jit, &r) + (s & 1) * 12;
-                    if (ch == 2 && g.c->hat_dens && ((s & 1) || !hat_keep(s / 2)))
-                        continue;
-                    if (ch == 2 && s / 2 >= gap)
-                        continue;
-                    drum_hit(hl, pos, lev > 192u ? 112 : 84);
-                    if (hl == L_CHH)
-                        hats |= (uint16_t)(1u << (s / 2));
-                }
+            int dens = grp_dens(GL[ch], pt->dens);       /* (the module's BD / SD / HH fill) */
+            for (s = 0; s < n; s++) {
+                int open, v = grids_at(ch, s, pert, dens, &open), st16 = s * ulen / (int)GEN_STEP, frac = s * ulen % (int)GEN_STEP;
+                int hl, pos;
+                if (!v)
+                    continue;
+                hl = open ? L_OHH : GL[ch];
+                pos = own < 0 ? dpos(hl, st16, lane_late(GL[ch]), st->jit, &r)
+                              : tpos_sw(st16, is_hat(hl) ? hat_sw(own) : own, lane_late(GL[ch]), st->jit, &r);
+                pos += frac;
+                if (ch == 2 && g.c->hat_dens && (frac || !hat_keep(st16)))
+                    continue;
+                if (ch == 2 && st16 >= gap)
+                    continue;
+                drum_hit(hl, pos, v);
+                if (hl == L_CHH)
+                    hats |= (uint16_t)(1u << st16);
             }
         }
     } else if (pt->mode == DM_TURING) {
@@ -1308,7 +1374,7 @@ static void build_drums(void)
         static const uint8_t TL[5] = {L_KICK, L_SNARE, L_CHH, L_OHH, L_RIM};
         int k;
         for (k = 0; k < 5; k++) {
-            uint16_t reg = turing_reg(k, pt->dens);
+            uint16_t reg = turing_reg(k, grp_dens(TL[k], pt->dens));
             for (s = 0; s < 16; s++)
                 if (reg >> s & 1u) {
                     int pos = dpos(TL[k], s, lane_late(TL[k]), st->jit, &r), v = ((s & 3) == 0 ? 105 : 80) + (int)rnd(&r, 12);
@@ -1339,7 +1405,7 @@ static void build_drums(void)
                 int v, pos, loud;
                 if ((perc && s >= gap) || (l == L_CHH && !hat_keep(s)))
                     continue;
-                v = style_hit(l, s, pt->dens);
+                v = style_hit(l, s, grp_dens(l, pt->dens));
                 if (!v)
                     continue;
                 loud = v > 60;
@@ -1364,6 +1430,8 @@ static void build_drums(void)
         for (s = 0; s < (from < gap ? from : gap); s++)
             if (hat_keep(s) && !(hats >> s & 1u))
                 drum_hit(L_CHH, dpos(L_CHH, s, st->lh, 0, &r), (s & 3) == 0 ? 100 : (s & 1) == 0 ? 84 : 62);
+    if (g.c->ghosts)                                     /* 0.5.3: Ghosts, in every mode */
+        drum_ghosts(from < gap ? from : gap);
     if (from < 16)
         drums_fill(ftype, from, &fr);
     else if (g.c->ratchet && (int)(gh(pseed(GP_DRUMS, 0xA00u), bb) % 254u) < g.c->ratchet)
@@ -2634,6 +2702,7 @@ void gen_stop(void)
 void gen_chord_key(int pc) { g.man_pc = (int8_t)(((pc % 12) + 12) % 12); }
 int gen_running(void) { return g.run; }
 int gen_bar(void) { return g.c ? (int)(g.bar % (uint32_t)phrase_len()) : 0; }
+uint32_t gen_song_bar(void) { return g.bar; }
 int gen_step(void) { return g.pos / (int)GEN_STEP; }
 int gen_phrase_bars(void) { return g.c ? phrase_len() : 1; }
 int gen_part_heard(int p)
@@ -2677,6 +2746,10 @@ void gen_defaults(gen_cfg_t *c)
     c->feel = 8;
     c->seed = 1;
     c->gx = c->gy = 64;
+    c->g_acc[0] = c->g_acc[1] = c->g_acc[2] = 28;   /* (0.5.3: the Grids controls as before) */
+    c->g_len[0] = c->g_len[1] = c->g_len[2] = 16;
+    c->g_res = 1;
+    c->g_ohat = 1;
     c->bend = 2;
     c->mb_lo = 36;
     c->dset = DS_KIT;                                    /* (the Simmons' notes are the Tanzbar's snare and kick) */
@@ -2697,7 +2770,8 @@ int gen_valid(const gen_cfg_t *c)
         c->sim_chan > 16u || c->bend < 1u || c->bend > 12u || c->mb_xpose < -24 || c->mb_xpose > 24 || c->mb_tune > 127u ||
         c->mb_lo < 12u || c->mb_lo > 96u || c->hat_dens > 3u || c->flam > 127u || c->fill_every > 6u ||
         c->hat_straight > 100u || c->space > 100u || c->spread > 24u || c->couple > 3u || c->voice > 3u || c->ratchet > 127u ||
-        c->bell > 1u || c->bell_cc > 127u || c->pocket > 1u || c->locks > 1u)
+        c->bell > 1u || c->bell_cc > 127u || c->pocket > 1u || c->locks > 1u ||
+        c->g_euclid > 1u || c->g_swing > 25u || c->g_res > 2u || c->g_ohat > 1u || c->ghosts > 127u)
         return 0;
     for (i = 0; i < GEN_NLANES; i++)
         if (c->lane_note[i] > 127u)

@@ -115,9 +115,18 @@ void eng_range(int id, int *lo, int *hi)
         case F_OUT_DELAY: h = 40; break;
         case F_BELL: h = 1; break;
         case F_POCKET: h = 1; break;
-        case F_LOCKS: h = 1; break;
+        case F_LOCKS: case F_G_EUCLID: case F_G_OHAT: h = 1; break;
+        case F_G_SWING: h = 25; break;
+        case F_G_RES: h = 2; break;
+        case F_GHOSTS: break;
         default:
-            if (id >= F_TANZ_OFS0)       /* the Tanzbär offsets */
+            if (id >= F_DENS_GRP0 && id < F_DENS_GRP0 + GEN_NGRP)
+                l = -64, h = 63;
+            else if (id >= F_G_ACC0 && id < F_G_ACC0 + 3)
+                h = 43;
+            else if (id >= F_G_LEN0 && id < F_G_LEN0 + 3)
+                l = 1, h = 32;
+            else if (id >= F_TANZ_OFS0)  /* the Tanzbär offsets */
                 l = -127;
             break;                       /* flam, ratchets: 0..127 */
         }
@@ -189,7 +198,19 @@ int eng_get(int id)
         case F_BELL: return E.g.bell;
         case F_POCKET: return E.g.pocket;
         case F_LOCKS: return E.g.locks;
-        default: return id >= F_TANZ_OFS0 ? E.c.tanz_ofs[id - F_TANZ_OFS0] : E.g.ratchet;
+        case F_G_EUCLID: return E.g.g_euclid;
+        case F_G_SWING: return E.g.g_swing;
+        case F_G_RES: return E.g.g_res;
+        case F_G_OHAT: return E.g.g_ohat;
+        case F_GHOSTS: return E.g.ghosts;
+        default:
+            if (id >= F_DENS_GRP0 && id < F_DENS_GRP0 + GEN_NGRP)
+                return E.g.dens_grp[id - F_DENS_GRP0];
+            if (id >= F_G_ACC0 && id < F_G_ACC0 + 3)
+                return E.g.g_acc[id - F_G_ACC0];
+            if (id >= F_G_LEN0 && id < F_G_LEN0 + 3)
+                return E.g.g_len[id - F_G_LEN0];
+            return id >= F_TANZ_OFS0 ? E.c.tanz_ofs[id - F_TANZ_OFS0] : E.g.ratchet;
         }
     }
     if (id >= F_TRK0) {
@@ -419,6 +440,8 @@ static void clock_tick(void)                     /* one 24th of a beat; the gene
 static void seq_start(int from_top)
 {
     E.song_next = SONG_NONE;                     /* (the subtick code sets it once it plays) */
+    if (from_top)
+        E.g.g_origin = 0;                        /* (Grids' Reset counts from the top again) */
     if (from_top) {
         E.seq_tick = 0;
         E.seq_step = 0;
@@ -762,6 +785,10 @@ int eng_style_tempo(int on)
     gen_style_bpm(st, &lo, &hi);
     return t < lo ? lo : t > hi ? hi : t;
 }
+void eng_grids_reset(void)
+{
+    E.g.g_origin = gen_song_bar() + 1u;          /* (a pure function of the bar again from there) */
+}
 int eng_jv_hint(int style, int out[4])
 {
     int i;
@@ -831,8 +858,19 @@ static void set_one(int id, int v, int64_t now)
         case F_BELL: E.g.bell = (uint8_t)v; break;
         case F_POCKET: E.g.pocket = (uint8_t)v; break;
         case F_LOCKS: E.g.locks = (uint8_t)v; break;
+        case F_G_EUCLID: E.g.g_euclid = (uint8_t)v; break;
+        case F_G_SWING: E.g.g_swing = (uint8_t)v; break;
+        case F_G_RES: E.g.g_res = (uint8_t)v; break;
+        case F_G_OHAT: E.g.g_ohat = (uint8_t)v; break;
+        case F_GHOSTS: E.g.ghosts = (uint8_t)v; break;
         default:
-            if (id >= F_TANZ_OFS0)
+            if (id >= F_DENS_GRP0 && id < F_DENS_GRP0 + GEN_NGRP)
+                E.g.dens_grp[id - F_DENS_GRP0] = (int8_t)v;
+            else if (id >= F_G_ACC0 && id < F_G_ACC0 + 3)
+                E.g.g_acc[id - F_G_ACC0] = (uint8_t)v;
+            else if (id >= F_G_LEN0 && id < F_G_LEN0 + 3)
+                E.g.g_len[id - F_G_LEN0] = (uint8_t)v;
+            else if (id >= F_TANZ_OFS0)
                 E.c.tanz_ofs[id - F_TANZ_OFS0] = (int8_t)v;
             else
                 E.g.ratchet = (uint8_t)v;

@@ -22,6 +22,9 @@ import androidx.compose.ui.unit.dp
 
 private val SIM2 = listOf("Snare layer", "Crash", "Percussion")
 private val HATS = listOf("With the kit", "1/4", "1/8", "1/16")
+private val GROUPS = listOf("Kick density", "Snare, clap, rim density", "Percussion and hats density")
+private val VOICES = listOf("BD", "SD", "HH")
+private val GRES = listOf("half speed", "normal", "double speed")
 private val FILLS = listOf("at the phrase's end", "never", "every bar", "every 2 bars", "every 4 bars", "every 8 bars", "every 16 bars")
 
 @Composable
@@ -34,6 +37,9 @@ fun DrumsScreen(s: Store) {
             Pick("Mode", modes.getOrElse(s.vals[F.part(drums, F.PF_MODE)]) { "?" }, modes) { s.set(F.part(drums, F.PF_MODE), it) }
             Pick("Lanes sent", s.dsetNames.getOrElse(s.vals[F.DSET]) { "?" }, s.dsetNames) { s.set(F.DSET, it) }
             SliderRow(s, "Density", F.part(drums, F.PF_DENS))
+            for (g in 0 until 3)                         // 0.5.3: on top of Density, in every mode (Grids: BD / SD / HH fill)
+                SliderRow(s, GROUPS[g], F.DENS_GRP0 + g, { if (it == 0) "as Density" else if (it > 0) "+$it" else "$it" })
+            SliderRow(s, "Ghosts (soft snares in the gaps)", F.GHOSTS, { if (it == 0) "off" else "$it" })
             SliderRow(s, "Flair", F.part(drums, F.PF_FLAIR))
             Pick("Simmons lane 2", SIM2.getOrElse(s.vals[F.SIM2]) { "?" }, SIM2) { s.set(F.SIM2, it) }
             Pick(
@@ -55,9 +61,22 @@ fun DrumsScreen(s: Store) {
         }
 
         Section("Grids (mode Grids)") {
-            SliderRow(s, "Map X", F.GX)
-            SliderRow(s, "Map Y", F.GY)
-            SliderRow(s, "Chaos", F.CHAOS)
+            SwitchRow("Euclidean mode (the fills set each voice's hits)", s.vals[F.G_EUCLID] == 1) {
+                s.set(F.G_EUCLID, if (it) 1 else 0)
+            }
+            if (s.vals[F.G_EUCLID] == 1) {
+                for (v in 0 until 3) SliderRow(s, "${VOICES[v]} length", F.G_LEN0 + v)
+            } else {
+                SliderRow(s, "Map X", F.GX)
+                SliderRow(s, "Map Y", F.GY)
+                SliderRow(s, "Chaos", F.CHAOS)
+            }
+            Text("Fill per voice: the kick, snare and percussion density above.", style = MaterialTheme.typography.bodySmall)
+            for (v in 0 until 3) SliderRow(s, "${VOICES[v]} accent", F.G_ACC0 + v, { "+$it" })
+            SliderRow(s, "Grids swing", F.G_SWING, { if (it == 0) "the global swing" else "${50 + it} %" })
+            Pick("Clock", GRES.getOrElse(s.vals[F.G_RES]) { "?" }, GRES) { s.set(F.G_RES, it) }
+            SwitchRow("Loudest hats to the open hat", s.vals[F.G_OHAT] == 1) { s.set(F.G_OHAT, if (it) 1 else 0) }
+            SmallButton("Reset: the pattern from step 1 at the next bar") { Native.nGridsReset() }
         }
 
         Section("This bar, lane by lane") {

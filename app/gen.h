@@ -13,6 +13,8 @@ enum { L_KICK, L_SNARE, L_RIM, L_CLAP, L_CHH, L_OHH, L_TOML, L_TOMH, L_CONGL, L_
        L_SIM1, L_SIM2, GEN_NLANES };
 /* sound locks' voices (0.5.1): kick decay, snare tone, open-hat decay, clap decay */
 enum { GEN_LOCK_KICK, GEN_LOCK_SNARE, GEN_LOCK_OHAT, GEN_LOCK_CLAP, GEN_NLOCK };
+/* the drum lanes' density groups (0.5.3) */
+enum { GEN_GRP_KICK, GEN_GRP_SNARE, GEN_GRP_PERC, GEN_NGRP };
 enum { DV_GENERIC, DV_MB33, DV_HADES, DV_MONOLOGUE, DV_JV1010, DV_VOLCAFM, DV_MBASE, DV_TANZBAR, GEN_NDEV };
 enum { GS_DILLA, GS_SOULQ, GS_GFUNK, GS_BOMB, GS_QUINCY, GS_JUSTIFIED, GS_MPLS, GS_NPG, GS_NJS, GS_BOOGIE, GS_PFUNK,
        GS_JAZZFUNK, GS_ELECTRO, GS_ELECTRO2, GS_WONKY, GS_BIGBEAT, GS_BRAINDANCE, GS_DETROIT, GS_808, GS_GLITCH,
@@ -87,6 +89,16 @@ typedef struct {
     uint8_t locks;                       /* 1: on (the styles in LOCK_STYLES) */
     uint8_t lock_cc[GEN_NLOCK];          /* each lock voice's CC on the drums' device (0: it has none) */
     uint8_t lock_base[GEN_NLOCK];        /* its value as the style's sound sets it (the engine's Tanzbär profile) */
+    /* 0.5.3: the lane groups' densities, the Grids module's controls, Ghosts (defaults: as before) */
+    int8_t dens_grp[GEN_NGRP];           /* kick / snare, clap, rim / percussion: added to the drums' Density (0) */
+    uint8_t g_acc[3];                    /* Grids: an accent's velocity above 84, per voice BD SD HH (28) */
+    uint8_t g_euclid;                    /* Grids: 1 = Euclidean mode, the voices' Density their number of hits */
+    uint8_t g_len[3];                    /* its loop lengths, 1..32 steps (16) */
+    uint8_t g_swing;                     /* Grids' own swing above 50 %, 1..25 (0: the global Swing) */
+    uint8_t g_res;                       /* Grids' clock: 0 half speed, 1 as before, 2 double */
+    uint8_t g_ohat;                      /* 1: the loudest hat steps go to the open hat (as before) */
+    uint32_t g_origin;                   /* the bar Grids' Reset restarts the pattern on (0: the song's start) */
+    uint8_t ghosts;                      /* soft snare and rim hits in the empty sixteenths, 0 none */
 } gen_cfg_t;
 
 typedef void (*gen_out_t)(uint32_t status, uint32_t d1, uint32_t d2);
@@ -104,6 +116,7 @@ void gen_part_off(int p);                /* the part's notes off (before its cha
 void gen_chord_key(int pc);              /* prog = keys: the chord on this pitch class */
 int gen_running(void);
 int gen_bar(void);                       /* the bar of the phrase playing, 0.. */
+uint32_t gen_song_bar(void);             /* the bar playing, counted from the song's start (0.5.3) */
 int gen_step(void);                      /* the sixteenth playing, 0..15 */
 int gen_phrase_bars(void);
 void gen_chord_text(char *b);            /* "Cm9" */

@@ -51,7 +51,15 @@ object F {
     const val TANZ_OFS0 = 133
     const val TANZ_NOFS = 16
     const val LOCKS = 149
-    const val COUNT = 150
+    const val DENS_GRP0 = 150
+    const val G_ACC0 = 153
+    const val G_EUCLID = 156
+    const val G_LEN0 = 157
+    const val G_SWING = 160
+    const val G_RES = 161
+    const val G_OHAT = 162
+    const val GHOSTS = 163
+    const val COUNT = 164
 
     const val PF_ON = 0
     const val PF_CHAN = 1

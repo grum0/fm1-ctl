@@ -117,6 +117,18 @@ been tried). Version 0.2.0 adds:
 - **The harp run** in LA beats: on the first beat of each phrase the arp part plays a quick 32nd run up two octaves
   of the chord.
 
+**0.5.3** (full Grids controls, density per lane group, Ghosts):
+
+- **Density per lane group** (Drums): kick, snare / clap / rim, and percussion and hats, each on top of Density, in
+  every drum mode (Cut-A-Dor's fixed patterns can only get thinner). In Grids mode they are the module's BD / SD / HH
+  fill. The bass and melodic kick follow the kick that plays.
+- **Ghosts** (Drums): soft snares, now and then the rim, in the sixteenths the pattern leaves empty and not next to a
+  kick or snare; 0 is off.
+- **Grids, the module's controls**: an accent level per voice, Euclidean mode (a length of 1–32 per voice, the fills
+  setting the hits, the loop's first step accented), its own swing, half / normal / double clock, the open-hat
+  switch, and Reset (the pattern from step 1 at the next bar).
+- Nothing changes until you move one of them: every default plays as before.
+
 **0.5.2** (batch [E]):
 
 - **Three styles** (89 in all): Punk-funk (a stiff kit under cowbell and conga, the bass riff held for 8 bars,

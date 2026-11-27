@@ -25,6 +25,7 @@ object Native {
     external fun nTanzBase(slot: Int, melodic: Int): Int              // the style's own value there
     external fun nTanzSound(kickKey: Int, melodic: Int, out: IntArray): Int   // (cc, value) pairs; returns how many
     external fun nStyleTempo(on: Int): Int                            // the tempo after a style change
+    external fun nGridsReset()                                        // 0.5.3: Grids' pattern from the top at the next bar
     external fun nMonOpen(on: Int)
     external fun nMonRead(since: Int, t: LongArray, b: ByteArray, res: IntArray)
     external fun nDefaults()

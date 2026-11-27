@@ -536,6 +536,15 @@ JNIEXPORT jint JNICALL J(nTanzOffset)(JNIEnv *env, jobject self, jint slot, jint
     (void)env, (void)self;
     return eng_tanz_offset(slot, base, value);
 }
+/* 0.5.3: Grids' Reset (its pattern starts again from the next bar) */
+JNIEXPORT void JNICALL J(nGridsReset)(JNIEnv *env, jobject self)
+{
+    (void)env, (void)self;
+    pthread_mutex_lock(&mu);
+    eng_grids_reset();
+    pthread_mutex_unlock(&mu);
+}
+
 /* 0.5.0: the Tanzbär's sound, worked out by the engine; the screen sends what these return */
 JNIEXPORT jint JNICALL J(nBellMelodic)(JNIEnv *env, jobject self, jint mode)
 {

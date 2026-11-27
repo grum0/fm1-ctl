@@ -40,6 +40,14 @@ enum {
     F_POCKET,                            /* 0.3.4: Cut-A-Dor's pocket on the styles' drums (Style mode), by Feel */
     F_TANZ_OFS0,                         /* 0.4.1: TANZ_NOFS offsets on the Tanzbär's style sound (TANZ_CCS order) */
     F_LOCKS = F_TANZ_OFS0 + TANZ_NOFS,   /* 0.5.1: sound locks (per-hit CCs on the Tanzbär in some styles), 0 off */
+    F_DENS_GRP0,                         /* 0.5.3: GEN_NGRP density offsets, kick / snare / percussion (-64..63, 0) */
+    F_G_ACC0 = F_DENS_GRP0 + GEN_NGRP,   /*        Grids: accent velocity above 84 for BD, SD, HH (0..43, 28) */
+    F_G_EUCLID = F_G_ACC0 + 3,           /*        Grids: Euclidean mode (0, 1) */
+    F_G_LEN0,                            /*        its three lengths (1..32, 16) */
+    F_G_SWING = F_G_LEN0 + 3,            /*        Grids' own swing above 50 % (0 = the global Swing, ..25) */
+    F_G_RES,                             /*        Grids' clock: 0 half, 1 normal, 2 double */
+    F_G_OHAT,                            /*        the loudest hat steps to the open hat (1) */
+    F_GHOSTS,                            /*        Ghosts (0..127, 0) */
     F_COUNT
 };
 enum { PF_ON, PF_CHAN, PF_DEV, PF_VAR, PF_DENS, PF_FLAIR, PF_MODE, PF_OCT };
@@ -82,6 +90,7 @@ int eng_tanz_base(int slot, int melodic);        /* the current style's own valu
 int eng_tanz_sound(int kick_key, int melodic, uint8_t *cc, uint8_t *val);   /* the CCs, in order; returns how many */
 int eng_style_tempo(int on);                     /* the tempo a style change moves to ("Picking a style moves the
                                                   * tempo"); the current one when off, following, or in range */
+void eng_grids_reset(void);                      /* Grids' Reset: its pattern starts again from the next bar */
 int eng_jv_hint(int style, int out[4]);          /* the JV-1010 parts for chords, Marble, arp, lead (0 none); 1 if known */
 const char *eng_jv_part(int part);               /* a part's name in the performance ("" if none) */
 void eng_panic(int64_t now);                     /* every note off; all notes off, all sound off, reset controllers
