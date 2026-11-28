@@ -215,7 +215,7 @@ fun RigScreen(s: Store) {
                     "• Cut-A-Dor by Kid Bunka (GPL-3.0-only): the drum pattern generator behind the Boom Bap, Lo-Fi, " +
                     "Funk Break, Half Time, Hip-Hop and Fast Break modes.\n" +
                     "• Mutable Instruments, Grids by Emilie Gillet (GPL-3.0-or-later): the Grids drum maps, by way of " +
-                    "Hortator's C port; Marbles was the inspiration for the Marble part.",
+                    "Hortator's C port; the Marble part follows Marbles' random generators (MIT licence, Emilie Gillet), written anew.",
                 style = MaterialTheme.typography.bodySmall,
             )
         }

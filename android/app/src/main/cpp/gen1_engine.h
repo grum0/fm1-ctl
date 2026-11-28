@@ -44,10 +44,17 @@ enum {
     F_G_ACC0 = F_DENS_GRP0 + GEN_NGRP,   /*        Grids: accent velocity above 84 for BD, SD, HH (0..43, 28) */
     F_G_EUCLID = F_G_ACC0 + 3,           /*        Grids: Euclidean mode (0, 1) */
     F_G_LEN0,                            /*        its three lengths (1..32, 16) */
-    F_G_SWING = F_G_LEN0 + 3,            /*        Grids' own swing above 50 % (0 = the global Swing, ..25) */
+    F_G_SWING = F_G_LEN0 + 3,            /*        Grids' own swing above 50 % (0 = the global Swing, ..25); 0.5.4: not
+                                          *        shown (gen1-grids-source-notes.md: Grids keeps the global Swing),
+                                          *        kept so the settings after it keep their numbers */
     F_G_RES,                             /*        Grids' clock: 0 half, 1 normal, 2 double */
     F_G_OHAT,                            /*        the loudest hat steps to the open hat (1) */
     F_GHOSTS,                            /*        Ghosts (0..127, 0) */
+    F_G_ROT0,                            /* 0.5.4: Grids Euclidean rotation per voice (0..31, 0) */
+    F_M_BIAS = F_G_ROT0 + 3,             /*        Marble: Bias (64), Shape (64 even), Steps (127 all), Memory (0),
+                                          *        Shuffle (0), Length (16), Rhythm (0 coin, 1 answer, 2 Markov) */
+    F_M_SHAPE, F_M_STEPS, F_M_MEMORY, F_M_SHUFFLE, F_M_LEN, F_M_RHYTHM,
+    F_ROOM,                              /*        chords make room for the lead (0 off, 1 shorten, 2 drop) */
     F_COUNT
 };
 enum { PF_ON, PF_CHAN, PF_DEV, PF_VAR, PF_DENS, PF_FLAIR, PF_MODE, PF_OCT };

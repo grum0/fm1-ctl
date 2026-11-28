@@ -59,7 +59,16 @@ object F {
     const val G_RES = 161
     const val G_OHAT = 162
     const val GHOSTS = 163
-    const val COUNT = 164
+    const val G_ROT0 = 164
+    const val M_BIAS = 167
+    const val M_SHAPE = 168
+    const val M_STEPS = 169
+    const val M_MEMORY = 170
+    const val M_SHUFFLE = 171
+    const val M_LEN = 172
+    const val M_RHYTHM = 173
+    const val ROOM = 174
+    const val COUNT = 175
 
     const val PF_ON = 0
     const val PF_CHAN = 1

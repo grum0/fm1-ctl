@@ -35,8 +35,22 @@ fun PartCard(s: Store, p: Int) {
         if (p == F.GP_CHORD) Pick("Voicing", VOICINGS.getOrElse(s.vals[F.VOICE]) { "?" }, VOICINGS) { s.set(F.VOICE, it) }
         SliderRow(s, "Density", F.part(p, F.PF_DENS))
         SliderRow(s, if (p == F.GP_RAND) "Chance" else "Flair", F.part(p, F.PF_FLAIR))
-        if (p == F.GP_RAND) SliderRow(s, "Spread", F.SPREAD, { "$it scale steps" })
+        if (p == F.GP_RAND) {
+            SliderRow(s, "Spread", F.SPREAD, { "$it scale steps" })
+            // 0.5.4: after Mutable Instruments' Marbles
+            SliderRow(s, "Bias", F.M_BIAS, { if (it == 64) "middle" else if (it < 64) "low $it" else "high $it" })
+            SliderRow(s, "Shape", F.M_SHAPE, { if (it == 64) "even" else if (it < 64) "bell $it" else "edges $it" })
+            SliderRow(s, "Steps", F.M_STEPS, { if (it >= 127) "the whole pool" else if (it < 32) "root only" else if (it < 64) "root and fifth" else "with the thirds" })
+            SwitchRow("Memory (fresh notes stay in the loop)", s.vals[F.M_MEMORY] == 1) { s.set(F.M_MEMORY, if (it) 1 else 0) }
+            SliderRow(s, "Shuffle", F.M_SHUFFLE, { if (it == 0) "off" else "$it" })
+            SliderRow(s, "Length", F.M_LEN, { if (it == 16) "one bar" else "$it steps" })
+            Pick("Rhythm", MRHYTHM.getOrElse(s.vals[F.M_RHYTHM]) { "?" }, MRHYTHM) { s.set(F.M_RHYTHM, it) }
+        }
+        if (p == F.GP_CHORD) Pick("Make room for the lead", ROOMS.getOrElse(s.vals[F.ROOM]) { "?" }, ROOMS) { s.set(F.ROOM, it) }
         StepRow(s, "Variation", F.part(p, F.PF_VAR))
         StepRow(s, "Octave", F.part(p, F.PF_OCT), { if (it > 0) "+$it" else "$it" })
     }
 }
+
+private val MRHYTHM = listOf("Coin", "Answer the drums", "Markov")
+private val ROOMS = listOf("off", "shorten chords", "drop chords")

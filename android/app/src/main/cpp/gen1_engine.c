@@ -118,8 +118,14 @@ void eng_range(int id, int *lo, int *hi)
         case F_LOCKS: case F_G_EUCLID: case F_G_OHAT: h = 1; break;
         case F_G_SWING: h = 25; break;
         case F_G_RES: h = 2; break;
-        case F_GHOSTS: break;
+        case F_GHOSTS: case F_M_BIAS: case F_M_SHAPE: case F_M_STEPS: case F_M_SHUFFLE: break;
+        case F_M_MEMORY: h = 1; break;
+        case F_M_LEN: l = 1, h = 16; break;
+        case F_M_RHYTHM: case F_ROOM: h = 2; break;
         default:
+            if (id >= F_G_ROT0 && id < F_G_ROT0 + 3)
+                h = 31;
+            else
             if (id >= F_DENS_GRP0 && id < F_DENS_GRP0 + GEN_NGRP)
                 l = -64, h = 63;
             else if (id >= F_G_ACC0 && id < F_G_ACC0 + 3)
@@ -203,7 +209,17 @@ int eng_get(int id)
         case F_G_RES: return E.g.g_res;
         case F_G_OHAT: return E.g.g_ohat;
         case F_GHOSTS: return E.g.ghosts;
+        case F_M_BIAS: return E.g.m_bias;
+        case F_M_SHAPE: return E.g.m_shape;
+        case F_M_STEPS: return E.g.m_steps;
+        case F_M_MEMORY: return E.g.m_memory;
+        case F_M_SHUFFLE: return E.g.m_shuffle;
+        case F_M_LEN: return E.g.m_len;
+        case F_M_RHYTHM: return E.g.m_rhythm;
+        case F_ROOM: return E.g.room;
         default:
+            if (id >= F_G_ROT0 && id < F_G_ROT0 + 3)
+                return E.g.g_rot[id - F_G_ROT0];
             if (id >= F_DENS_GRP0 && id < F_DENS_GRP0 + GEN_NGRP)
                 return E.g.dens_grp[id - F_DENS_GRP0];
             if (id >= F_G_ACC0 && id < F_G_ACC0 + 3)
@@ -485,6 +501,7 @@ static void song_locate(uint32_t pos)
     seq_offs();
     E.seq_tick = s16 * SEQ_TICKS;
     E.seq_step = s16;
+    E.g.g_origin = 0;                            /* (0.5.4: a locate clears Grids' Reset, as an SPP does) */
     gen_locate(s16);
     if (!E.running)
         seq_start(0);
@@ -625,6 +642,7 @@ void eng_midi_spp(int sixteenths, int64_t at)
     seq_offs();
     E.seq_tick = (uint32_t)sixteenths * SEQ_TICKS;
     E.seq_step = (uint32_t)sixteenths;
+    E.g.g_origin = 0;                            /* (0.5.4: Grids' Reset follows the MPC's position) */
     gen_locate((uint32_t)sixteenths);
 }
 
@@ -863,7 +881,18 @@ static void set_one(int id, int v, int64_t now)
         case F_G_RES: E.g.g_res = (uint8_t)v; break;
         case F_G_OHAT: E.g.g_ohat = (uint8_t)v; break;
         case F_GHOSTS: E.g.ghosts = (uint8_t)v; break;
+        case F_M_BIAS: E.g.m_bias = (uint8_t)v; break;
+        case F_M_SHAPE: E.g.m_shape = (uint8_t)v; break;
+        case F_M_STEPS: E.g.m_steps = (uint8_t)v; break;
+        case F_M_MEMORY: E.g.m_memory = (uint8_t)v; break;
+        case F_M_SHUFFLE: E.g.m_shuffle = (uint8_t)v; break;
+        case F_M_LEN: E.g.m_len = (uint8_t)v; break;
+        case F_M_RHYTHM: E.g.m_rhythm = (uint8_t)v; break;
+        case F_ROOM: E.g.room = (uint8_t)v; break;
         default:
+            if (id >= F_G_ROT0 && id < F_G_ROT0 + 3)
+                E.g.g_rot[id - F_G_ROT0] = (uint8_t)v;
+            else
             if (id >= F_DENS_GRP0 && id < F_DENS_GRP0 + GEN_NGRP)
                 E.g.dens_grp[id - F_DENS_GRP0] = (int8_t)v;
             else if (id >= F_G_ACC0 && id < F_G_ACC0 + 3)

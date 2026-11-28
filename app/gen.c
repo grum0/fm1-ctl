@@ -1132,7 +1132,6 @@ static uint16_t turing_reg(int k, int dens)
     }
     return reg;
 }
-static int euclid_hit(int len, int hits, int i);
 /* 0.5.3: a lane's density group, and the drums' Density for it (the global one plus the group's offset) */
 static int lane_grp(int l)
 {
@@ -1155,11 +1154,16 @@ static int grids_at(int ch, int u, uint32_t pert, int dens, int *open)
     int len, n = grids_slots(&len), acc = 84 + g.c->g_acc[ch];
     uint32_t rb = bb - (bb >= g.c->g_origin ? g.c->g_origin : 0u);    /* (bars since Reset) */
     *open = 0;
-    if (g.c->g_euclid) {
-        int L = gclamp(g.c->g_len[ch], 1, 32), hits = (dens * L + 63) / 127, a = (int)((rb * (uint32_t)n + (uint32_t)u) % (uint32_t)L);
-        if (!euclid_hit(L, hits, a))
+    if (g.c->g_euclid) {                                 /* the module's table (lut_res_euclidean), 0.5.4 */
+        int L = gclamp(g.c->g_len[ch], 1, 32), rot = g.c->g_rot[ch] % L, j, first = -1;
+        int a = (int)((rb * (uint32_t)n + (uint32_t)u) % (uint32_t)L);
+        uint32_t pat = GRIDS_EUCLID[(L - 1) * 32 + (dens * 2 >> 3)];
+        if (!(pat >> ((a + rot) % L) & 1u))
             return 0;
-        return a == 0 ? gclamp(acc, 1, 127) : 84;
+        for (j = 0; j < L && first < 0; j++)             /* the cycle's first hit carries the accent */
+            if (pat >> ((j + rot) % L) & 1u)
+                first = j;
+        return a == first ? gclamp(acc, 1, 127) : 84;
     }
     idx = g.c->g_res == 0 ? (rb & 1u) * 16u + (uint32_t)u : (uint32_t)u & 31u;
     lev = grids_level(idx, (uint32_t)ch, x, y);
@@ -1169,18 +1173,20 @@ static int grids_at(int ch, int u, uint32_t pert, int dens, int *open)
     *open = ch == 2 && g.c->g_ohat && lev > 235u;
     return lev > 192u ? gclamp(acc, 1, 127) : 84;
 }
-/* Grids mode's kick on a sixteenth this bar (0, or its velocity): the drum part's first draw and map level */
-static int grids_kick(int step, int dens)
+/* A Grids voice (0 kick, 1 snare) on a sixteenth this bar (0, or its velocity): the drum part's draws and map */
+static int grids_voice(int ch, int step, int dens)
 {
-    uint32_t pert;
-    int len, n = grids_slots(&len), u = step * (int)GEN_STEP / len, o;
+    uint32_t pert = 0;
+    int len, n = grids_slots(&len), u = step * (int)GEN_STEP / len, o, i;
     rng_t r;
     r.s = gh(pseed(GP_DRUMS, 1), bb % (uint32_t)phrase_len() + epoch() * 64u);
-    pert = rnd(&r, (uint32_t)g.c->chaos / 2u + 1u);
+    for (i = 0; i <= ch; i++)
+        pert = rnd(&r, (uint32_t)g.c->chaos / 2u + 1u);
     if (step * (int)GEN_STEP % len || u >= n)
         return 0;                                        /* (at half speed: only on its eighths) */
-    return grids_at(0, u, pert, grp_dens(L_KICK, dens), &o);
+    return grids_at(ch, u, pert, grp_dens(ch ? L_SNARE : L_KICK, dens), &o);
 }
+static int grids_kick(int step, int dens) { return grids_voice(0, step, dens); }
 /* the kick this bar, step by step (0, or its velocity), for the parts that go with it (the bass's coupling, the
  * melodic kick): the kick the drum part's mode plays (Cut-A-Dor, Grids, Turing), else the style's lane, at this
  * density; whether the drum part is on or not */
@@ -1194,6 +1200,18 @@ static int kick_src(int step, int dens)
     if (m == DM_TURING)
         return (turing_reg(0, grp_dens(L_KICK, dens)) >> step & 1u) ? ((step & 3) == 0 ? 105 : 80) : 0;
     return style_hit(L_KICK, step, grp_dens(L_KICK, dens));
+}
+/* The snare that plays on a sixteenth this bar, as kick_src (0.5.4: Marble's rhythm models listen to both) */
+static int snare_src(int step, int dens)
+{
+    int cs = drum_cad(), m = g.c->part[GP_DRUMS].mode;
+    if (cs >= 0)
+        return cad_pat(cs)->vel[C_SNARE][(int)(bb & 1u) * 16 + step];
+    if (m == DM_GRIDS)
+        return grids_voice(1, step, dens);
+    if (m == DM_TURING)
+        return (turing_reg(1, grp_dens(L_SNARE, dens)) >> step & 1u) ? 90 : 0;
+    return style_hit(L_SNARE, step, grp_dens(L_SNARE, dens));
 }
 
 static void drums_fill(int f, int from, rng_t *r)
@@ -1946,23 +1964,140 @@ static void build_kick(void)
  * part's Flair) is how many are drawn afresh each time round: 0 the loop exactly, 127 never the same twice.
  * Density is how many of the steps sound; the mode what the notes are held to: the chord, the pentatonic, the key;
  * Spread how many scale steps they range over. */
+/* Marble (0.5.4: the upgrade after Mutable Instruments' Marbles: the ideas of its t_generator.cc,
+ * random_sequence.h, quantizer.cc and distributions.h, written anew in integers). Every default plays as before.
+ * A pure function of seed and bar: memory looks back over a bounded number of bars.
+ *   Marbles: Copyright 2015 Emilie Gillet. Permission is hereby granted, free of charge, to any person obtaining a
+ *   copy of this software and associated documentation files (the "Software"), to deal in the Software without
+ *   restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute,
+ *   sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do
+ *   so, subject to the following conditions: The above copyright notice and this permission notice shall be
+ *   included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT
+ *   WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+ *   FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR
+ *   ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT
+ *   OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
+static int marble_fresh(uint32_t a) { return (int)(gh(pseed(GP_RAND, 2), a) % 127u) < g.c->part[GP_RAND].flair; }
+/* the random word behind absolute step a: the loop's own (by loop position), or a fresh draw; with Memory, the last
+ * fresh draw made at this loop position, up to 16 bars back */
+static uint32_t marble_word(uint32_t a)
+{
+    uint32_t L = (uint32_t)gclamp(g.c->m_len, 1, 16), p = a % L, k, it = a / L;
+    if (marble_fresh(a))
+        return gh(pseed(GP_RAND, 3), a);
+    if (g.c->m_memory)
+        for (k = 1; k <= 256u / L && k <= it; k++)
+            if (marble_fresh(a - k * L))
+                return gh(pseed(GP_RAND, 3), a - k * L);
+    if (g.c->m_shuffle && (int)(gh(pseed(GP_RAND, 5), a) % 127u) < g.c->m_shuffle)
+        p = gh(pseed(GP_RAND, 6), it * 16u + p) % L;     /* the loop's notes, replayed out of order */
+    return gh(pseed(GP_RAND, 4), p);
+}
+/* where in the spread the note falls (0..65535) from Bias and Shape; Shape 64 is the even draw from before */
+static uint32_t marble_place(uint32_t h)
+{
+    int sh = g.c->m_shape, b = g.c->m_bias * 65535 / 127;
+    int u1 = (int)(h >> 8 & 0xFFFFu), u2 = (int)(gh(h, 0x51u) & 0xFFFFu), v;
+    if (sh < 64) {                                       /* a bell around Bias, narrower down to one note at 0 */
+        v = b + ((u1 + u2) / 2 - 32768) * sh / 64;
+    } else {                                             /* even at 64, then more and more to the edges */
+        int e = (sh - 64) * 512 / 63, x = u1 - 32768;     /* (e in 512ths) */
+        v = 32768 + x + (x > 0 ? (32767 - x) : -(32768 + x)) * e / 512;
+    }
+    return (uint32_t)gclamp(v, 0, 65535);
+}
+static int bits12(uint16_t m)
+{
+    int i, n = 0;
+    for (i = 0; i < 12; i++)
+        n += m >> i & 1u;
+    return n;
+}
+/* Steps: the pool, thinned to its heavier degrees counted from the chord's root (root, fifth, thirds, the rest) */
+static uint16_t marble_steps(uint16_t m, int root)
+{
+    static const uint16_t KEEP[4] = {0x001u, 0x081u, 0x099u, 0xFFFu};   /* (intervals above the root) */
+    int lvl = g.c->m_steps >= 127 ? 3 : g.c->m_steps / 32, i;
+    uint16_t k = KEEP[lvl > 3 ? 3 : lvl], out = 0;
+    for (i = 0; i < 12; i++)
+        if (m >> i & 1u && k >> ((i - root + 12) % 12) & 1u)
+            out |= (uint16_t)(1u << i);
+    return out ? out : m;
+}
 static void build_marble(void)
 {
     const gen_part_t *pt = &g.c->part[GP_RAND];
-    int s, base = 60 + 12 * pt->oct, div = pt->dens < 40 ? 2 : 1, sp = g.c->spread ? g.c->spread : 11;
+    int s, base = 60 + 12 * pt->oct, div = pt->dens < 40 ? 2 : 1, sp = g.c->spread ? g.c->spread : 11, silent = 0;
+    int ddens = g.c->part[GP_DRUMS].dens, pc = 30 + pt->dens / 2;
+    uint16_t played = 0;
     rng_t r;
     r.s = gh(pseed(GP_RAND, 1), bb);
     for (s = 0; s < 16; s += div) {
         chord_t c = chord_step(s);
         uint16_t m = pt->mode == RM_CHORD ? chord_mask(c) : mel_mask(c, pt->mode == RM_PENT);
-        int fresh = (int)(gh(pseed(GP_RAND, 2), bb * 16u + (uint32_t)s) % 127u) < pt->flair;
-        uint32_t h = fresh ? gh(pseed(GP_RAND, 3), bb * 16u + (uint32_t)s) : gh(pseed(GP_RAND, 4), (uint32_t)s);
-        int len = div * (int)GEN_STEP;
-        if ((int)(h % 100u) >= 30 + pt->dens / 2)
+        uint32_t a = bb * 16u + (uint32_t)s, h = g.c->m_len == 16 && !g.c->m_memory && !g.c->m_shuffle
+            ? (marble_fresh(a) ? gh(pseed(GP_RAND, 3), a) : gh(pseed(GP_RAND, 4), (uint32_t)s)) : marble_word(a);
+        int len = div * (int)GEN_STEP, idx, chance = pc;
+        if (g.c->m_rhythm) {                             /* the drums that play as the other channel */
+            int ks = kick_src(s, ddens) || snare_src(s, ddens);
+            if (g.c->m_rhythm == 1)                      /* Answer: the gaps */
+                chance = ks ? pc / 4 : gclamp(pc * 3 / 2, 0, 95);
+            else {                                       /* Markov, within the bar */
+                if (s >= 8 && played >> (s - 8) & 1u)
+                    chance += 25;
+                if (ks)
+                    chance -= 30;
+                if (s >= div && played >> (s - div) & 1u)
+                    chance -= 20;
+                if (s >= 4 && (kick_src(s - 4, ddens) || snare_src(s - 4, ddens)))
+                    chance += 20;
+                if (silent >= 6)
+                    chance = 100;
+            }
+        }
+        if ((int)(h % 100u) >= chance) {
+            silent += div;
             continue;
-        gput_note(GP_RAND, tpos(s, 0, sty()->jit, &r), ladder(root_note(c, base), (int)((h >> 8) % (uint32_t)sp) - sp * 3 / 11, m),
+        }
+        silent = 0;
+        played |= (uint16_t)(1u << s);
+        idx = g.c->m_shape == 64 ? (int)((h >> 8) % (uint32_t)sp) : (int)(marble_place(h) * (uint32_t)sp >> 16);
+        idx -= sp * 3 / 11;
+        if (g.c->m_steps < 127) {                        /* fewer degrees: fewer steps, so the range stays */
+            uint16_t t = marble_steps(m, c.root);
+            idx = idx * bits12(t) / (bits12(m) ? bits12(m) : 1);
+            m = t;
+        }
+        gput_note(GP_RAND, tpos(s, 0, sty()->jit, &r), ladder(root_note(c, base), idx, m),
                   60 + (int)((h >> 16) % 50u), len * (30 + (int)((h >> 24) % 60u)) / 100);
     }
+}
+
+/* Chords make room for the lead (0.5.4): a chord note that would sound while a lead note starts is shortened to
+ * end there (room 1), or one that overlaps a lead note at all is left out (room 2). The chords and lead of this bar
+ * only, after both are made: a pure function of the bar. */
+static void make_room(void)
+{
+    gev_t *c = &wb->ev[GEV_OFF[GP_CHORD]];
+    const gev_t *l = &wb->ev[GEV_OFF[GP_LEAD]];
+    int nc = wb->n[GP_CHORD], nl = wb->n[GP_LEAD], i, j, k = 0;
+    for (i = 0; i < nc; i++) {
+        int keep = 1;
+        if (c[i].kind == EV_NOTE)
+            for (j = 0; j < nl; j++) {
+                int cs = c[i].pos, ce = c[i].pos + c[i].dur, ls = l[j].pos, le = l[j].pos + l[j].dur;
+                if (l[j].kind != EV_NOTE || le <= cs || ls >= ce)
+                    continue;
+                if (g.c->room == 2 || ls <= cs) {
+                    keep = 0;
+                    break;
+                }
+                c[i].dur = (uint16_t)(ls - cs);          /* (the first lead note inside it decides) */
+            }
+        if (keep)
+            c[k++] = c[i];
+    }
+    wb->n[GP_CHORD] = k;
 }
 
 /* ------------------------------------------------------------- playing --- */
@@ -2620,6 +2755,8 @@ void gen_service(void)
         g.c->part[GP_DRUMS].mode = DM_STYLE;
         g.c->gx = gx0, g.c->gy = gy0;
     }
+    if (g.c->room && g.c->part[GP_CHORD].on && g.c->part[GP_LEAD].on)
+        make_room();
     wb->bar = target;
     wb->sig = sig;
     f = GEN_LOCK();
@@ -2750,6 +2887,9 @@ void gen_defaults(gen_cfg_t *c)
     c->g_len[0] = c->g_len[1] = c->g_len[2] = 16;
     c->g_res = 1;
     c->g_ohat = 1;
+    c->m_bias = c->m_shape = 64;                    /* (0.5.4: Marble as before) */
+    c->m_steps = 127;
+    c->m_len = 16;
     c->bend = 2;
     c->mb_lo = 36;
     c->dset = DS_KIT;                                    /* (the Simmons' notes are the Tanzbar's snare and kick) */
@@ -2771,7 +2911,8 @@ int gen_valid(const gen_cfg_t *c)
         c->mb_lo < 12u || c->mb_lo > 96u || c->hat_dens > 3u || c->flam > 127u || c->fill_every > 6u ||
         c->hat_straight > 100u || c->space > 100u || c->spread > 24u || c->couple > 3u || c->voice > 3u || c->ratchet > 127u ||
         c->bell > 1u || c->bell_cc > 127u || c->pocket > 1u || c->locks > 1u ||
-        c->g_euclid > 1u || c->g_swing > 25u || c->g_res > 2u || c->g_ohat > 1u || c->ghosts > 127u)
+        c->g_euclid > 1u || c->g_swing > 25u || c->g_res > 2u || c->g_ohat > 1u || c->ghosts > 127u ||
+        c->m_memory > 1u || c->m_len < 1u || c->m_len > 16u || c->m_rhythm > 2u || c->room > 2u)
         return 0;
     for (i = 0; i < GEN_NLANES; i++)
         if (c->lane_note[i] > 127u)

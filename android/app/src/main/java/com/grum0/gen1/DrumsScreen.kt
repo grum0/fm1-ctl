@@ -65,7 +65,10 @@ fun DrumsScreen(s: Store) {
                 s.set(F.G_EUCLID, if (it) 1 else 0)
             }
             if (s.vals[F.G_EUCLID] == 1) {
-                for (v in 0 until 3) SliderRow(s, "${VOICES[v]} length", F.G_LEN0 + v)
+                for (v in 0 until 3) {
+                    SliderRow(s, "${VOICES[v]} length", F.G_LEN0 + v)
+                    SliderRow(s, "${VOICES[v]} rotation", F.G_ROT0 + v)
+                }
             } else {
                 SliderRow(s, "Map X", F.GX)
                 SliderRow(s, "Map Y", F.GY)
@@ -73,7 +76,6 @@ fun DrumsScreen(s: Store) {
             }
             Text("Fill per voice: the kick, snare and percussion density above.", style = MaterialTheme.typography.bodySmall)
             for (v in 0 until 3) SliderRow(s, "${VOICES[v]} accent", F.G_ACC0 + v, { "+$it" })
-            SliderRow(s, "Grids swing", F.G_SWING, { if (it == 0) "the global swing" else "${50 + it} %" })
             Pick("Clock", GRES.getOrElse(s.vals[F.G_RES]) { "?" }, GRES) { s.set(F.G_RES, it) }
             SwitchRow("Loudest hats to the open hat", s.vals[F.G_OHAT] == 1) { s.set(F.G_OHAT, if (it) 1 else 0) }
             SmallButton("Reset: the pattern from step 1 at the next bar") { Native.nGridsReset() }

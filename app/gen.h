@@ -99,6 +99,14 @@ typedef struct {
     uint8_t g_ohat;                      /* 1: the loudest hat steps go to the open hat (as before) */
     uint32_t g_origin;                   /* the bar Grids' Reset restarts the pattern on (0: the song's start) */
     uint8_t ghosts;                      /* soft snare and rim hits in the empty sixteenths, 0 none */
+    /* 0.5.4 (gen1-grids-source-notes.md, gen1-priorities.md "Marble upgrade"; defaults: as before) */
+    uint8_t g_rot[3];                    /* Grids Euclidean: rotation per voice, 0..31 (0) */
+    uint8_t m_bias, m_shape;             /* Marble: where notes cluster (64), and how (0 one note .. 64 even, as
+                                          * before .. 127 the edges) */
+    uint8_t m_steps;                     /* Marble: 0..127, from the root only to the whole pool (127, as before) */
+    uint8_t m_memory, m_shuffle, m_len;  /* Marble: Déjà vu memory (0/1), shuffle (0..127), loop length 1..16 (16) */
+    uint8_t m_rhythm;                    /* Marble: 0 coin (as before), 1 answer, 2 Markov */
+    uint8_t room;                        /* chords make room for the lead: 0 off, 1 shorten, 2 drop */
 } gen_cfg_t;
 
 typedef void (*gen_out_t)(uint32_t status, uint32_t d1, uint32_t d2);

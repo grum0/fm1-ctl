@@ -117,6 +117,19 @@ been tried). Version 0.2.0 adds:
 - **The harp run** in LA beats: on the first beat of each phrase the arp part plays a quick 32nd run up two octaves
   of the chord.
 
+**0.5.4** (the Marble upgrade, chords make room, Grids as agreed):
+
+- **Marble, after Mutable Instruments' Marbles** (Parts → Marble): Bias and Shape (where in the Spread the notes
+  fall: one note, a bell around Bias, even as before, or the edges), Steps (from the root only to the whole pool,
+  the range kept), Memory (a fresh note stays in the loop), Shuffle, Length (1–16 steps, drifting against the bar),
+  and Rhythm: Coin as before, Answer (plays in the drums' gaps) or Markov (echoes, avoids the kick and snare). Every
+  default plays as before.
+- **Chords make room for the lead** (Parts → Chords): off, shorten (a chord note ends where a lead note starts) or
+  drop (chord notes under a lead note are left out).
+- **Grids, as agreed** (`gen1-grids-source-notes.md`): Euclidean mode uses the module's own table, a rotation per
+  voice, the accent on each cycle's first hit, Reset also cleared by a Song Position Pointer; no separate Grids
+  swing (it follows the global Swing).
+
 **0.5.3** (full Grids controls, density per lane group, Ghosts):
 
 - **Density per lane group** (Drums): kick, snare / clap / rim, and percussion and hats, each on top of Density, in
@@ -340,5 +353,7 @@ effects. The rest of the generators (`app/gen.c`) and of the app is GPL-3.0-or-l
   from CTL-1's `engine.c`.
 - **Cut-A-Dor** by Kid Bunka (GPL-3.0-only): the drum pattern generator (`app/gen_cad.h`).
 - **Mutable Instruments**: the Grids drum maps by Emilie Gillet (GPL-3.0-or-later), by way of Hortator's C port
-  (`app/grids_tables.h`); Marbles was the inspiration for the Marble part.
+  (`app/grids_tables.h`); the Marble part follows Marbles' random generators
+  (Bias, Shape, Steps, Déjà vu, the rhythm models; MIT licence, Emilie Gillet), written anew in `app/gen.c` from
+  0.5.4.
 - No fonts or other data are bundled yet; their licences will be listed here when they are.

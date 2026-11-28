@@ -2084,6 +2084,165 @@ static void test_grids_053(void)
     printf("0.5.3: group densities, Grids controls, Ghosts ok\n");
 }
 
+/* 0.5.4: the Grids controls as agreed (gen1-grids-source-notes.md), the Marble upgrade, chords make room */
+static int mb_notes(int ch, int64_t from, int *note, int64_t *at, int max)   /* note-ons on a channel, in order */
+{
+    int i, n = 0;
+    for (i = 0; i < nlog && n < max; i++)
+        if (log_[i].n == 3 && log_[i].m[0] == (0x90 | ch) && log_[i].m[2] && log_[i].t >= from) {
+            note[n] = log_[i].m[1];
+            at[n++] = log_[i].t;
+        }
+    return n;
+}
+static int mb_on_drum(int64_t t)                         /* a kick or snare (drums on channel 1) within 30 ms */
+{
+    int i;
+    for (i = 0; i < nlog; i++)
+        if (log_[i].n == 3 && log_[i].m[0] == 0x91 && log_[i].m[2] && (log_[i].m[1] == 36 || log_[i].m[1] == 37) &&
+            llabs(log_[i].t - t) < 30 * MS)
+            return 1;
+    return 0;
+}
+static void test_marble_054(void)
+{
+    static int nt[4000], nt2[4000];
+    static int64_t at[4000], at2[4000];
+    const int64_t per = 625000000LL / 120, t0 = 5000 * MS;
+    int k, i, n, n2, bad, loud, ons[3];
+    uint32_t pat = GRIDS_EUCLID[4 * 32 + 16];
+    /* Grids: the module's table (BD 5 steps, density 64: fill 16), its first hit accented, rotation moves it */
+    gr_begin(GS_DILLA, DM_GRIDS);
+    eng_set(F_PART(GP_DRUMS, PF_DENS), 64, vnow);
+    eng_set(F_G_EUCLID, 1, vnow);
+    eng_set(F_G_LEN0, 5, vnow);
+    gr_go(20500);
+    k = E.g.lane_note[L_KICK];
+    {
+        int64_t tz = gr_t0();
+        uint32_t b0 = gr_bar(k, tz, 0);
+        for (i = 0, n = 0; i < 10; i++)
+            n += __builtin_popcount(gr_bar(k, tz, i));
+        CHECK(n == __builtin_popcount(pat & 31u) * 32, "table hits: %d, %d a loop", n, __builtin_popcount(pat & 31u));
+        loud = 0;
+        for (i = 0; i < nlog; i++)
+            loud += log_[i].n == 3 && log_[i].m[0] == 0x99 && log_[i].m[1] == k && log_[i].m[2] == 112 &&
+                    log_[i].t - tz < 20000 * MS - 60 * MS;
+        CHECK(loud == 32, "first-hit accents: %d of 32", loud);
+        gr_begin(GS_DILLA, DM_GRIDS);
+        eng_set(F_PART(GP_DRUMS, PF_DENS), 64, vnow);
+        eng_set(F_G_EUCLID, 1, vnow);
+        eng_set(F_G_LEN0, 5, vnow);
+        eng_set(F_G_ROT0, 2, vnow);
+        gr_go(4500);
+        CHECK(gr_bar(k, gr_t0(), 0) != b0, "rotation changed nothing");
+    }
+    fresh();                                             /* a locate clears Reset (the SPP rule) */
+    eng_set(F_CLOCK, CLK_INT, vnow);
+    eng_render(1, 0, 96, t0, per);
+    eng_grids_reset();
+    CHECK(E.g.g_origin != 0, "Reset not set");
+    eng_render(1, 96u * 4u * 3u, 96, t0, per);
+    CHECK(E.g.g_origin == 0, "a locate kept Reset");
+    /* Marble, in Acid techno (one chord all along): Shape 0 is one note; Steps 0 the root only; Length 5 repeats
+     * every 5 sixteenths; Memory gives the same notes straight through and after a jump */
+    for (k = 0; k < 4; k++) {
+        core_setup(GS_ACIDTECH);
+        eng_set(F_CLOCK, CLK_INT, vnow);
+        eng_set(F_PART(GP_RAND, PF_DENS), 100, vnow);
+        if (k == 0)
+            eng_set(F_M_SHAPE, 0, vnow);
+        if (k == 1)
+            eng_set(F_M_STEPS, 0, vnow);
+        if (k == 2) {
+            eng_set(F_M_LEN, 5, vnow);
+            eng_set(F_PART(GP_RAND, PF_FLAIR), 0, vnow);
+        }
+        eng_render(1, 0, 96u * 4u * 8u, t0, per);
+        n = mb_notes(7, t0, nt, at, 4000);
+        bad = 0;
+        for (i = 1; i < n; i++) {
+            if (k == 0)
+                bad += nt[i] != nt[0];
+            if (k == 1)
+                bad += nt[i] % 12 != nt[0] % 12;
+        }
+        if (k == 2) {                                    /* same note 5 sixteenths later, when both play */
+            for (i = 0; i < n; i++) {
+                int j, si = (int)((at[i] - t0 + per * 12) / (per * 24));
+                for (j = i + 1; j < n; j++) {
+                    int sj = (int)((at[j] - t0 + per * 12) / (per * 24));
+                    if (sj == si + 5)
+                        bad += nt[j] != nt[i];
+                }
+            }
+        }
+        if (k < 3)
+            CHECK(n > 20 && !bad, "Marble %s: %d notes, %d off", k == 0 ? "Shape 0" : k == 1 ? "Steps 0" : "Length 5",
+                  n, bad);
+    }
+    for (k = 0; k < 2; k++) {                            /* Memory: straight vs from bar 6 */
+        core_setup(GS_ACIDTECH);
+        eng_set(F_CLOCK, CLK_INT, vnow);
+        eng_set(F_PART(GP_RAND, PF_DENS), 100, vnow);
+        eng_set(F_PART(GP_RAND, PF_FLAIR), 60, vnow);
+        eng_set(F_M_MEMORY, 1, vnow);
+        if (k == 0) {
+            eng_render(1, 0, 96u * 4u * 12u, t0, per);
+            n = mb_notes(7, t0 + (int64_t)(96 * 4 * 6) * per, nt, at, 4000);
+        } else {
+            eng_render(0, 0, 40, t0 - 40 * per, per);
+            eng_render(1, 96u * 4u * 6u, 96u * 4u * 6u, t0 + (int64_t)(96 * 4 * 6) * per, per);
+            n2 = mb_notes(7, t0 + (int64_t)(96 * 4 * 6) * per, nt2, at2, 4000);
+        }
+    }
+    bad = n != n2;
+    for (i = 0; i < n && i < n2; i++)
+        bad += nt[i] != nt2[i] || at[i] != at2[i];
+    CHECK(n > 20 && !bad, "Memory after a jump: %d vs %d notes, %d differ", n, n2, bad);
+    /* the rhythm models: Answer and Markov land on the kick or snare less often than Coin */
+    for (k = 0; k < 3; k++) {
+        core_setup(GS_DILLA);
+        eng_set(F_CLOCK, CLK_INT, vnow);
+        eng_set(F_PART(GP_RAND, PF_DENS), 100, vnow);
+        eng_set(F_M_RHYTHM, k, vnow);
+        eng_render(1, 0, 96u * 4u * 8u, t0, per);
+        n = mb_notes(7, t0, nt, at, 4000);
+        for (i = 0, ons[k] = 0; i < n; i++)
+            ons[k] += mb_on_drum(at[i]);
+        ons[k] = n ? ons[k] * 100 / n : 100;
+    }
+    CHECK(ons[1] < ons[0] && ons[2] < ons[0], "with the drums: coin %d %%, answer %d %%, Markov %d %%", ons[0], ons[1],
+          ons[2]);
+    /* chords make room: off, some chord note sounds across a lead onset; shorten and drop: none does */
+    for (k = 0; k < 3; k++) {
+        int j, c, cross = 0;
+        core_setup(GS_MODBOOGIE);                        /* (held pads under a solo lead) */
+        eng_set(F_CLOCK, CLK_INT, vnow);
+        eng_set(F_ROOM, k, vnow);
+        eng_render(1, 0, 96u * 4u * 8u, t0, per);
+        n = mb_notes(5, t0, nt, at, 4000);              /* the lead's onsets */
+        for (i = 0; i < nlog; i++) {
+            int64_t a = log_[i].t, e = -1;
+            if (log_[i].n != 3 || log_[i].m[0] != 0x92 || !log_[i].m[2])
+                continue;
+            c = log_[i].m[1];
+            for (j = i + 1; j < nlog && e < 0; j++)
+                if (log_[j].n == 3 && ((log_[j].m[0] == 0x82 && log_[j].m[1] == c) ||
+                                       (log_[j].m[0] == 0x92 && log_[j].m[1] == c && !log_[j].m[2])))
+                    e = log_[j].t;
+            for (j = 0; j < n && e > 0; j++)
+                if (at[j] > a + MS && at[j] < e - MS)
+                    cross++;
+        }
+        if (k == 0)
+            CHECK(cross > 0, "room off: no chord note across a lead onset to start with");
+        else
+            CHECK(cross == 0, "room %d: %d chord notes across a lead onset", k, cross);
+    }
+    printf("0.5.4: Grids as agreed, Marble upgrade, chords make room ok\n");
+}
+
 int main(void)
 {
     test_ranges();
@@ -2117,6 +2276,7 @@ int main(void)
     test_locks_051();
     test_e_052();
     test_grids_053();
+    test_marble_054();
     test_panic();
     printf(fails ? "FAILED (%d)\n" : "ok\n", fails);
     free(log_);
